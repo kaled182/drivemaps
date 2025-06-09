@@ -49,6 +49,7 @@ HTML_FORM = """
 </html>
 """
 
+HTML_PREVIEW = """
 <!DOCTYPE html>
 <html>
 <head>
@@ -82,102 +83,4 @@ HTML_FORM = """
                 <td>
                     <input type="hidden" name="numero_pacote_{{ loop.index0 }}" value="{{item['order_number']}}">
                     <input type="hidden" name="cep_{{ loop.index0 }}" value="{{item['cep']}}">
-                    <input type="text" name="endereco_{{ loop.index0 }}" value="{{item['address']}}" {% if item['status']=='OK' %}readonly{% endif %}>
-                </td>
-                <td>{{ item['status'] }}</td>
-                <td>
-                    {% if item['status'] != 'OK' %}
-                        <button type="submit" name="revalidar" value="{{ loop.index0 }}">Validar novamente</button>
-                    {% else %}
-                        ✔️
-                    {% endif %}
-                </td>
-            </tr>
-            {% endfor %}
-        </table>
-        <input type="hidden" name="total" value="{{lista|length}}">
-        <button type="submit" name="finalizar" value="1">Gerar CSV para MyWay</button>
-    </form>
-</div>
-</body>
-</html>
-
-csv_content = None
-
-@app.route('/', methods=['GET'])
-def form():
-    return render_template_string(HTML_FORM)
-
-@app.route('/preview', methods=['POST'])
-def preview():
-    enderecos_brutos = request.form['enderecos']
-    regex_cep = re.compile(r'(\d{4}-\d{3})')
-    linhas = [linha.strip() for linha in enderecos_brutos.split('\n') if linha.strip()]
-    lista = []
-    i = 0
-    while i < len(linhas) - 2:
-        linha = linhas[i]
-        cep_match = regex_cep.search(linha)
-        if cep_match:
-            if i + 2 < len(linhas) and linhas[i+2] == linha:
-                numero_pacote = linhas[i+3] if (i+3) < len(linhas) else ""
-                status, endereco_validado, location = valida_endereco_google(linha)
-                lista.append({
-                    "order_number": numero_pacote,
-                    "address": linha,
-                    "cep": cep_match.group(1),
-                    "status": status,
-                })
-                i += 4
-            else:
-                i += 1
-        else:
-            i += 1
-    session['lista'] = lista  # Salva para próxima etapa
-    return render_template_string(HTML_PREVIEW, lista=lista)
-
-@app.route('/generate', methods=['POST'])
-def generate():
-    global csv_content
-    total = int(request.form['total'])
-    lista = []
-    for i in range(total):
-        numero_pacote = request.form.get(f'numero_pacote_{i}', '')
-        endereco = request.form.get(f'endereco_{i}', '')
-        cep = request.form.get(f'cep_{i}', '')
-        status, endereco_validado, location = valida_endereco_google(endereco)
-        lista.append({
-            "order_number": numero_pacote,
-            "address": endereco,
-            "cep": cep,
-            "status": status,
-            "latitude": location["lat"] if status == "OK" and location else "",
-            "longitude": location["lng"] if status == "OK" and location else "",
-        })
-    # Gera CSV
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow([
-        "order number", "name", "address", "latitude", "longitude", "duration", "start time",
-        "end time", "phone", "contact", "notes", "color", "Group"
-    ])
-    for row in lista:
-        writer.writerow([
-            row["order_number"], "", row["address"], row["latitude"], row["longitude"], "", "", "", "", "", row["cep"], "", ""
-        ])
-    csv_content = output.getvalue()
-    return redirect(url_for('download'))
-
-@app.route('/download')
-def download():
-    global csv_content
-    return send_file(
-        io.BytesIO(csv_content.encode("utf-8")),
-        mimetype='text/csv',
-        as_attachment=True,
-        download_name="enderecos_myway.csv"
-    )
-
-if __name__ == '__main__':
-    app.secret_key = "umasecretqualquer123"
-    app.run(host='0.0.0.0', port=10000)
+                    <input type="text" name="endereco_{{ loop.index0 }}" value="{{item['address']}}" {% if item['status']=='OK' %}re_
