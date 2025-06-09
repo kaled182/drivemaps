@@ -49,7 +49,6 @@ HTML_FORM = """
 </html>
 """
 
-HTML_PREVIEW = """
 <!DOCTYPE html>
 <html>
 <head>
@@ -77,18 +76,18 @@ HTML_PREVIEW = """
                 <th>Status</th>
                 <th>Corrigir/Confirmar</th>
             </tr>
-            {% for i, item in enumerate(lista) %}
+            {% for item in lista %}
             <tr class="{{ 'ok' if item['status'] == 'OK' else 'erro' }}">
-                <td>{{ i+1 }}</td>
+                <td>{{ loop.index }}</td>
                 <td>
-                    <input type="hidden" name="numero_pacote_{{i}}" value="{{item['order_number']}}">
-                    <input type="hidden" name="cep_{{i}}" value="{{item['cep']}}">
-                    <input type="text" name="endereco_{{i}}" value="{{item['address']}}" {% if item['status']=='OK' %}readonly{% endif %}>
+                    <input type="hidden" name="numero_pacote_{{ loop.index0 }}" value="{{item['order_number']}}">
+                    <input type="hidden" name="cep_{{ loop.index0 }}" value="{{item['cep']}}">
+                    <input type="text" name="endereco_{{ loop.index0 }}" value="{{item['address']}}" {% if item['status']=='OK' %}readonly{% endif %}>
                 </td>
                 <td>{{ item['status'] }}</td>
                 <td>
                     {% if item['status'] != 'OK' %}
-                        <button type="submit" name="revalidar" value="{{i}}">Validar novamente</button>
+                        <button type="submit" name="revalidar" value="{{ loop.index0 }}">Validar novamente</button>
                     {% else %}
                         ✔️
                     {% endif %}
@@ -102,7 +101,6 @@ HTML_PREVIEW = """
 </div>
 </body>
 </html>
-"""
 
 csv_content = None
 
