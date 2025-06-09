@@ -37,11 +37,11 @@ HTML = """
 </head>
 <body>
 <div class="container">
-    <h2>PAACK – Gerador de CSV com Validação Google</h2>
+    <h2>PAACK – Gerador de CSV para MyWay com Validação Google</h2>
     <form method="post">
         <label>Cole sua lista de endereços:</label><br>
         <textarea name="enderecos" rows="16" placeholder="Cole aqui sua lista bruta..."></textarea><br>
-        <button type="submit">Gerar CSV</button>
+        <button type="submit">Gerar CSV para MyWay</button>
     </form>
     {% if file_ready %}
         <br>
@@ -72,29 +72,43 @@ def index():
                     numero_pacote = linhas[i+3] if (i+3) < len(linhas) else ""
                     # Valida no Google
                     status, endereco_validado, location = valida_endereco_google(linha)
-                    saida.append([
-                        linha,
-                        cep_match.group(1),
-                        numero_pacote,
-                        status,
-                        endereco_validado
-                    ])
+                    saida.append({
+                        "order_number": numero_pacote,
+                        "address": linha,
+                        "latitude": location["lat"] if status == "OK" and location else "",
+                        "longitude": location["lng"] if status == "OK" and location else "",
+                        "status": status,
+                        "formatted_address": endereco_validado,
+                        "notes": cep_match.group(1)  # Exemplo: salvar o código postal em notes
+                    })
                     i += 4
                 else:
                     i += 1
             else:
                 i += 1
-        # Gera CSV em memória
+        # --- Gera CSV no padrão MyWay ---
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow([
-            "Endereco Original",
-            "Codigo Postal",
-            "Numero Pacote",
-            "Status Validacao",
-            "Endereco Google"
+            "order number", "name", "address", "latitude", "longitude", "duration", "start time",
+            "end time", "phone", "contact", "notes", "color", "Group"
         ])
-        writer.writerows(saida)
+        for row in saida:
+            writer.writerow([
+                row["order_number"],  # order number
+                "",                   # name
+                row["address"],       # address (original)
+                row["latitude"],      # latitude (do Google)
+                row["longitude"],     # longitude (do Google)
+                "",                   # duration
+                "",                   # start time
+                "",                   # end time
+                "",                   # phone
+                "",                   # contact
+                row["notes"],         # notes (coloquei o código postal)
+                "",                   # color
+                ""                    # Group
+            ])
         csv_content = output.getvalue()
         file_ready = True
     return render_template_string(HTML, file_ready=file_ready)
@@ -106,7 +120,7 @@ def download():
         io.BytesIO(csv_content.encode("utf-8")),
         mimetype='text/csv',
         as_attachment=True,
-        download_name="enderecos_paack.csv"
+        download_name="enderecos_myway.csv"
     )
 
 if __name__ == '__main__':
