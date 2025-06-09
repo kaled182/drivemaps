@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Pré-visualização</h2>
+<table>
+    <tr>
+        <th>Endereço</th>
+        <th>Status</th>
+        <th>Coordenadas</th>
+    </tr>
+    {% for resultado in resultados %}
+    <tr class="{{ 'success' if resultado.status == 'OK' else 'error' }}">
+        <td>{{ resultado.endereco_formatado or request.form.enderecos[loop.index0] }}</td>
+        <td>{{ resultado.status }}</td>
+        <td>{{ resultado.coordenadas|default('N/A') }}</td>
+    </tr>
+    {% endfor %}
+</table>
+{% endblock %}
