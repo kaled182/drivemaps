@@ -3,9 +3,9 @@ import re
 import csv
 import io
 import requests
+import os
 
-# SUA CHAVE GOOGLE AQUI (use a sua, não compartilhe publicamente!)
-GOOGLE_API_KEY = "AIzaSyBduVEZasqT3ce-E91RBNLgexuJd4Km0C0"
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
 
 def valida_endereco_google(address, api_key=GOOGLE_API_KEY):
     url = "https://maps.googleapis.com/maps/api/geocode/json"
