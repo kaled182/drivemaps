@@ -33,18 +33,25 @@ def preview():
             if i + 2 < len(linhas) and linhas[i+2] == linha:
                 numero_pacote = linhas[i+3] if (i+3) < len(linhas) else ""
                 cep = cep_match.group(1)
+                # Validação automática Google
+                res_google = valida_rua_google(linha, cep)
+                rua_digitada = linha.split(',')[0] if linha else ''
+                rua_google = res_google.get('route_encontrada', '')
+                rua_bate = normalizar(rua_digitada) in normalizar(rua_google) or normalizar(rua_google) in normalizar(rua_digitada)
+                cep_ok = cep == res_google.get('postal_code_encontrado', '')
                 lista.append({
                     "order_number": numero_pacote,
                     "address": linha,
                     "cep": cep,
-                    "status_google": "",
-                    "postal_code_encontrado": "",
-                    "endereco_formatado": "",
-                    "latitude": "",
-                    "longitude": "",
-                    "rua_google": "",
-                    "cep_ok": False,
-                    "rua_bate": False,
+                    "status_google": res_google.get('status'),
+                    "postal_code_encontrado": res_google.get('postal_code_encontrado', ''),
+                    "endereco_formatado": res_google.get('endereco_formatado', ''),
+                    "latitude": res_google.get('coordenadas', {}).get('lat', ''),
+                    "longitude": res_google.get('coordenadas', {}).get('lng', ''),
+                    "rua_google": rua_google,
+                    "cep_ok": cep_ok,
+                    "rua_bate": rua_bate,
+                    "freguesia": res_google.get('sublocality', ''),
                 })
                 i += 4
             else:
@@ -76,6 +83,7 @@ def validar_linha():
         'rua_google': rua_google,
         'cep_ok': cep_ok,
         'rua_bate': rua_bate,
+        'freguesia_google': res_google.get('sublocality', ''),
     })
 
 @main_routes.route('/generate', methods=['POST'])
@@ -104,25 +112,25 @@ def generate():
             "rua_google": rua_google,
             "cep_ok": cep_ok,
             "rua_bate": rua_bate,
+            "freguesia": res_google.get('sublocality', ''),
         })
-    # Só gera se todos os CEPs estiverem validados!
-    todos_ok = all(row['cep_ok'] for row in lista)
-    if not todos_ok:
-        return "Existem endereços com código postal divergente do Google. Corrija antes de gerar o CSV.", 400
-    lista_ordenada = sorted(lista, key=lambda x: x['postal_code_encontrado'] or x['cep'])
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow([
         "order number", "name", "address", "latitude", "longitude", "duration", "start time",
-        "end time", "phone", "contact", "notes", "color", "Group", "rua_google", "aviso"
+        "end time", "phone", "contact", "notes", "color", "Group", "rua_google", "freguesia_google", "status"
     ])
-    for row in lista_ordenada:
+    for row in lista:
         aviso = ""
-        if not row["rua_bate"]:
-            aviso = "Rua divergente do Google"
+        if not row["cep_ok"]:
+            aviso = "CEP divergente"
+        elif not row["rua_bate"]:
+            aviso = "Rua divergente"
+        else:
+            aviso = "Validado"
         writer.writerow([
             row["order_number"], "", row["address"], row["latitude"], row["longitude"], "", "", "", "", "",
-            row["postal_code_encontrado"] or row["cep"], "", "", row["rua_google"], aviso
+            row["postal_code_encontrado"] or row["cep"], "", "", row["rua_google"], row.get("freguesia", ""), aviso
         ])
     csv_content = output.getvalue()
     return redirect(url_for('main.download'))
