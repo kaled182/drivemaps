@@ -60,6 +60,18 @@
 {% block scripts %}
 <script src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&callback=initMap" async defer></script>
 <script>
+// Cria um PIN SVG com o número do pacote e a cor correspondente
+function svgPin(numero, cor) {
+    const svg = `
+    <svg width="42" height="48" viewBox="0 0 42 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <ellipse cx="21" cy="21" rx="18" ry="18" fill="${cor}" stroke="black" stroke-width="2"/>
+      <rect x="19" y="38" width="4" height="8" fill="${cor}" stroke="black" stroke-width="1"/>
+      <text x="21" y="28" text-anchor="middle" font-size="18" font-family="Arial" fill="#fff" stroke="black" stroke-width="0.7" dy=".3em">${numero}</text>
+    </svg>
+    `;
+    return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
+}
+
 window.initMap = function() {
     var enderecos = [
         {% for item in lista %}
@@ -68,7 +80,8 @@ window.initMap = function() {
             lat: {{ item.latitude }},
             lng: {{ item.longitude }},
             title: "{{ item.order_number }} - {{ item.address | replace('"', "'") }}",
-            status: "{{ 'valid' if item.cep_ok else 'invalid' }}"
+            status: "{{ 'valid' if item.cep_ok else 'invalid' }}",
+            numero_pacote: "{{ item.order_number }}"
         },
         {% endif %}
         {% endfor %}
@@ -79,12 +92,15 @@ window.initMap = function() {
         center: center
     });
     enderecos.forEach(function(e) {
-        var pinColor = (e.status === 'valid') ? "http://maps.google.com/mapfiles/ms/icons/green-dot.png" : "http://maps.google.com/mapfiles/ms/icons/red-dot.png";
+        var cor = (e.status === 'valid') ? "#38b000" : "#e63946";
         new google.maps.Marker({
             position: {lat: e.lat, lng: e.lng},
             map: map,
             title: e.title,
-            icon: pinColor
+            icon: {
+                url: svgPin(e.numero_pacote, cor),
+                scaledSize: new google.maps.Size(42, 48)
+            }
         });
     });
 };
