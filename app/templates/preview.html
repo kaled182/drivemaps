@@ -1,192 +1,142 @@
 {% extends "base.html" %}
 
 {% block content %}
-<!-- MAPA + BOTÃO FULLSCREEN -->
+<!-- MAPA GOOGLE + BOTÃO FULLSCREEN -->
 <div style="position:relative;">
-    <div id="map" style="width:100%; height:320px; border-radius:9px; margin-bottom:12px;"></div>
+    <div id="map" class="gmaps-principal"></div>
     <button type="button" class="btn btn-outline-primary btn-sm"
             style="position:absolute; right:12px; top:12px; z-index:10;"
             onclick="abrirMapaFullscreen()">🔎 Mapa em tela cheia</button>
 </div>
 
-<!-- TABELA -->
-<div class="table-responsive" style="max-height:56vh; overflow-y:auto;">
+<!-- CARDS MOBILE / TABELA DESKTOP -->
+<div id="enderecos-lista">
     <form id="form-csv" action="{{ url_for('main.generate') }}" method="post">
-        <table class="table table-bordered align-middle table-sm" id="tabela-enderecos" style="font-size:1em;">
-            <thead class="table-light">
-                <tr>
-                    <th style="width:32px;">#</th>
-                    <th style="min-width:140px;">Endereço</th>
-                    <th style="min-width:100px;">CEP Informado</th>
-                    <th style="min-width:86px;">CEP Google</th>
-                    <th style="min-width:80px;">Status</th>
-                    <th style="width:80px;">Ação</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in lista %}
-                <tr id="linha-{{ loop.index0 }}" class="{% if item.cep_ok %}table-success{% else %}table-danger{% endif %}">
-                    <td class="text-center px-1">{{ loop.index }}</td>
-                    <td class="px-1">
-                        <input type="hidden" name="numero_pacote_{{ loop.index0 }}" value="{{item['order_number']}}">
-                        <input type="text" class="form-control form-control-sm" name="endereco_{{ loop.index0 }}" value="{{item['address']}}" style="min-width:120px;">
-                    </td>
-                    <td class="px-1">
-                        <input type="text" class="form-control form-control-sm" name="cep_{{ loop.index0 }}" value="{{item['cep']}}" style="min-width:80px;">
-                    </td>
-                    <td class="cep-encontrado text-center px-1">{{ item['postal_code_encontrado'] or '-' }}</td>
-                    <td class="status-google px-1">
+        <!-- CARDS MOBILE -->
+        <div class="d-block d-md-none">
+            {% for item in lista %}
+            <div class="card mb-2 {% if item.cep_ok %}border-success{% else %}border-danger{% endif %}" style="font-size:1em;">
+                <div class="card-body py-2 px-3">
+                    <div class="d-flex align-items-center mb-2">
+                        <span class="badge bg-primary me-2" style="width:28px;">{{ loop.index }}</span>
+                        <strong style="flex:1">{{ item.address }}</strong>
+                    </div>
+                    <div class="mb-1"><small>CEP Inf.:</small> {{item.cep}} | <small>CEP Google:</small> {{item.postal_code_encontrado or '-' }}</div>
+                    <div>
+                        <span class="text-muted small">Status:</span>
                         {% if item.status_google == 'OK' %}
                             <span class="text-success">OK</span>
                             {% if not item.rua_bate %}
-                                <br><span class="text-warning" style="font-size:.97em;">⚠️ Rua diferente do Google!</span>
+                                <span class="text-warning">⚠️ Rua diferente do Google!</span>
                             {% endif %}
                         {% else %}
                             <span class="text-danger">{{ item.status_google or 'NÃO ENCONTRADO' }}</span>
                         {% endif %}
-                    </td>
-                    <td class="px-1 text-center">
+                    </div>
+                    <div class="mt-2">
+                        <input type="hidden" name="numero_pacote_{{ loop.index0 }}" value="{{item['order_number']}}">
+                        <input type="text" class="form-control form-control-sm mb-1" name="endereco_{{ loop.index0 }}" value="{{item['address']}}" placeholder="Endereço">
+                        <input type="text" class="form-control form-control-sm mb-1" name="cep_{{ loop.index0 }}" value="{{item['cep']}}" placeholder="CEP">
                         <button type="button" onclick="validarLinha({{ loop.index0 }})" class="btn btn-warning btn-sm w-100 mb-1">Validar</button>
-                        <span class="valido-ok d-none text-success">✔️</span>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        <!-- TABELA DESKTOP -->
+        <div class="table-responsive d-none d-md-block" style="max-height:56vh; overflow-y:auto;">
+            <table class="table table-bordered align-middle table-sm" id="tabela-enderecos" style="font-size:1em;">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:32px;">#</th>
+                        <th style="min-width:140px;">Endereço</th>
+                        <th style="min-width:100px;">CEP Informado</th>
+                        <th style="min-width:86px;">CEP Google</th>
+                        <th style="min-width:80px;">Status</th>
+                        <th style="width:80px;">Ação</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in lista %}
+                    <tr id="linha-{{ loop.index0 }}" class="{% if item.cep_ok %}table-success{% else %}table-danger{% endif %}">
+                        <td class="text-center px-1">{{ loop.index }}</td>
+                        <td class="px-1">
+                            <input type="hidden" name="numero_pacote_{{ loop.index0 }}" value="{{item['order_number']}}">
+                            <input type="text" class="form-control form-control-sm" name="endereco_{{ loop.index0 }}" value="{{item['address']}}" style="min-width:120px;">
+                        </td>
+                        <td class="px-1">
+                            <input type="text" class="form-control form-control-sm" name="cep_{{ loop.index0 }}" value="{{item['cep']}}" style="min-width:80px;">
+                        </td>
+                        <td class="cep-encontrado text-center px-1">{{ item['postal_code_encontrado'] or '-' }}</td>
+                        <td class="status-google px-1">
+                            {% if item.status_google == 'OK' %}
+                                <span class="text-success">OK</span>
+                                {% if not item.rua_bate %}
+                                    <br><span class="text-warning" style="font-size:.97em;">⚠️ Rua diferente do Google!</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-danger">{{ item.status_google or 'NÃO ENCONTRADO' }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-1 text-center">
+                            <button type="button" onclick="validarLinha({{ loop.index0 }})" class="btn btn-warning btn-sm w-100 mb-1">Validar</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
         <input type="hidden" name="total" value="{{lista|length}}">
         <button id="btn-csv" type="submit" name="finalizar" value="1" class="btn btn-success w-100 mt-2">
             Gerar CSV para MyWay
         </button>
     </form>
 </div>
-
-<!-- MODAL MAPA FULLSCREEN -->
-<div class="modal fade" id="modalMapa" tabindex="-1" aria-labelledby="modalMapaLabel" aria-hidden="true">
-  <div class="modal-dialog modal-fullscreen">
-    <div class="modal-content">
-      <div class="modal-body p-0">
-        <div id="map-fullscreen" style="width:100vw; height:100vh;"></div>
-      </div>
-      <button type="button" class="btn btn-light position-absolute top-0 end-0 m-3" data-bs-dismiss="modal" style="z-index:10;">Fechar</button>
-    </div>
-  </div>
-</div>
 {% endblock %}
 
 {% block scripts %}
+<style>
+.gmaps-principal { width: 100%; height: 340px; border-radius: 9px; margin-bottom: 8px; }
+@media (max-width: 700px) {
+    .gmaps-principal { height: 50vw !important; min-height: 220px !important; }
+}
+</style>
 <script>
-let markers = [];
-let mapObj = null;
+function abrirMapaFullscreen() {
+    let el = document.getElementById('map');
+    if (el.requestFullscreen) el.requestFullscreen();
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    else if (el.msRequestFullscreen) el.msRequestFullscreen();
+}
 
-// --- MAPA PRINCIPAL E PINS DRAGGABLE ---
-window.initMap = function() {
-    // ---- dados dos endereços ---
+// Função para exibir os pins dos endereços no mapa
+function initMap() {
     var enderecos = [
         {% for item in lista %}
         {% if item.latitude and item.longitude %}
         {
             lat: {{ item.latitude }},
             lng: {{ item.longitude }},
-            idx: {{ loop.index0 }},
-            title: "{{ item.order_number }}",
-            address: "{{ item.address | replace('"', "'") }}"
+            title: "{{ item.order_number }} - {{ item.address | replace('"', "'") }}",
+            status: "{{ 'valid' if item.cep_ok else 'invalid' }}"
         },
         {% endif %}
         {% endfor %}
     ];
-
     var center = (enderecos.length > 0) ? {lat: enderecos[0].lat, lng: enderecos[0].lng} : {lat: 41.7, lng: -8.8};
-    mapObj = new google.maps.Map(document.getElementById('map'), {
+    var map = new google.maps.Map(document.getElementById('map'), {
         zoom: 11,
         center: center
     });
-    markers = [];
-    enderecos.forEach(function(e, idx) {
-        let marker = new google.maps.Marker({
+    enderecos.forEach(function(e) {
+        var pinColor = (e.status === 'valid') ? "http://maps.google.com/mapfiles/ms/icons/green-dot.png" : "http://maps.google.com/mapfiles/ms/icons/red-dot.png";
+        new google.maps.Marker({
             position: {lat: e.lat, lng: e.lng},
-            map: mapObj,
-            draggable: true,
+            map: map,
             title: e.title,
-            icon: {
-                url: e.idx % 2 === 0
-                    ? "http://maps.google.com/mapfiles/ms/icons/green-dot.png"
-                    : "http://maps.google.com/mapfiles/ms/icons/red-dot.png",
-                labelOrigin: new google.maps.Point(18, 12)
-            },
-            label: {
-                text: String(idx+1),
-                color: "#fff",
-                fontWeight: "bold"
-            }
+            icon: pinColor
         });
-
-        // Drag & drop do PIN: atualiza campo endereço
-        marker.addListener('dragend', function(event) {
-            atualizaEnderecoPorPin(idx, event.latLng.lat(), event.latLng.lng());
-        });
-        markers.push(marker);
     });
-};
-
-// Função chamada ao arrastar PIN para novo local
-function atualizaEnderecoPorPin(idx, lat, lng) {
-    // Faz request reversa para obter endereço
-    fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key={{ GOOGLE_API_KEY }}&region=pt`)
-    .then(resp => resp.json())
-    .then(data => {
-        if (data.status === "OK") {
-            let addr = data.results[0].formatted_address || "";
-            document.querySelector('input[name="endereco_' + idx + '"]').value = addr;
-        }
-    });
-}
-
-// Botão de mapa fullscreen (abre modal Bootstrap)
-function abrirMapaFullscreen() {
-    var modal = new bootstrap.Modal(document.getElementById('modalMapa'));
-    modal.show();
-
-    setTimeout(function() {
-        var enderecos = [
-            {% for item in lista %}
-            {% if item.latitude and item.longitude %}
-            {
-                lat: {{ item.latitude }},
-                lng: {{ item.longitude }},
-                idx: {{ loop.index0 }},
-                title: "{{ item.order_number }}",
-                address: "{{ item.address | replace('"', "'") }}"
-            },
-            {% endif %}
-            {% endfor %}
-        ];
-        var mapFullscreen = new google.maps.Map(document.getElementById('map-fullscreen'), {
-            zoom: 11,
-            center: (enderecos.length > 0) ? {lat: enderecos[0].lat, lng: enderecos[0].lng} : {lat: 41.7, lng: -8.8}
-        });
-        enderecos.forEach(function(e, idx) {
-            let marker = new google.maps.Marker({
-                position: {lat: e.lat, lng: e.lng},
-                map: mapFullscreen,
-                draggable: true,
-                title: e.title,
-                icon: {
-                    url: e.idx % 2 === 0
-                        ? "http://maps.google.com/mapfiles/ms/icons/green-dot.png"
-                        : "http://maps.google.com/mapfiles/ms/icons/red-dot.png",
-                    labelOrigin: new google.maps.Point(18, 12)
-                },
-                label: {
-                    text: String(idx+1),
-                    color: "#fff",
-                    fontWeight: "bold"
-                }
-            });
-            marker.addListener('dragend', function(event) {
-                atualizaEnderecoPorPin(idx, event.latLng.lat(), event.latLng.lng());
-            });
-        });
-    }, 300);
 }
 
 // Função para validar uma linha individualmente (AJAX)
@@ -224,7 +174,6 @@ function validarLinha(idx) {
         }
         btn.disabled = false;
         btn.textContent = "Validar";
-        // (Opcional: atualizar pin no mapa principal, se quiser)
     })
     .catch(() => {
         btn.disabled = false;
@@ -234,8 +183,5 @@ function validarLinha(idx) {
     return false;
 }
 </script>
-<!-- Bootstrap Modal -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-<!-- Google Maps -->
 <script src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&callback=initMap" async defer></script>
 {% endblock %}
