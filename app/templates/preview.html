@@ -70,15 +70,17 @@ function validarLinha(idx) {
         } else {
             tdGoogle.innerHTML = '<span class="text-danger">' + (data.status_google || "NÃO ENCONTRADO") + '</span>';
         }
-        // Verificação de validade total: Google OK + CEP informado igual ao encontrado
-        let ok = (data.status_google == "OK" && data.cep == data.postal_code_encontrado);
-        if (ok) {
+        // Se CEP bate, valida independente da rua!
+        if (data.cep_ok) {
             row.className = "table-success";
             btn.classList.add("d-none");
             row.querySelector('.valido-ok').classList.remove("d-none");
-            // Bloqueia os campos após validar
             row.querySelector('input[name="endereco_' + idx + '"]').setAttribute('readonly', 'readonly');
             row.querySelector('input[name="cep_' + idx + '"]').setAttribute('readonly', 'readonly');
+            // Aviso se a rua divergir
+            if (!data.rua_bate) {
+                tdGoogle.innerHTML += '<br><span class="text-warning">⚠️ Rua diferente do Google!</span>';
+            }
         } else {
             row.className = "table-danger";
             btn.disabled = false;
@@ -99,7 +101,7 @@ function validarLinha(idx) {
 }
 
 function atualizarBotaoCSV() {
-    // Habilita botão CSV só se todas as linhas estiverem table-success (ou seja, validadas)
+    // Habilita botão CSV só se todas as linhas estiverem table-success (ou seja, validadas por CEP)
     let tudoOK = true;
     document.querySelectorAll("#tabela-enderecos tbody tr").forEach(function(row) {
         if (!row.classList.contains("table-success")) {
