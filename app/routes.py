@@ -7,6 +7,14 @@ from .utils import valida_rua_google
 main_routes = Blueprint('main', __name__)
 csv_content = None
 
+def normalizar(texto):
+    import unicodedata
+    if not texto:
+        return ''
+    return ''.join(
+        c for c in unicodedata.normalize('NFKD', texto.lower()) if not unicodedata.combining(c)
+    ).strip()
+
 @main_routes.route('/', methods=['GET'])
 def home():
     return render_template("home.html")
@@ -34,6 +42,9 @@ def preview():
                     "endereco_formatado": "",
                     "latitude": "",
                     "longitude": "",
+                    "rua_google": "",
+                    "cep_ok": False,
+                    "rua_bate": False,
                 })
                 i += 4
             else:
@@ -49,6 +60,10 @@ def validar_linha():
     cep = request.form.get('cep')
     numero_pacote = request.form.get('numero_pacote')
     res_google = valida_rua_google(endereco, cep)
+    rua_digitada = endereco.split(',')[0] if endereco else ''
+    rua_google = res_google.get('route_encontrada', '')
+    rua_bate = normalizar(rua_digitada) in normalizar(rua_google) or normalizar(rua_google) in normalizar(rua_digitada)
+    cep_ok = cep == res_google.get('postal_code_encontrado', '')
     return jsonify({
         'order_number': numero_pacote,
         'address': endereco,
@@ -58,6 +73,9 @@ def validar_linha():
         'endereco_formatado': res_google.get('endereco_formatado', ''),
         'latitude': res_google.get('coordenadas', {}).get('lat', ''),
         'longitude': res_google.get('coordenadas', {}).get('lng', ''),
+        'rua_google': rua_google,
+        'cep_ok': cep_ok,
+        'rua_bate': rua_bate,
     })
 
 @main_routes.route('/generate', methods=['POST'])
@@ -71,6 +89,10 @@ def generate():
         cep = request.form.get(f'cep_{i}', '')
         res_google = valida_rua_google(endereco, cep)
         postal_code_encontrado = res_google.get('postal_code_encontrado', '')
+        rua_digitada = endereco.split(',')[0] if endereco else ''
+        rua_google = res_google.get('route_encontrada', '')
+        rua_bate = normalizar(rua_digitada) in normalizar(rua_google) or normalizar(rua_google) in normalizar(rua_digitada)
+        cep_ok = cep == postal_code_encontrado
         lista.append({
             "order_number": numero_pacote,
             "address": endereco,
@@ -79,22 +101,28 @@ def generate():
             "postal_code_encontrado": postal_code_encontrado,
             "latitude": res_google.get('coordenadas', {}).get('lat', ''),
             "longitude": res_google.get('coordenadas', {}).get('lng', ''),
+            "rua_google": rua_google,
+            "cep_ok": cep_ok,
+            "rua_bate": rua_bate,
         })
-    # Só gera se todos estiverem validados!
-    todos_ok = all(row['status_google'] == "OK" and row['cep'] == row['postal_code_encontrado'] for row in lista)
+    # Só gera se todos os CEPs estiverem validados!
+    todos_ok = all(row['cep_ok'] for row in lista)
     if not todos_ok:
-        return "Existem endereços não validados corretamente. Corrija antes de gerar o CSV.", 400
-    # Ordena pelo código postal encontrado, senão pelo informado
+        return "Existem endereços com código postal divergente do Google. Corrija antes de gerar o CSV.", 400
     lista_ordenada = sorted(lista, key=lambda x: x['postal_code_encontrado'] or x['cep'])
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow([
         "order number", "name", "address", "latitude", "longitude", "duration", "start time",
-        "end time", "phone", "contact", "notes", "color", "Group"
+        "end time", "phone", "contact", "notes", "color", "Group", "rua_google", "aviso"
     ])
     for row in lista_ordenada:
+        aviso = ""
+        if not row["rua_bate"]:
+            aviso = "Rua divergente do Google"
         writer.writerow([
-            row["order_number"], "", row["address"], row["latitude"], row["longitude"], "", "", "", "", "", row["postal_code_encontrado"] or row["cep"], "", ""
+            row["order_number"], "", row["address"], row["latitude"], row["longitude"], "", "", "", "", "",
+            row["postal_code_encontrado"] or row["cep"], "", "", row["rua_google"], aviso
         ])
     csv_content = output.getvalue()
     return redirect(url_for('main.download'))
