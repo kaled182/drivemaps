@@ -4,9 +4,9 @@ import os
 def validar_rua_codigo_postal(rua, codigo_postal):
     """
     Valida se a rua existe dentro do código postal usando geoapi.pt.
-    Retorna dict com status, se existe e lista de ruas válidas.
+    Retorna dict: existe, status e lista de ruas válidas.
     """
-    url = f"https://geoapi.pt/cp/{codigo_postal.replace('-','')}"
+    url = f"https://geoapi.pt/cp/{codigo_postal.replace('-', '')}"
     try:
         r = requests.get(url, timeout=8)
         if r.status_code != 200:
@@ -23,6 +23,10 @@ def validar_rua_codigo_postal(rua, codigo_postal):
         return {"status": "ERRO", "detalhe": str(e)}
 
 def valida_rua_google(endereco, cep=None):
+    """
+    Valida e geocodifica o endereço usando Google Maps API.
+    Retorna lat/lon e endereço formatado.
+    """
     api_key = os.environ.get('GOOGLE_API_KEY')
     url = "https://maps.googleapis.com/maps/api/geocode/json"
     query = endereco
