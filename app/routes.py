@@ -27,18 +27,22 @@ def preview():
                 numero_pacote = linhas[i+3] if (i+3) < len(linhas) else ""
                 cep = cep_match.group(1)
                 nome_rua = linha.split(',')[0].strip()
+                # 1. Valida rua/código postal via geoapi.pt
                 resultado_geoapi = validar_rua_codigo_postal(nome_rua, cep)
+                # 2. Consulta Google
                 resultado_google = valida_rua_google(linha, cep)
-                status = "OK" if resultado_geoapi.get('existe') and resultado_google.get('status') == "OK" else "NÃO ENCONTRADO"
+                # 3. Status consolidado
+                status = "OK" if resultado_geoapi['existe'] and resultado_google['status'] == "OK" else (
+                    "RUA NÃO EXISTE NO CEP" if not resultado_geoapi['existe'] else resultado_google['status']
+                )
                 lista.append({
                     "order_number": numero_pacote,
                     "address": linha,
                     "cep": cep,
                     "status": status,
                     "postal_code_encontrado": resultado_google.get('postal_code_encontrado', ''),
-                    "rua_validada_geoapi": resultado_geoapi.get('existe'),
-                    "sugestoes_ruas": resultado_geoapi.get('ruas_validas', []),
                     "endereco_formatado": resultado_google.get('endereco_formatado', ''),
+                    "rua_geoapi": ", ".join(resultado_geoapi['ruas_validas'][:5]) + ("..." if len(resultado_geoapi['ruas_validas']) > 5 else ""),
                 })
                 i += 4
             else:
@@ -60,7 +64,9 @@ def generate():
         nome_rua = endereco.split(',')[0].strip()
         resultado_geoapi = validar_rua_codigo_postal(nome_rua, cep)
         resultado_google = valida_rua_google(endereco, cep)
-        status = "OK" if resultado_geoapi.get('existe') and resultado_google.get('status') == "OK" else "NÃO ENCONTRADO"
+        status = "OK" if resultado_geoapi['existe'] and resultado_google['status'] == "OK" else (
+            "RUA NÃO EXISTE NO CEP" if not resultado_geoapi['existe'] else resultado_google['status']
+        )
         lista.append({
             "order_number": numero_pacote,
             "address": endereco,
@@ -102,7 +108,9 @@ def validar_linha():
     nome_rua = endereco.split(',')[0].strip()
     resultado_geoapi = validar_rua_codigo_postal(nome_rua, cep)
     resultado_google = valida_rua_google(endereco, cep)
-    status = "OK" if resultado_geoapi.get('existe') and resultado_google.get('status') == "OK" else "NÃO ENCONTRADO"
+    status = "OK" if resultado_geoapi['existe'] and resultado_google['status'] == "OK" else (
+        "RUA NÃO EXISTE NO CEP" if not resultado_geoapi['existe'] else resultado_google['status']
+    )
     return jsonify({
         'order_number': numero_pacote,
         'address': endereco,
@@ -112,6 +120,5 @@ def validar_linha():
         'endereco_formatado': resultado_google.get('endereco_formatado', ''),
         'latitude': resultado_google.get('coordenadas', {}).get('lat', ''),
         'longitude': resultado_google.get('coordenadas', {}).get('lng', ''),
-        'rua_validada_geoapi': resultado_geoapi.get('existe'),
-        'sugestoes_ruas': resultado_geoapi.get('ruas_validas', []),
+        'ruas_geoapi': resultado_geoapi['ruas_validas']
     })
