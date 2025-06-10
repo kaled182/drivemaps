@@ -1,28 +1,53 @@
 import requests
 import os
 
-def valida_endereco_google(endereco, codigo_postal):
-    api_key = os.getenv('GOOGLE_API_KEY')
-    # Monta endereço priorizando CEP/PT
-    query = f"{endereco}, {codigo_postal}, Portugal"
-    url = "https://maps.googleapis.com/maps/api/geocode/json"
-    params = {'address': query, 'key': api_key, 'region': 'pt'}
+def validar_rua_codigo_postal(rua, codigo_postal):
+    """
+    Valida se a rua existe dentro do código postal usando geoapi.pt.
+    Retorna dict com status e lista de ruas válidas.
+    """
+    url = f"https://geoapi.pt/cp/{codigo_postal.replace('-','')}"
     try:
-        response = requests.get(url, params=params, timeout=10)
-        data = response.json()
-        if data['status'] == 'OK':
-            result = data['results'][0]
-            postal_code = None
-            for comp in result['address_components']:
-                if 'postal_code' in comp['types']:
-                    postal_code = comp['long_name']
-                    break
-            return {
-                'status': 'OK',
-                'endereco_formatado': result['formatted_address'],
-                'coordenadas': result['geometry']['location'],
-                'postal_code_encontrado': postal_code
-            }
-        return {'status': data['status'], 'detalhes': data.get('error_message', '')}
+        r = requests.get(url, timeout=8)
+        if r.status_code != 200:
+            return {"status": "ERRO_API", "detalhe": "Falha ao consultar geoapi.pt"}
+        data = r.json()
+        ruas_validas = [rua_api['nome'].lower() for rua_api in data.get('ruas', [])]
+        existe = any(rua.strip().lower() == r for r in ruas_validas)
+        return {
+            "status": "OK" if existe else "NÃO ENCONTRADO",
+            "existe": existe,
+            "ruas_validas": ruas_validas
+        }
     except Exception as e:
-        return {'status': 'ERRO_API', 'detalhes': str(e)}
+        return {"status": "ERRO", "detalhe": str(e)}
+
+def valida_rua_google(endereco, cep=None):
+    api_key = os.environ.get('GOOGLE_API_KEY')
+    url = "https://maps.googleapis.com/maps/api/geocode/json"
+    query = endereco
+    if cep and cep not in endereco:
+        query = f"{endereco}, {cep}, Portugal"
+    params = {
+        'address': query,
+        'region': 'pt',
+        'key': api_key
+    }
+    r = requests.get(url, params=params, timeout=8)
+    if r.status_code != 200:
+        return {"status": "ERRO_API", "detalhes": r.text}
+    data = r.json()
+    if not data.get('results'):
+        return {"status": "NÃO ENCONTRADO"}
+    res = data['results'][0]
+    componentes = {c['types'][0]: c['long_name'] for c in res['address_components']}
+    resultado = {
+        "status": "OK",
+        "endereco_formatado": res['formatted_address'],
+        "coordenadas": res['geometry']['location'],
+        "postal_code_encontrado": componentes.get('postal_code', ''),
+        "route_encontrada": componentes.get('route', ''),
+        "locality": componentes.get('locality', ''),
+        "sublocality": componentes.get('sublocality', ''),
+    }
+    return resultado
