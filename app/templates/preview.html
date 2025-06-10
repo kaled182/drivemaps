@@ -11,6 +11,7 @@
                 <th>CEP Informado</th>
                 <th>CEP Encontrado</th>
                 <th>Status</th>
+                <th>Sugestões (GeoAPI)</th>
                 <th>Corrigir/Confirmar</th>
             </tr>
         </thead>
@@ -30,9 +31,6 @@
                 </td>
                 <td class="cep-encontrado">
                     {{ item['postal_code_encontrado'] or "-" }}
-                    {% if item['postal_code_encontrado'] and item['cep'] != item['postal_code_encontrado'] %}
-                        <span class="badge bg-warning text-dark">Divergente</span>
-                    {% endif %}
                 </td>
                 <td class="status">
                     {% if item['status'] == 'OK' and item['cep'] == item['postal_code_encontrado'] %}
@@ -42,6 +40,9 @@
                     {% else %}
                         <span class="text-danger">{{ item['status'] or "ERRO" }}</span>
                     {% endif %}
+                </td>
+                <td>
+                    <small>{{ item['rua_geoapi'] }}</small>
                 </td>
                 <td>
                     {% if item['status'] != 'OK' or item['cep'] != item['postal_code_encontrado'] %}
@@ -77,17 +78,10 @@ function validarLinha(idx) {
     })
     .then(resp => resp.json())
     .then(data => {
-        // Atualiza campos
         row.querySelector('input[name="endereco_' + idx + '"]').value = data.address;
         row.querySelector('input[name="cep_' + idx + '"]').value = data.cep;
-
-        // CEP Encontrado + Badge divergente
         let tdCep = row.querySelector('td.cep-encontrado');
         tdCep.innerHTML = data.postal_code_encontrado || "-";
-        if (data.postal_code_encontrado && data.cep != data.postal_code_encontrado) {
-            tdCep.innerHTML += ' <span class="badge bg-warning text-dark">Divergente</span>';
-        }
-
         // Status atualizado e colorido
         let tdStatus = row.querySelector('td.status');
         tdStatus.innerHTML = '';
@@ -98,7 +92,8 @@ function validarLinha(idx) {
         } else {
             tdStatus.innerHTML = '<span class="text-danger">' + (data.status || "ERRO") + '</span>';
         }
-
+        // Sugestões da GeoAPI
+        row.children[5].innerHTML = data.ruas_geoapi ? data.ruas_geoapi.slice(0, 5).join(", ") : '';
         // Cor da linha
         if (data.status == "OK" && data.cep == data.postal_code_encontrado) {
             row.className = "table-success";
@@ -107,8 +102,6 @@ function validarLinha(idx) {
         } else {
             row.className = "table-danger";
         }
-
-        // Botão/readonly
         if (data.status == "OK" && data.cep == data.postal_code_encontrado) {
             btn.outerHTML = '<span class="text-success">✔️</span>';
             row.querySelector('input[name="endereco_' + idx + '"]').setAttribute('readonly', 'readonly');
