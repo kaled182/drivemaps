@@ -1,35 +1,30 @@
-<!DOCTYPE html>
-<html lang="pt">
-<head>
-    <meta charset="utf-8">
-    <title>DriveMaps – Gerador de Rotas PAACK</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <!-- Bootstrap 5 CDN -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body {
-            background: #f2f6ff;
-            min-height: 100vh;
-        }
-        .container {
-            background: #fff;
-            border-radius: 8px;
-            box-shadow: 0 0 16px #bbb;
-            padding: 30px;
-            max-width: 950px;
-            margin: 36px auto;
-        }
-        h2, h4 {
-            color: #1976d2;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h2 class="mb-4" style="font-weight:600;">DriveMaps</h2>
-        {% block content %}{% endblock %}
+{% extends "base.html" %}
+
+{% block content %}
+<h2>DriveMaps – Validação de Endereços PAACK</h2>
+<form action="{{ url_for('main.preview') }}" method="POST">
+    <div class="mb-3">
+        <label for="enderecos" class="form-label">
+            Cole abaixo a lista de endereços da PAACK (um por linha):
+        </label>
+        <textarea class="form-control" id="enderecos" name="enderecos" rows="16"
+                  placeholder="Exemplo:&#10;urbanização do ribeiro 135, 4905-129, palme&#10;#U3BGMQkZZ_1&#10;urbanização do ribeiro 135, 4905-129, palme&#10;1"></textarea>
     </div>
-    <!-- Bootstrap JS (opcional, só para modais/popovers) -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+    <button type="submit" class="btn btn-primary">Pré-visualizar Endereços</button>
+</form>
+
+<div class="mt-4">
+    <h4>Como usar:</h4>
+    <ol>
+        <li>Cole a lista completa da PAACK no campo acima (copiada do sistema/app).</li>
+        <li>Clique em “Pré-visualizar Endereços”.</li>
+        <li>Na tela seguinte, confira a cor de cada linha (verde = CEP válido, vermelho = CEP divergente).</li>
+        <li>Confira a <b>freguesia</b> retornada pelo Google para maior precisão.</li>
+        <li>Se necessário, corrija e clique em "Validar" em qualquer linha alterada.</li>
+        <li>O botão "Gerar CSV para MyWay" está sempre disponível!</li>
+    </ol>
+    <div class="alert alert-info mt-3">
+        <strong>Dica:</strong> Se copiar grandes volumes de endereços, divida em lotes para não sobrecarregar!
+    </div>
+</div>
+{% endblock %}
