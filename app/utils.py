@@ -4,7 +4,7 @@ import os
 def valida_rua_google(endereco, cep=None):
     """
     Valida e geocodifica o endereço usando Google Maps API.
-    Retorna lat/lon, endereço formatado, status, e o postal code identificado pelo Google.
+    Retorna lat/lon, endereço formatado, e também sublocality (freguesia).
     """
     api_key = os.environ.get('GOOGLE_API_KEY')
     url = "https://maps.googleapis.com/maps/api/geocode/json"
@@ -24,7 +24,8 @@ def valida_rua_google(endereco, cep=None):
                 "endereco_formatado": "",
                 "postal_code_encontrado": "",
                 "coordenadas": {},
-                "detalhe": r.text
+                "detalhe": r.text,
+                "sublocality": ""
             }
         data = r.json()
         if not data.get('results'):
@@ -32,7 +33,8 @@ def valida_rua_google(endereco, cep=None):
                 "status": "NÃO ENCONTRADO",
                 "endereco_formatado": "",
                 "postal_code_encontrado": "",
-                "coordenadas": {}
+                "coordenadas": {},
+                "sublocality": ""
             }
         res = data['results'][0]
         componentes = {c['types'][0]: c['long_name'] for c in res['address_components']}
@@ -43,7 +45,7 @@ def valida_rua_google(endereco, cep=None):
             "postal_code_encontrado": componentes.get('postal_code', ''),
             "route_encontrada": componentes.get('route', ''),
             "locality": componentes.get('locality', ''),
-            "sublocality": componentes.get('sublocality', ''),
+            "sublocality": componentes.get('sublocality', ''),  # Freguesia
         }
     except Exception as e:
         return {
@@ -51,5 +53,6 @@ def valida_rua_google(endereco, cep=None):
             "endereco_formatado": "",
             "postal_code_encontrado": "",
             "coordenadas": {},
+            "sublocality": "",
             "detalhe": str(e)
         }
