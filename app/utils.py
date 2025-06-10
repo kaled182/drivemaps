@@ -4,14 +4,23 @@ import os
 def validar_rua_codigo_postal(rua, codigo_postal):
     """
     Valida se a rua existe dentro do código postal usando geoapi.pt.
-    Retorna dict: existe, status e lista de ruas válidas.
+    SEMPRE retorna as chaves: status, existe, ruas_validas.
     """
+    api_key = os.environ.get('GEOAPI_KEY')
     url = f"https://geoapi.pt/cp/{codigo_postal.replace('-', '')}"
+    if api_key:
+        url += f"?key={api_key}"
     try:
         r = requests.get(url, timeout=8)
         if r.status_code != 200:
-            return {"status": "ERRO_API", "detalhe": "Falha ao consultar geoapi.pt"}
+            return {
+                "status": "ERRO_API",
+                "existe": False,
+                "ruas_validas": [],
+                "detalhe": "Falha ao consultar geoapi.pt"
+            }
         data = r.json()
+        # A API retorna lista de ruas válidas
         ruas_validas = [rua_api['nome'].lower() for rua_api in data.get('ruas', [])]
         existe = any(rua.strip().lower() == r for r in ruas_validas)
         return {
@@ -20,7 +29,12 @@ def validar_rua_codigo_postal(rua, codigo_postal):
             "ruas_validas": ruas_validas
         }
     except Exception as e:
-        return {"status": "ERRO", "detalhe": str(e)}
+        return {
+            "status": "ERRO",
+            "existe": False,
+            "ruas_validas": [],
+            "detalhe": str(e)
+        }
 
 def valida_rua_google(endereco, cep=None):
     """
@@ -37,21 +51,40 @@ def valida_rua_google(endereco, cep=None):
         'region': 'pt',
         'key': api_key
     }
-    r = requests.get(url, params=params, timeout=8)
-    if r.status_code != 200:
-        return {"status": "ERRO_API", "detalhes": r.text}
-    data = r.json()
-    if not data.get('results'):
-        return {"status": "NÃO ENCONTRADO"}
-    res = data['results'][0]
-    componentes = {c['types'][0]: c['long_name'] for c in res['address_components']}
-    resultado = {
-        "status": "OK",
-        "endereco_formatado": res['formatted_address'],
-        "coordenadas": res['geometry']['location'],
-        "postal_code_encontrado": componentes.get('postal_code', ''),
-        "route_encontrada": componentes.get('route', ''),
-        "locality": componentes.get('locality', ''),
-        "sublocality": componentes.get('sublocality', ''),
-    }
-    return resultado
+    try:
+        r = requests.get(url, params=params, timeout=8)
+        if r.status_code != 200:
+            return {
+                "status": "ERRO_API",
+                "endereco_formatado": "",
+                "postal_code_encontrado": "",
+                "coordenadas": {},
+                "detalhe": r.text
+            }
+        data = r.json()
+        if not data.get('results'):
+            return {
+                "status": "NÃO ENCONTRADO",
+                "endereco_formatado": "",
+                "postal_code_encontrado": "",
+                "coordenadas": {}
+            }
+        res = data['results'][0]
+        componentes = {c['types'][0]: c['long_name'] for c in res['address_components']}
+        return {
+            "status": "OK",
+            "endereco_formatado": res['formatted_address'],
+            "coordenadas": res['geometry']['location'],
+            "postal_code_encontrado": componentes.get('postal_code', ''),
+            "route_encontrada": componentes.get('route', ''),
+            "locality": componentes.get('locality', ''),
+            "sublocality": componentes.get('sublocality', ''),
+        }
+    except Exception as e:
+        return {
+            "status": "ERRO",
+            "endereco_formatado": "",
+            "postal_code_encontrado": "",
+            "coordenadas": {},
+            "detalhe": str(e)
+        }
