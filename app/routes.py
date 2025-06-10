@@ -26,23 +26,24 @@ def preview():
             if i + 2 < len(linhas) and linhas[i+2] == linha:
                 numero_pacote = linhas[i+3] if (i+3) < len(linhas) else ""
                 cep = cep_match.group(1)
+                # Extrai nome da rua (ajuste se necessário conforme padrão dos seus endereços)
                 nome_rua = linha.split(',')[0].strip()
-                # 1. Valida rua/código postal via geoapi.pt
-                resultado_geoapi = validar_rua_codigo_postal(nome_rua, cep)
-                # 2. Consulta Google
-                resultado_google = valida_rua_google(linha, cep)
-                # 3. Status consolidado
-                status = "OK" if resultado_geoapi['existe'] and resultado_google['status'] == "OK" else (
-                    "RUA NÃO EXISTE NO CEP" if not resultado_geoapi['existe'] else resultado_google['status']
-                )
+                # Valida com geoapi.pt
+                res_geoapi = validar_rua_codigo_postal(nome_rua, cep)
+                # Valida com Google Maps
+                res_google = valida_rua_google(linha, cep)
                 lista.append({
                     "order_number": numero_pacote,
                     "address": linha,
                     "cep": cep,
-                    "status": status,
-                    "postal_code_encontrado": resultado_google.get('postal_code_encontrado', ''),
-                    "endereco_formatado": resultado_google.get('endereco_formatado', ''),
-                    "rua_geoapi": ", ".join(resultado_geoapi['ruas_validas'][:5]) + ("..." if len(resultado_geoapi['ruas_validas']) > 5 else ""),
+                    "status_geoapi": res_geoapi['status'],
+                    "rua_existe_geoapi": res_geoapi['existe'],
+                    "ruas_validas": res_geoapi['ruas_validas'],
+                    "status_google": res_google.get('status'),
+                    "postal_code_encontrado": res_google.get('postal_code_encontrado', ''),
+                    "endereco_formatado": res_google.get('endereco_formatado', ''),
+                    "latitude": res_google.get('coordenadas', {}).get('lat', ''),
+                    "longitude": res_google.get('coordenadas', {}).get('lng', ''),
                 })
                 i += 4
             else:
@@ -51,6 +52,28 @@ def preview():
             i += 1
     session['lista'] = lista
     return render_template("preview.html", lista=lista)
+
+@main_routes.route('/api/validar-linha', methods=['POST'])
+def validar_linha():
+    endereco = request.form.get('endereco')
+    cep = request.form.get('cep')
+    numero_pacote = request.form.get('numero_pacote')
+    nome_rua = endereco.split(',')[0].strip()
+    res_geoapi = validar_rua_codigo_postal(nome_rua, cep)
+    res_google = valida_rua_google(endereco, cep)
+    return jsonify({
+        'order_number': numero_pacote,
+        'address': endereco,
+        'cep': cep,
+        'status_geoapi': res_geoapi['status'],
+        'rua_existe_geoapi': res_geoapi['existe'],
+        'ruas_validas': res_geoapi['ruas_validas'],
+        'status_google': res_google.get('status'),
+        'postal_code_encontrado': res_google.get('postal_code_encontrado', ''),
+        'endereco_formatado': res_google.get('endereco_formatado', ''),
+        'latitude': res_google.get('coordenadas', {}).get('lat', ''),
+        'longitude': res_google.get('coordenadas', {}).get('lng', ''),
+    })
 
 @main_routes.route('/generate', methods=['POST'])
 def generate():
@@ -62,21 +85,24 @@ def generate():
         endereco = request.form.get(f'endereco_{i}', '')
         cep = request.form.get(f'cep_{i}', '')
         nome_rua = endereco.split(',')[0].strip()
-        resultado_geoapi = validar_rua_codigo_postal(nome_rua, cep)
-        resultado_google = valida_rua_google(endereco, cep)
-        status = "OK" if resultado_geoapi['existe'] and resultado_google['status'] == "OK" else (
-            "RUA NÃO EXISTE NO CEP" if not resultado_geoapi['existe'] else resultado_google['status']
-        )
+        res_geoapi = validar_rua_codigo_postal(nome_rua, cep)
+        res_google = valida_rua_google(endereco, cep)
+        postal_code_encontrado = res_google.get('postal_code_encontrado', '')
         lista.append({
             "order_number": numero_pacote,
             "address": endereco,
             "cep": cep,
-            "status": status,
-            "postal_code_encontrado": resultado_google.get('postal_code_encontrado', ''),
-            "latitude": resultado_google.get('coordenadas', {}).get('lat', ''),
-            "longitude": resultado_google.get('coordenadas', {}).get('lng', ''),
+            "status_geoapi": res_geoapi['status'],
+            "rua_existe_geoapi": res_geoapi['existe'],
+            "ruas_validas": res_geoapi['ruas_validas'],
+            "status_google": res_google.get('status'),
+            "postal_code_encontrado": postal_code_encontrado,
+            "latitude": res_google.get('coordenadas', {}).get('lat', ''),
+            "longitude": res_google.get('coordenadas', {}).get('lng', ''),
         })
+    # Ordena pelo código postal encontrado, senão pelo informado
     lista_ordenada = sorted(lista, key=lambda x: x['postal_code_encontrado'] or x['cep'])
+    # Gera CSV
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow([
@@ -99,26 +125,3 @@ def download():
         as_attachment=True,
         download_name="enderecos_myway.csv"
     )
-
-@main_routes.route('/api/validar-linha', methods=['POST'])
-def validar_linha():
-    endereco = request.form.get('endereco')
-    cep = request.form.get('cep')
-    numero_pacote = request.form.get('numero_pacote')
-    nome_rua = endereco.split(',')[0].strip()
-    resultado_geoapi = validar_rua_codigo_postal(nome_rua, cep)
-    resultado_google = valida_rua_google(endereco, cep)
-    status = "OK" if resultado_geoapi['existe'] and resultado_google['status'] == "OK" else (
-        "RUA NÃO EXISTE NO CEP" if not resultado_geoapi['existe'] else resultado_google['status']
-    )
-    return jsonify({
-        'order_number': numero_pacote,
-        'address': endereco,
-        'cep': cep,
-        'status': status,
-        'postal_code_encontrado': resultado_google.get('postal_code_encontrado', ''),
-        'endereco_formatado': resultado_google.get('endereco_formatado', ''),
-        'latitude': resultado_google.get('coordenadas', {}).get('lat', ''),
-        'longitude': resultado_google.get('coordenadas', {}).get('lng', ''),
-        'ruas_geoapi': resultado_geoapi['ruas_validas']
-    })
