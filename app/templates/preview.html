@@ -1,10 +1,12 @@
 {% extends "base.html" %}
 
 {% block content %}
+<!-- Mapa Google -->
 <div class="mb-3" style="position:relative;">
-    <div id="map" style="width:100%;height:350px;position:sticky;top:0;z-index:2;border-radius:10px;margin-bottom:18px;"></div>
+    <div id="map" style="width:100%;height:350px;border-radius:10px;margin-bottom:18px;"></div>
 </div>
 
+<!-- Tabela responsiva -->
 <div class="table-responsive">
 <form id="form-csv" action="{{ url_for('main.generate') }}" method="post" autocomplete="off">
     <table class="table table-bordered align-middle" id="tabela-enderecos">
@@ -56,6 +58,14 @@
 {% endblock %}
 
 {% block scripts %}
+<!-- Responsividade extra para mobile -->
+<style>
+@media (max-width: 600px) {
+    #map { height: 240px !important; }
+    .table thead { font-size: 0.90em;}
+    .table input { font-size: 0.93em; }
+}
+</style>
 <script src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&callback=initMap" async defer></script>
 <script>
 let markers = [];
@@ -75,6 +85,7 @@ let enderecosData = [
 let map;
 
 function initMap() {
+    // Foco inicial: primeiro endereço válido ou centro genérico
     let primeiro = enderecosData.find(e => e.lat && e.lng);
     let center = primeiro ? {lat: primeiro.lat, lng: primeiro.lng} : {lat: 41.7, lng: -8.8};
 
@@ -83,29 +94,29 @@ function initMap() {
         center: center
     });
 
-    // Cria marcadores com label e cor
+    // Cria marcadores Google padrão numerados (label com ID do pacote)
     enderecosData.forEach(function(e, idx) {
         if (!e.lat || !e.lng) return;
-        let pinColor = (e.status === 'valid') ? "#44B100" : "#D82B2B";
+        let color = (e.status === 'valid') ? "#44B100" : "#D82B2B";
         let marker = new google.maps.Marker({
             position: {lat: e.lat, lng: e.lng},
             map: map,
-            title: e.numero_pacote + " - " + e.address,
-            draggable: true,
             label: {
-                text: String(e.numero_pacote),
-                color: "white",
+                text: e.numero_pacote,
+                color: "#fff",
                 fontWeight: "bold",
-                fontSize: "14px"
+                fontSize: "13px"
             },
             icon: {
                 path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
                 scale: 6,
-                fillColor: pinColor,
+                fillColor: color,
                 fillOpacity: 1,
                 strokeWeight: 1,
                 strokeColor: "#222"
-            }
+            },
+            title: e.numero_pacote + " - " + e.address,
+            draggable: true
         });
 
         marker.addListener('dragend', function(event) {
@@ -125,8 +136,7 @@ function initMap() {
                         row.querySelector('input[name="endereco_' + e.idx + '"]').value = data.address;
                         row.querySelector('input[name="cep_' + e.idx + '"]').value = data.cep;
                         row.className = "table-success";
-                        enderecosData[e.idx].lat = event.latLng.lat();
-                        enderecosData[e.idx].lng = event.latLng.lng();
+                        // Atualiza pin (verde)
                         marker.setIcon({
                             path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
                             scale: 6,
@@ -135,9 +145,14 @@ function initMap() {
                             strokeWeight: 1,
                             strokeColor: "#222"
                         });
+                        // Atualiza dados internos
+                        enderecosData[e.idx].lat = event.latLng.lat();
+                        enderecosData[e.idx].lng = event.latLng.lng();
+                        // Posição no mapa
+                        map.panTo({lat: event.latLng.lat(), lng: event.latLng.lng()});
                     } else {
                         alert("Endereço não encontrado!");
-                        marker.setPosition({lat: e.lat, lng: e.lng});
+                        marker.setPosition({lat: e.lat, lng: e.lng}); // Volta para original
                     }
                 })
                 .catch(() => {
@@ -145,7 +160,7 @@ function initMap() {
                     marker.setPosition({lat: e.lat, lng: e.lng});
                 });
             } else {
-                marker.setPosition({lat: e.lat, lng: e.lng});
+                marker.setPosition({lat: e.lat, lng: e.lng}); // Volta para original
             }
         });
 
@@ -186,7 +201,8 @@ function validarLinha(idx) {
         }
         btn.disabled = false;
         btn.textContent = "Validar";
-        // Atualiza pin do mapa (se coordenadas vieram)
+
+        // Atualiza pin do mapa
         if (data.latitude && data.longitude) {
             let novaLat = parseFloat(data.latitude);
             let novaLng = parseFloat(data.longitude);
