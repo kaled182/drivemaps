@@ -4,7 +4,7 @@ import os
 def validar_rua_codigo_postal(rua, codigo_postal):
     """
     Valida se a rua existe dentro do código postal usando geoapi.pt.
-    Retorna dict com status e lista de ruas válidas.
+    Retorna dict com status, se existe e lista de ruas válidas.
     """
     url = f"https://geoapi.pt/cp/{codigo_postal.replace('-','')}"
     try:
