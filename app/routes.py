@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, session, send_file
+from flask import Blueprint, render_template, request, redirect, url_for, session, send_file, jsonify
 import re
 import csv
 import io
@@ -89,3 +89,21 @@ def download():
         as_attachment=True,
         download_name="enderecos_myway.csv"
     )
+
+# --------- NOVA ROTA AJAX (VALIDAÇÃO INDIVIDUAL) ----------
+@main_routes.route('/api/validar-linha', methods=['POST'])
+def validar_linha():
+    endereco = request.form.get('endereco')
+    cep = request.form.get('cep')
+    numero_pacote = request.form.get('numero_pacote')
+    resultado = valida_endereco_google(endereco, cep)
+    return jsonify({
+        'order_number': numero_pacote,
+        'address': endereco,
+        'cep': cep,
+        'status': resultado.get('status'),
+        'postal_code_encontrado': resultado.get('postal_code_encontrado', ''),
+        'endereco_formatado': resultado.get('endereco_formatado', ''),
+        'latitude': resultado.get('coordenadas', {}).get('lat', ''),
+        'longitude': resultado.get('coordenadas', {}).get('lng', ''),
+    })
