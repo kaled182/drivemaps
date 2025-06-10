@@ -29,7 +29,20 @@
         table th, table td {
             vertical-align: middle !important;
         }
+        /* Responsividade extra para mobile */
+        @media (max-width: 768px) {
+            #map { height: 220px !important; }
+            table { font-size: 0.93em; }
+            .table-responsive { overflow-x: auto; }
+            th, td { min-width: 100px; }
+            input.form-control { font-size: 0.97em; }
+        }
+        @media (max-width: 500px) {
+            #map { height: 120px !important; }
+            h2 { font-size: 1.2em !important; }
+        }
     </style>
+    {% block head %}{% endblock %}
 </head>
 <body>
     <div class="container">
