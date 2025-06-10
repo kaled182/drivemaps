@@ -146,3 +146,23 @@ def download():
         as_attachment=True,
         download_name="enderecos_myway.csv"
     )
+
+# --- NOVO ENDPOINT PARA ATUALIZAR PIN NO MAPA ---
+@main_routes.route("/api/atualizar-coordenada", methods=["POST"])
+def atualizar_coordenada():
+    try:
+        idx = int(request.form["idx"])
+        lat = float(request.form["lat"])
+        lng = float(request.form["lng"])
+        if "lista" in session:
+            lista = session["lista"]
+            if 0 <= idx < len(lista):
+                lista[idx]["latitude"] = lat
+                lista[idx]["longitude"] = lng
+                lista[idx]["cep_ok"] = True  # (Opcional) força como válido ao mover
+                session["lista"] = lista
+                return jsonify(sucesso=True)
+            return jsonify(sucesso=False, erro="Índice fora do range"), 400
+        return jsonify(sucesso=False, erro="Nenhuma lista carregada"), 400
+    except Exception as e:
+        return jsonify(sucesso=False, erro=str(e)), 500
