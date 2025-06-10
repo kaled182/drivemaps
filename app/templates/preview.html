@@ -21,9 +21,9 @@
         <tbody>
             {% for item in lista %}
             <tr id="linha-{{ loop.index0 }}" class="{% if item.cep_ok %}table-success{% else %}table-danger{% endif %}">
-                <td style="font-weight: bold; text-align:center;">{{ item['order_number'] or '?' }}</td>
+                <td style="font-weight: bold; text-align:center;">{{ item['order_number'] }}</td>
                 <td>
-                    <input type="hidden" name="numero_pacote_{{ loop.index0 }}" value="{{item['order_number'] or '?'}}">
+                    <input type="hidden" name="numero_pacote_{{ loop.index0 }}" value="{{item['order_number']}}">
                     <input type="text" class="form-control" name="endereco_{{ loop.index0 }}" value="{{item['address']}}">
                 </td>
                 <td>
@@ -65,7 +65,7 @@ let enderecosData = [
         idx: {{ loop.index0 }},
         lat: {{ item.latitude or 'null' }},
         lng: {{ item.longitude or 'null' }},
-        numero_pacote: "{{ item.order_number or '?' }}",
+        numero_pacote: "{{ item.order_number|e }}",
         address: `{{ item.address|replace('`','\'')|e }}`,
         status: "{{ 'valid' if item.cep_ok else 'invalid' }}"
     },
@@ -75,8 +75,7 @@ let enderecosData = [
 let map;
 
 function initMap() {
-    // Foco inicial: primeiro endereço válido ou centro genérico
-    let primeiro = enderecosData.find(e => typeof e.lat === "number" && typeof e.lng === "number");
+    let primeiro = enderecosData.find(e => e.lat && e.lng);
     let center = primeiro ? {lat: primeiro.lat, lng: primeiro.lng} : {lat: 41.7, lng: -8.8};
 
     map = new google.maps.Map(document.getElementById('map'), {
@@ -84,20 +83,29 @@ function initMap() {
         center: center
     });
 
-    let pinBase = "https://chart.googleapis.com/chart?chst=d_map_pin_letter&chld=";
-    let pinGreen = "|44B100|fff";
-    let pinRed = "|D82B2B|fff";
-
+    // Cria marcadores com label e cor
     enderecosData.forEach(function(e, idx) {
-        if (typeof e.lat !== "number" || typeof e.lng !== "number" || isNaN(e.lat) || isNaN(e.lng)) return;
-        let cor = (e.status === 'valid') ? pinGreen : pinRed;
-        let label = e.numero_pacote && e.numero_pacote !== "null" && e.numero_pacote !== "" ? e.numero_pacote : "?";
+        if (!e.lat || !e.lng) return;
+        let pinColor = (e.status === 'valid') ? "#44B100" : "#D82B2B";
         let marker = new google.maps.Marker({
             position: {lat: e.lat, lng: e.lng},
             map: map,
-            title: label + " - " + e.address,
-            icon: pinBase + encodeURIComponent(label) + cor,
-            draggable: true
+            title: e.numero_pacote + " - " + e.address,
+            draggable: true,
+            label: {
+                text: String(e.numero_pacote),
+                color: "white",
+                fontWeight: "bold",
+                fontSize: "14px"
+            },
+            icon: {
+                path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
+                scale: 6,
+                fillColor: pinColor,
+                fillOpacity: 1,
+                strokeWeight: 1,
+                strokeColor: "#222"
+            }
         });
 
         marker.addListener('dragend', function(event) {
@@ -119,7 +127,14 @@ function initMap() {
                         row.className = "table-success";
                         enderecosData[e.idx].lat = event.latLng.lat();
                         enderecosData[e.idx].lng = event.latLng.lng();
-                        marker.setIcon(pinBase + encodeURIComponent(label) + pinGreen);
+                        marker.setIcon({
+                            path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
+                            scale: 6,
+                            fillColor: "#44B100",
+                            fillOpacity: 1,
+                            strokeWeight: 1,
+                            strokeColor: "#222"
+                        });
                     } else {
                         alert("Endereço não encontrado!");
                         marker.setPosition({lat: e.lat, lng: e.lng});
@@ -142,7 +157,7 @@ function validarLinha(idx) {
     const row = document.getElementById('linha-' + idx);
     const endereco = row.querySelector('input[name="endereco_' + idx + '"]').value;
     const cep = row.querySelector('input[name="cep_' + idx + '"]').value;
-    const numero_pacote = row.querySelector('input[name="numero_pacote_' + idx + '"]').value || "?";
+    const numero_pacote = row.querySelector('input[name="numero_pacote_' + idx + '"]').value;
     const btn = row.querySelector('button');
     btn.disabled = true;
     btn.textContent = "Validando...";
@@ -171,17 +186,21 @@ function validarLinha(idx) {
         }
         btn.disabled = false;
         btn.textContent = "Validar";
-
         // Atualiza pin do mapa (se coordenadas vieram)
         if (data.latitude && data.longitude) {
             let novaLat = parseFloat(data.latitude);
             let novaLng = parseFloat(data.longitude);
             if (markers[idx]) {
                 markers[idx].setPosition({lat: novaLat, lng: novaLng});
-                let cor = (data.cep_ok ? "|44B100|fff" : "|D82B2B|fff");
-                let pinUrl = "https://chart.googleapis.com/chart?chst=d_map_pin_letter&chld=" +
-                            encodeURIComponent(data.order_number || "?") + cor;
-                markers[idx].setIcon(pinUrl);
+                let cor = (data.cep_ok ? "#44B100" : "#D82B2B");
+                markers[idx].setIcon({
+                    path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
+                    scale: 6,
+                    fillColor: cor,
+                    fillOpacity: 1,
+                    strokeWeight: 1,
+                    strokeColor: "#222"
+                });
                 map.panTo({lat: novaLat, lng: novaLng});
             }
             enderecosData[idx].lat = novaLat;
