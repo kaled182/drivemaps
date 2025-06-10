@@ -5,7 +5,6 @@ import io
 from .utils import validar_rua_codigo_postal, valida_rua_google
 
 main_routes = Blueprint('main', __name__)
-
 csv_content = None
 
 @main_routes.route('/', methods=['GET'])
@@ -26,24 +25,19 @@ def preview():
             if i + 2 < len(linhas) and linhas[i+2] == linha:
                 numero_pacote = linhas[i+3] if (i+3) < len(linhas) else ""
                 cep = cep_match.group(1)
-                # Extrai nome da rua (ajuste se necessário conforme padrão dos seus endereços)
-                nome_rua = linha.split(',')[0].strip()
-                # Valida com geoapi.pt
-                res_geoapi = validar_rua_codigo_postal(nome_rua, cep)
-                # Valida com Google Maps
-                res_google = valida_rua_google(linha, cep)
                 lista.append({
                     "order_number": numero_pacote,
                     "address": linha,
                     "cep": cep,
-                    "status_geoapi": res_geoapi['status'],
-                    "rua_existe_geoapi": res_geoapi['existe'],
-                    "ruas_validas": res_geoapi['ruas_validas'],
-                    "status_google": res_google.get('status'),
-                    "postal_code_encontrado": res_google.get('postal_code_encontrado', ''),
-                    "endereco_formatado": res_google.get('endereco_formatado', ''),
-                    "latitude": res_google.get('coordenadas', {}).get('lat', ''),
-                    "longitude": res_google.get('coordenadas', {}).get('lng', ''),
+                    # Novidade: NÃO valida status aqui! Campos em branco para status
+                    "status_geoapi": "",
+                    "rua_existe_geoapi": False,
+                    "ruas_validas": [],
+                    "status_google": "",
+                    "postal_code_encontrado": "",
+                    "endereco_formatado": "",
+                    "latitude": "",
+                    "longitude": "",
                 })
                 i += 4
             else:
@@ -100,9 +94,12 @@ def generate():
             "latitude": res_google.get('coordenadas', {}).get('lat', ''),
             "longitude": res_google.get('coordenadas', {}).get('lng', ''),
         })
+    # Só gera se todos estiverem validados!
+    todos_ok = all(row['status_geoapi'] == "OK" and row['status_google'] == "OK" and row['cep'] == row['postal_code_encontrado'] for row in lista)
+    if not todos_ok:
+        return "Existem endereços não validados corretamente. Corrija antes de gerar o CSV.", 400
     # Ordena pelo código postal encontrado, senão pelo informado
     lista_ordenada = sorted(lista, key=lambda x: x['postal_code_encontrado'] or x['cep'])
-    # Gera CSV
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow([
