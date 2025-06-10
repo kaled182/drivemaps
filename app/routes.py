@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, sessio
 import re
 import csv
 import io
+import os
 from .utils import valida_rua_google
 
 main_routes = Blueprint('main', __name__)
@@ -59,7 +60,8 @@ def preview():
         else:
             i += 1
     session['lista'] = lista
-    return render_template("preview.html", lista=lista)
+    google_api_key = os.environ.get("GOOGLE_API_KEY", "")
+    return render_template("preview.html", lista=lista, GOOGLE_API_KEY=google_api_key)
 
 @main_routes.route('/api/validar-linha', methods=['POST'])
 def validar_linha():
