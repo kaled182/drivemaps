@@ -2,7 +2,6 @@ from flask import Blueprint, render_template, request, redirect, url_for, sessio
 import re
 import csv
 import io
-import os
 from .utils import valida_endereco_google
 
 main_routes = Blueprint('main', __name__)
@@ -90,7 +89,6 @@ def download():
         download_name="enderecos_myway.csv"
     )
 
-# --------- NOVA ROTA AJAX (VALIDAÇÃO INDIVIDUAL) ----------
 @main_routes.route('/api/validar-linha', methods=['POST'])
 def validar_linha():
     endereco = request.form.get('endereco')
