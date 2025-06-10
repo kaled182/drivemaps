@@ -60,19 +60,33 @@
 {% block scripts %}
 <script src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&callback=initMap" async defer></script>
 <script>
-// Cria um PIN SVG com o número do pacote e a cor correspondente
+var map;
+var markers = [];
+
 function svgPin(numero, cor) {
-    const svg = `
-    <svg width="42" height="48" viewBox="0 0 42 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <ellipse cx="21" cy="21" rx="18" ry="18" fill="${cor}" stroke="black" stroke-width="2"/>
-      <rect x="19" y="38" width="4" height="8" fill="${cor}" stroke="black" stroke-width="1"/>
-      <text x="21" y="28" text-anchor="middle" font-size="18" font-family="Arial" fill="#fff" stroke="black" stroke-width="0.7" dy=".3em">${numero}</text>
-    </svg>
-    `;
-    return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
+    numero = String(numero).padStart(2, '0');
+    return 'data:image/svg+xml;utf-8,' + encodeURIComponent(`
+      <svg width="48" height="64" viewBox="0 0 48 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- Sombra -->
+        <ellipse cx="24" cy="59" rx="12" ry="5" fill="#000" fill-opacity="0.13"/>
+        <!-- Corpo -->
+        <path d="M24 4
+                 a20 20 0 0 1 20 20
+                 c0 11-13 32-20 36
+                 c-7-4-20-25-20-36
+                 a20 20 0 0 1 20-20z"
+              fill="${cor}" stroke="#444" stroke-width="1"/>
+        <!-- Sombra inclinada -->
+        <polygon points="24,4 44,24 24,44" fill="#000" fill-opacity="0.12"/>
+        <!-- Número -->
+        <text x="24" y="29" text-anchor="middle" font-size="18" font-family="Arial" font-weight="bold" fill="#fff" stroke="#222" stroke-width="0.8" dy=".3em">${numero}</text>
+      </svg>
+    `);
 }
 
+// Inicializa o mapa e os pins
 window.initMap = function() {
+    markers = [];
     var enderecos = [
         {% for item in lista %}
         {% if item.latitude and item.longitude %}
@@ -87,24 +101,43 @@ window.initMap = function() {
         {% endfor %}
     ];
     var center = (enderecos.length > 0) ? {lat: enderecos[0].lat, lng: enderecos[0].lng} : {lat: 41.7, lng: -8.8};
-    var map = new google.maps.Map(document.getElementById('map'), {
+    map = new google.maps.Map(document.getElementById('map'), {
         zoom: 11,
         center: center
     });
-    enderecos.forEach(function(e) {
-        var cor = (e.status === 'valid') ? "#38b000" : "#e63946";
-        new google.maps.Marker({
+    enderecos.forEach(function(e, idx) {
+        var cor = (e.status === 'valid') ? "#3adb31" : "#e74c3c";
+        var marker = new google.maps.Marker({
             position: {lat: e.lat, lng: e.lng},
             map: map,
             title: e.title,
             icon: {
                 url: svgPin(e.numero_pacote, cor),
-                scaledSize: new google.maps.Size(42, 48)
+                scaledSize: new google.maps.Size(48, 64)
             }
         });
+        markers.push(marker);
     });
-};
+}
 
+// Atualiza apenas o pin do endereço corrigido/validado
+function atualizarPin(idx, lat, lng, numero_pacote, status) {
+    if (markers[idx]) {
+        markers[idx].setMap(null); // Remove antigo
+    }
+    var cor = (status === 'valid') ? "#3adb31" : "#e74c3c";
+    markers[idx] = new google.maps.Marker({
+        position: {lat: lat, lng: lng},
+        map: map,
+        title: String(numero_pacote),
+        icon: {
+            url: svgPin(numero_pacote, cor),
+            scaledSize: new google.maps.Size(48, 64)
+        }
+    });
+}
+
+// Função AJAX para validação individual
 window.validarLinha = function(idx) {
     const row = document.getElementById('linha-' + idx);
     const endereco = row.querySelector('input[name="endereco_' + idx + '"]').value;
@@ -137,6 +170,10 @@ window.validarLinha = function(idx) {
         } else {
             tdGoogle.innerHTML = '<span class="text-danger">' + (data.status_google || "NÃO ENCONTRADO") + '</span>';
             row.className = "table-danger";
+        }
+        // Atualizar pin no mapa se latitude e longitude estiverem presentes
+        if (data.latitude && data.longitude) {
+            atualizarPin(idx, data.latitude, data.longitude, data.order_number, data.cep_ok ? 'valid' : 'invalid');
         }
         btn.disabled = false;
         btn.textContent = "Validar";
