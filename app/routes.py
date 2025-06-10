@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, sessio
 import re
 import csv
 import io
-from .utils import validar_rua_codigo_postal, valida_rua_google
+from .utils import valida_rua_google
 
 main_routes = Blueprint('main', __name__)
 csv_content = None
@@ -29,10 +29,6 @@ def preview():
                     "order_number": numero_pacote,
                     "address": linha,
                     "cep": cep,
-                    # Novidade: NÃO valida status aqui! Campos em branco para status
-                    "status_geoapi": "",
-                    "rua_existe_geoapi": False,
-                    "ruas_validas": [],
                     "status_google": "",
                     "postal_code_encontrado": "",
                     "endereco_formatado": "",
@@ -52,16 +48,11 @@ def validar_linha():
     endereco = request.form.get('endereco')
     cep = request.form.get('cep')
     numero_pacote = request.form.get('numero_pacote')
-    nome_rua = endereco.split(',')[0].strip()
-    res_geoapi = validar_rua_codigo_postal(nome_rua, cep)
     res_google = valida_rua_google(endereco, cep)
     return jsonify({
         'order_number': numero_pacote,
         'address': endereco,
         'cep': cep,
-        'status_geoapi': res_geoapi['status'],
-        'rua_existe_geoapi': res_geoapi['existe'],
-        'ruas_validas': res_geoapi['ruas_validas'],
         'status_google': res_google.get('status'),
         'postal_code_encontrado': res_google.get('postal_code_encontrado', ''),
         'endereco_formatado': res_google.get('endereco_formatado', ''),
@@ -78,24 +69,19 @@ def generate():
         numero_pacote = request.form.get(f'numero_pacote_{i}', '')
         endereco = request.form.get(f'endereco_{i}', '')
         cep = request.form.get(f'cep_{i}', '')
-        nome_rua = endereco.split(',')[0].strip()
-        res_geoapi = validar_rua_codigo_postal(nome_rua, cep)
         res_google = valida_rua_google(endereco, cep)
         postal_code_encontrado = res_google.get('postal_code_encontrado', '')
         lista.append({
             "order_number": numero_pacote,
             "address": endereco,
             "cep": cep,
-            "status_geoapi": res_geoapi['status'],
-            "rua_existe_geoapi": res_geoapi['existe'],
-            "ruas_validas": res_geoapi['ruas_validas'],
             "status_google": res_google.get('status'),
             "postal_code_encontrado": postal_code_encontrado,
             "latitude": res_google.get('coordenadas', {}).get('lat', ''),
             "longitude": res_google.get('coordenadas', {}).get('lng', ''),
         })
     # Só gera se todos estiverem validados!
-    todos_ok = all(row['status_geoapi'] == "OK" and row['status_google'] == "OK" and row['cep'] == row['postal_code_encontrado'] for row in lista)
+    todos_ok = all(row['status_google'] == "OK" and row['cep'] == row['postal_code_encontrado'] for row in lista)
     if not todos_ok:
         return "Existem endereços não validados corretamente. Corrija antes de gerar o CSV.", 400
     # Ordena pelo código postal encontrado, senão pelo informado
