@@ -39,3 +39,14 @@
                         <button type="submit" name="revalidar" value="{{ loop.index0 }}">Validar novamente</button>
                     {% else %}
                         ✔️
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+        <input type="hidden" name="total" value="{{lista|length}}">
+        <button type="submit" name="finalizar" value="1">Gerar CSV para MyWay</button>
+    </form>
+</div>
+</body>
+</html>
