@@ -1,52 +1,39 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>MapsDrive – Pré-visualização</title>
-    <style>
-        body { background: #f2f6ff; font-family: Arial; }
-        .container { max-width: 900px; margin: auto; background: #fff; border-radius: 8px; padding: 30px; box-shadow: 0 0 16px #bbb; }
-        table { border-collapse: collapse; width: 100%; margin-top: 18px; }
-        th, td { border: 1px solid #ccc; padding: 7px; text-align: left; }
-        .ok { background: #e3faea; }
-        .erro { background: #f9d7d7; }
-        input[type="text"] { width: 98%; font-size:1.08em; }
-        button { background: #1976d2; color: white; padding: 10px 24px; border: none; border-radius: 5px; font-size: 1em; margin-top: 12px; }
-        h2 { color: #1976d2; }
-    </style>
-</head>
-<body>
-<div class="container">
-    <h2>Pré-visualização dos Endereços</h2>
-    <form action="/generate" method="post">
-        <table>
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Pré-visualização dos Endereços</h2>
+<form action="{{ url_for('main.generate') }}" method="post">
+    <table class="table table-bordered">
+        <thead>
             <tr>
                 <th>#</th>
                 <th>Endereço</th>
                 <th>Status</th>
                 <th>Corrigir/Confirmar</th>
             </tr>
+        </thead>
+        <tbody>
             {% for item in lista %}
-            <tr class="{{ 'ok' if item['status'] == 'OK' else 'erro' }}">
+            <tr class="{% if item['status'] == 'OK' %}table-success{% else %}table-danger{% endif %}">
                 <td>{{ loop.index }}</td>
                 <td>
                     <input type="hidden" name="numero_pacote_{{ loop.index0 }}" value="{{item['order_number']}}">
                     <input type="hidden" name="cep_{{ loop.index0 }}" value="{{item['cep']}}">
-                    <input type="text" name="endereco_{{ loop.index0 }}" value="{{item['address']}}" {% if item['status']=='OK' %}readonly{% endif %}>
+                    <input type="text" class="form-control" name="endereco_{{ loop.index0 }}" value="{{item['address']}}" {% if item['status']=='OK' %}readonly{% endif %}>
                 </td>
                 <td>{{ item['status'] }}</td>
                 <td>
                     {% if item['status'] != 'OK' %}
-                        <button type="submit" name="revalidar" value="{{ loop.index0 }}">Validar novamente</button>
+                        <button type="submit" name="revalidar" value="{{ loop.index0 }}" class="btn btn-warning btn-sm">Validar novamente</button>
                     {% else %}
-                        ✔️
+                        <span class="text-success">✔️</span>
                     {% endif %}
                 </td>
             </tr>
             {% endfor %}
-        </table>
-        <input type="hidden" name="total" value="{{lista|length}}">
-        <button type="submit" name="finalizar" value="1">Gerar CSV para MyWay</button>
-    </form>
-</div>
-</body>
-</html>
+        </tbody>
+    </table>
+    <input type="hidden" name="total" value="{{lista|length}}">
+    <button type="submit" name="finalizar" value="1" class="btn btn-success">Gerar CSV para MyWay</button>
+</form>
+{% endblock %}
