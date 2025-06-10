@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, session
+from flask import Blueprint, render_template, request, redirect, url_for, session, send_file
 import re
 import csv
 import io
@@ -23,71 +23,11 @@ def valida_endereco_google(address, api_key=GOOGLE_API_KEY):
     except Exception:
         return "ERRO API", "", ""
 
-# --- HTML templates (simples, recomenda-se usar arquivos em /templates) ---
-HTML_FORM = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>MapsDrive – Gerador de CSV para MyWay</title>
-</head>
-<body>
-    <h2>MapsDrive – Gerador de CSV para MyWay</h2>
-    <form action="/preview" method="post">
-        <label>Cole sua lista de endereços:</label><br>
-        <textarea name="enderecos" rows="16" style="width:100%; font-size:1.1em" placeholder="Cole aqui sua lista bruta..."></textarea><br>
-        <button type="submit">Pré-visualizar</button>
-    </form>
-</body>
-</html>
-"""
-
-HTML_PREVIEW = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>MapsDrive – Pré-visualização</title>
-</head>
-<body>
-    <h2>Pré-visualização dos Endereços</h2>
-    <form action="/generate" method="post">
-        <table border="1" style="width:100%">
-            <tr>
-                <th>#</th>
-                <th>Endereço</th>
-                <th>Status</th>
-                <th>Corrigir/Confirmar</th>
-            </tr>
-            {% for item in lista %}
-            <tr style="background: {% if item['status'] == 'OK' %}#e3faea{% else %}#f9d7d7{% endif %};">
-                <td>{{ loop.index }}</td>
-                <td>
-                    <input type="hidden" name="numero_pacote_{{ loop.index0 }}" value="{{item['order_number']}}">
-                    <input type="hidden" name="cep_{{ loop.index0 }}" value="{{item['cep']}}">
-                    <input type="text" name="endereco_{{ loop.index0 }}" value="{{item['address']}}" {% if item['status']=='OK' %}readonly{% endif %}>
-                </td>
-                <td>{{ item['status'] }}</td>
-                <td>
-                    {% if item['status'] != 'OK' %}
-                        <button type="submit" name="revalidar" value="{{ loop.index0 }}">Validar novamente</button>
-                    {% else %}
-                        ✔️
-                    {% endif %}
-                </td>
-            </tr>
-            {% endfor %}
-        </table>
-        <input type="hidden" name="total" value="{{lista|length}}">
-        <button type="submit" name="finalizar" value="1">Gerar CSV para MyWay</button>
-    </form>
-</body>
-</html>
-"""
-
 csv_content = None
 
 @main_routes.route('/', methods=['GET'])
 def home():
-    return render_template_string(HTML_FORM)
+    return render_template("home.html")
 
 @main_routes.route('/preview', methods=['POST'])
 def preview():
@@ -115,7 +55,7 @@ def preview():
         else:
             i += 1
     session['lista'] = lista  # Salva para próxima etapa
-    return render_template_string(HTML_PREVIEW, lista=lista)
+    return render_template("preview.html", lista=lista)
 
 @main_routes.route('/generate', methods=['POST'])
 def generate():
