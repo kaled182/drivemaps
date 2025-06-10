@@ -147,22 +147,31 @@ def download():
         download_name="enderecos_myway.csv"
     )
 
-# --- NOVO ENDPOINT PARA ATUALIZAR PIN NO MAPA ---
-@main_routes.route("/api/atualizar-coordenada", methods=["POST"])
-def atualizar_coordenada():
-    try:
-        idx = int(request.form["idx"])
-        lat = float(request.form["lat"])
-        lng = float(request.form["lng"])
-        if "lista" in session:
-            lista = session["lista"]
-            if 0 <= idx < len(lista):
-                lista[idx]["latitude"] = lat
-                lista[idx]["longitude"] = lng
-                lista[idx]["cep_ok"] = True  # (Opcional) força como válido ao mover
-                session["lista"] = lista
-                return jsonify(sucesso=True)
-            return jsonify(sucesso=False, erro="Índice fora do range"), 400
-        return jsonify(sucesso=False, erro="Nenhuma lista carregada"), 400
-    except Exception as e:
-        return jsonify(sucesso=False, erro=str(e)), 500
+# --- NOVA ROTA para reverse-geocode ---
+@main_routes.route('/api/reverse-geocode', methods=['POST'])
+def reverse_geocode():
+    idx = int(request.form.get('idx'))
+    lat = request.form.get('lat')
+    lng = request.form.get('lng')
+    if not lat or not lng:
+        return jsonify({'sucesso': False}), 400
+    import requests
+    api_key = os.environ.get('GOOGLE_API_KEY', '')
+    url = "https://maps.googleapis.com/maps/api/geocode/json"
+    params = {'latlng': f"{lat},{lng}", 'key': api_key, 'region': 'pt'}
+    r = requests.get(url, params=params, timeout=7)
+    data = r.json()
+    if not data.get('results'):
+        return jsonify({'sucesso': False})
+    res = data['results'][0]
+    address = res['formatted_address']
+    postal_code = ''
+    for c in res['address_components']:
+        if 'postal_code' in c['types']:
+            postal_code = c['long_name']
+            break
+    return jsonify({
+        'sucesso': True,
+        'address': address,
+        'cep': postal_code
+    })
