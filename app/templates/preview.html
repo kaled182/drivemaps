@@ -1,12 +1,10 @@
 {% extends "base.html" %}
 
 {% block content %}
-<!-- Mapa Google -->
 <div class="mb-3" style="position:relative;">
-    <div id="map" style="width:100%;height:350px;border-radius:10px;margin-bottom:18px;"></div>
+    <div id="map" style="width:100%;height:350px;position:sticky;top:0;z-index:2;border-radius:10px;margin-bottom:18px;"></div>
 </div>
 
-<!-- Tabela responsiva -->
 <div class="table-responsive">
 <form id="form-csv" action="{{ url_for('main.generate') }}" method="post" autocomplete="off">
     <table class="table table-bordered align-middle" id="tabela-enderecos">
@@ -58,14 +56,6 @@
 {% endblock %}
 
 {% block scripts %}
-<!-- Responsividade extra para mobile -->
-<style>
-@media (max-width: 600px) {
-    #map { height: 240px !important; }
-    .table thead { font-size: 0.90em;}
-    .table input { font-size: 0.93em; }
-}
-</style>
 <script src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&callback=initMap" async defer></script>
 <script>
 let markers = [];
@@ -85,7 +75,6 @@ let enderecosData = [
 let map;
 
 function initMap() {
-    // Foco inicial: primeiro endereço válido ou centro genérico
     let primeiro = enderecosData.find(e => e.lat && e.lng);
     let center = primeiro ? {lat: primeiro.lat, lng: primeiro.lng} : {lat: 41.7, lng: -8.8};
 
@@ -94,28 +83,18 @@ function initMap() {
         center: center
     });
 
-    // Cria marcadores Google padrão numerados (label com ID do pacote)
+    let pinBase = "https://chart.googleapis.com/chart?chst=d_map_pin_letter&chld=";
+    let pinGreen = "|44B100|fff";
+    let pinRed = "|D82B2B|fff";
+
     enderecosData.forEach(function(e, idx) {
         if (!e.lat || !e.lng) return;
-        let color = (e.status === 'valid') ? "#44B100" : "#D82B2B";
+        let cor = (e.status === 'valid') ? pinGreen : pinRed;
         let marker = new google.maps.Marker({
             position: {lat: e.lat, lng: e.lng},
             map: map,
-            label: {
-                text: e.numero_pacote,
-                color: "#fff",
-                fontWeight: "bold",
-                fontSize: "13px"
-            },
-            icon: {
-                path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
-                scale: 6,
-                fillColor: color,
-                fillOpacity: 1,
-                strokeWeight: 1,
-                strokeColor: "#222"
-            },
             title: e.numero_pacote + " - " + e.address,
+            icon: pinBase + encodeURIComponent(e.numero_pacote) + cor,
             draggable: true
         });
 
@@ -136,23 +115,12 @@ function initMap() {
                         row.querySelector('input[name="endereco_' + e.idx + '"]').value = data.address;
                         row.querySelector('input[name="cep_' + e.idx + '"]').value = data.cep;
                         row.className = "table-success";
-                        // Atualiza pin (verde)
-                        marker.setIcon({
-                            path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
-                            scale: 6,
-                            fillColor: "#44B100",
-                            fillOpacity: 1,
-                            strokeWeight: 1,
-                            strokeColor: "#222"
-                        });
-                        // Atualiza dados internos
                         enderecosData[e.idx].lat = event.latLng.lat();
                         enderecosData[e.idx].lng = event.latLng.lng();
-                        // Posição no mapa
-                        map.panTo({lat: event.latLng.lat(), lng: event.latLng.lng()});
+                        marker.setIcon(pinBase + encodeURIComponent(e.numero_pacote) + pinGreen);
                     } else {
                         alert("Endereço não encontrado!");
-                        marker.setPosition({lat: e.lat, lng: e.lng}); // Volta para original
+                        marker.setPosition({lat: e.lat, lng: e.lng});
                     }
                 })
                 .catch(() => {
@@ -160,7 +128,7 @@ function initMap() {
                     marker.setPosition({lat: e.lat, lng: e.lng});
                 });
             } else {
-                marker.setPosition({lat: e.lat, lng: e.lng}); // Volta para original
+                marker.setPosition({lat: e.lat, lng: e.lng});
             }
         });
 
@@ -168,6 +136,7 @@ function initMap() {
     });
 }
 
+// Função para validar individualmente um endereço
 function validarLinha(idx) {
     const row = document.getElementById('linha-' + idx);
     const endereco = row.querySelector('input[name="endereco_' + idx + '"]').value;
@@ -201,22 +170,16 @@ function validarLinha(idx) {
         }
         btn.disabled = false;
         btn.textContent = "Validar";
-
-        // Atualiza pin do mapa
+        // Atualiza pin do mapa (se coordenadas vieram)
         if (data.latitude && data.longitude) {
             let novaLat = parseFloat(data.latitude);
             let novaLng = parseFloat(data.longitude);
             if (markers[idx]) {
                 markers[idx].setPosition({lat: novaLat, lng: novaLng});
-                let cor = (data.cep_ok ? "#44B100" : "#D82B2B");
-                markers[idx].setIcon({
-                    path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
-                    scale: 6,
-                    fillColor: cor,
-                    fillOpacity: 1,
-                    strokeWeight: 1,
-                    strokeColor: "#222"
-                });
+                let cor = (data.cep_ok ? "|44B100|fff" : "|D82B2B|fff");
+                let pinUrl = "https://chart.googleapis.com/chart?chst=d_map_pin_letter&chld=" +
+                            encodeURIComponent(data.order_number) + cor;
+                markers[idx].setIcon(pinUrl);
                 map.panTo({lat: novaLat, lng: novaLng});
             }
             enderecosData[idx].lat = novaLat;
