@@ -3,7 +3,7 @@
 {% block content %}
 <h2>Pré-visualização dos Endereços</h2>
 
-<!-- MAPA -->
+<!-- MAPA GOOGLE -->
 <div id="map" style="width:100%; height:400px; margin-bottom:28px;"></div>
 
 <form id="form-csv" action="{{ url_for('main.generate') }}" method="post">
@@ -57,12 +57,12 @@
 </form>
 {% endblock %}
 
-<!-- GOOGLE MAPS JS API -->
+<!-- SCRIPTS GOOGLE MAPS E JS DE VALIDAÇÃO -->
 <script src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&callback=initMap" async defer></script>
 
 <script>
+// Função para exibir os pins dos endereços no mapa (precisa ser global)
 function initMap() {
-    // Monta lista de endereços válidos
     var enderecos = [
         {% for item in lista %}
         {% if item.latitude and item.longitude %}
@@ -75,13 +75,11 @@ function initMap() {
         {% endif %}
         {% endfor %}
     ];
-
     var center = (enderecos.length > 0) ? {lat: enderecos[0].lat, lng: enderecos[0].lng} : {lat: 41.7, lng: -8.8};
     var map = new google.maps.Map(document.getElementById('map'), {
         zoom: 11,
         center: center
     });
-
     enderecos.forEach(function(e) {
         var pinColor = (e.status === 'valid') ? "http://maps.google.com/mapfiles/ms/icons/green-dot.png" : "http://maps.google.com/mapfiles/ms/icons/red-dot.png";
         var marker = new google.maps.Marker({
@@ -93,7 +91,7 @@ function initMap() {
     });
 }
 
-// Função de validação de linha (sem alteração, igual antes)
+// Função para validar uma linha individualmente (AJAX)
 function validarLinha(idx) {
     const row = document.getElementById('linha-' + idx);
     const endereco = row.querySelector('input[name="endereco_' + idx + '"]').value;
