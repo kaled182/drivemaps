@@ -2,6 +2,10 @@
 
 {% block content %}
 <h2>Pré-visualização dos Endereços</h2>
+
+<!-- MAPA -->
+<div id="map" style="width:100%; height:400px; margin-bottom:28px;"></div>
+
 <form id="form-csv" action="{{ url_for('main.generate') }}" method="post">
     <table class="table table-bordered" id="tabela-enderecos">
         <thead>
@@ -51,8 +55,45 @@
         Gerar CSV para MyWay
     </button>
 </form>
+{% endblock %}
+
+<!-- GOOGLE MAPS JS API -->
+<script src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&callback=initMap" async defer></script>
 
 <script>
+function initMap() {
+    // Monta lista de endereços válidos
+    var enderecos = [
+        {% for item in lista %}
+        {% if item.latitude and item.longitude %}
+        {
+            lat: {{ item.latitude }},
+            lng: {{ item.longitude }},
+            title: "{{ item.order_number }} - {{ item.address | replace('"', "'") }}",
+            status: "{{ 'valid' if item.cep_ok else 'invalid' }}"
+        },
+        {% endif %}
+        {% endfor %}
+    ];
+
+    var center = (enderecos.length > 0) ? {lat: enderecos[0].lat, lng: enderecos[0].lng} : {lat: 41.7, lng: -8.8};
+    var map = new google.maps.Map(document.getElementById('map'), {
+        zoom: 11,
+        center: center
+    });
+
+    enderecos.forEach(function(e) {
+        var pinColor = (e.status === 'valid') ? "http://maps.google.com/mapfiles/ms/icons/green-dot.png" : "http://maps.google.com/mapfiles/ms/icons/red-dot.png";
+        var marker = new google.maps.Marker({
+            position: {lat: e.lat, lng: e.lng},
+            map: map,
+            title: e.title,
+            icon: pinColor
+        });
+    });
+}
+
+// Função de validação de linha (sem alteração, igual antes)
 function validarLinha(idx) {
     const row = document.getElementById('linha-' + idx);
     const endereco = row.querySelector('input[name="endereco_' + idx + '"]').value;
@@ -75,7 +116,6 @@ function validarLinha(idx) {
         row.querySelector('input[name="cep_' + idx + '"]').value = data.cep;
         row.querySelector('td.cep-encontrado').innerHTML = data.postal_code_encontrado || "-";
         row.querySelector('td.freguesia-google').innerHTML = data.freguesia_google || "-";
-        // Status Google
         let tdGoogle = row.querySelector('td.status-google');
         if (data.status_google === "OK") {
             tdGoogle.innerHTML = '<span class="text-success">OK</span>';
@@ -98,4 +138,3 @@ function validarLinha(idx) {
     return false;
 }
 </script>
-{% endblock %}
