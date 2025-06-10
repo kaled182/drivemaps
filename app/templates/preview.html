@@ -1,49 +1,41 @@
-{% extends "base.html" %}
-
-{% block title %}Pré-visualização | {{ super() }}{% endblock %}
-
-{% block content %}
-<h2>Resultados da Validação</h2>
-
-<div class="table-responsive">
-    <table class="table">
-        <thead>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MapsDrive – Pré-visualização</title>
+    <style>
+        body { background: #f2f6ff; font-family: Arial; }
+        .container { max-width: 900px; margin: auto; background: #fff; border-radius: 8px; padding: 30px; box-shadow: 0 0 16px #bbb; }
+        table { border-collapse: collapse; width: 100%; margin-top: 18px; }
+        th, td { border: 1px solid #ccc; padding: 7px; text-align: left; }
+        .ok { background: #e3faea; }
+        .erro { background: #f9d7d7; }
+        input[type="text"] { width: 98%; font-size:1.08em; }
+        button { background: #1976d2; color: white; padding: 10px 24px; border: none; border-radius: 5px; font-size: 1em; margin-top: 12px; }
+        h2 { color: #1976d2; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2>Pré-visualização dos Endereços</h2>
+    <form action="/generate" method="post">
+        <table>
             <tr>
                 <th>#</th>
-                <th>Endereço Original</th>
-                <th>Endereço Validado</th>
+                <th>Endereço</th>
                 <th>Status</th>
-                <th>Coordenadas</th>
+                <th>Corrigir/Confirmar</th>
             </tr>
-        </thead>
-        <tbody>
-            {% for resultado in resultados %}
-            <tr class="{% if resultado.status == 'OK' %}success{% else %}error{% endif %}">
+            {% for item in lista %}
+            <tr class="{{ 'ok' if item['status'] == 'OK' else 'erro' }}">
                 <td>{{ loop.index }}</td>
-                <td>{{ request.form.enderecos.split('\n')[loop.index0] }}</td>
-                <td>{{ resultado.endereco_formatado|default('N/A') }}</td>
                 <td>
-                    <span class="badge bg-{% if resultado.status == 'OK' %}success{% else %}danger{% endif %}">
-                        {{ resultado.status }}
-                    </span>
+                    <input type="hidden" name="numero_pacote_{{ loop.index0 }}" value="{{item['order_number']}}">
+                    <input type="hidden" name="cep_{{ loop.index0 }}" value="{{item['cep']}}">
+                    <input type="text" name="endereco_{{ loop.index0 }}" value="{{item['address']}}" {% if item['status']=='OK' %}readonly{% endif %}>
                 </td>
+                <td>{{ item['status'] }}</td>
                 <td>
-                    {% if resultado.coordenadas %}
-                        {{ resultado.coordenadas.lat|round(6) }}, {{ resultado.coordenadas.lng|round(6) }}
+                    {% if item['status'] != 'OK' %}
+                        <button type="submit" name="revalidar" value="{{ loop.index0 }}">Validar novamente</button>
                     {% else %}
-                        N/A
-                    {% endif %}
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-
-<div class="mt-3">
-    <form action="{{ url_for('main.generate_csv') }}" method="POST">
-        <input type="hidden" name="enderecos_json" value="{{ resultados|tojson|forceescape }}">
-        <button type="submit" class="btn btn-success">Gerar CSV para MyWay</button>
-    </form>
-</div>
-{% endblock %}
+                        ✔️
