@@ -2,26 +2,10 @@ from flask import Blueprint, render_template, request, redirect, url_for, sessio
 import re
 import csv
 import io
-import requests
 import os
+from .utils import valida_endereco_google
 
 main_routes = Blueprint('main', __name__)
-
-GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
-
-def valida_endereco_google(address, api_key=GOOGLE_API_KEY):
-    url = "https://maps.googleapis.com/maps/api/geocode/json"
-    params = {"address": address, "region": "pt", "key": api_key}
-    try:
-        response = requests.get(url, params=params, timeout=8)
-        data = response.json()
-        if data.get('status') == 'OK':
-            result = data['results'][0]
-            return "OK", result['formatted_address'], result['geometry']['location']
-        else:
-            return "NÃO ENCONTRADO", "", ""
-    except Exception:
-        return "ERRO API", "", ""
 
 csv_content = None
 
@@ -42,12 +26,15 @@ def preview():
         if cep_match:
             if i + 2 < len(linhas) and linhas[i+2] == linha:
                 numero_pacote = linhas[i+3] if (i+3) < len(linhas) else ""
-                status, endereco_validado, location = valida_endereco_google(linha)
+                cep = cep_match.group(1)
+                resultado = valida_endereco_google(linha, cep)
                 lista.append({
                     "order_number": numero_pacote,
                     "address": linha,
-                    "cep": cep_match.group(1),
-                    "status": status,
+                    "cep": cep,
+                    "status": resultado.get('status'),
+                    "postal_code_encontrado": resultado.get('postal_code_encontrado', ''),
+                    "endereco_formatado": resultado.get('endereco_formatado', ''),
                 })
                 i += 4
             else:
@@ -66,15 +53,19 @@ def generate():
         numero_pacote = request.form.get(f'numero_pacote_{i}', '')
         endereco = request.form.get(f'endereco_{i}', '')
         cep = request.form.get(f'cep_{i}', '')
-        status, endereco_validado, location = valida_endereco_google(endereco)
+        resultado = valida_endereco_google(endereco, cep)
+        postal_code_encontrado = resultado.get('postal_code_encontrado', '')
         lista.append({
             "order_number": numero_pacote,
             "address": endereco,
             "cep": cep,
-            "status": status,
-            "latitude": location["lat"] if status == "OK" and location else "",
-            "longitude": location["lng"] if status == "OK" and location else "",
+            "status": resultado.get('status'),
+            "postal_code_encontrado": postal_code_encontrado,
+            "latitude": resultado.get('coordenadas', {}).get('lat', ''),
+            "longitude": resultado.get('coordenadas', {}).get('lng', ''),
         })
+    # Ordena pelo código postal encontrado, senão pelo informado
+    lista_ordenada = sorted(lista, key=lambda x: x['postal_code_encontrado'] or x['cep'])
     # Gera CSV
     output = io.StringIO()
     writer = csv.writer(output)
@@ -82,9 +73,9 @@ def generate():
         "order number", "name", "address", "latitude", "longitude", "duration", "start time",
         "end time", "phone", "contact", "notes", "color", "Group"
     ])
-    for row in lista:
+    for row in lista_ordenada:
         writer.writerow([
-            row["order_number"], "", row["address"], row["latitude"], row["longitude"], "", "", "", "", "", row["cep"], "", ""
+            row["order_number"], "", row["address"], row["latitude"], row["longitude"], "", "", "", "", "", row["postal_code_encontrado"] or row["cep"], "", ""
         ])
     csv_content = output.getvalue()
     return redirect(url_for('main.download'))
