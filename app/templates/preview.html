@@ -3,7 +3,6 @@
 {% block content %}
 <h2>Pré-visualização dos Endereços</h2>
 
-<!-- MAPA GOOGLE -->
 <div id="map" style="width:100%; height:400px; margin-bottom:28px;"></div>
 
 <form id="form-csv" action="{{ url_for('main.generate') }}" method="post">
@@ -14,7 +13,6 @@
                 <th>Endereço</th>
                 <th>CEP Informado</th>
                 <th>CEP Google</th>
-                <th>Freguesia</th>
                 <th>Status Google</th>
                 <th>Corrigir/Confirmar</th>
             </tr>
@@ -31,7 +29,6 @@
                     <input type="text" class="form-control" name="cep_{{ loop.index0 }}" value="{{item['cep']}}">
                 </td>
                 <td class="cep-encontrado">{{ item['postal_code_encontrado'] or '-' }}</td>
-                <td class="freguesia-google">{{ item['freguesia'] or '-' }}</td>
                 <td class="status-google">
                     {% if item.status_google == 'OK' %}
                         <span class="text-success">OK</span>
@@ -62,31 +59,28 @@
 <script>
 var map;
 var markers = [];
+var geocoder;
 
 function svgPin(numero, cor) {
     numero = String(numero).padStart(2, '0');
     return 'data:image/svg+xml;utf-8,' + encodeURIComponent(`
       <svg width="48" height="64" viewBox="0 0 48 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <!-- Sombra -->
         <ellipse cx="24" cy="59" rx="12" ry="5" fill="#000" fill-opacity="0.13"/>
-        <!-- Corpo -->
         <path d="M24 4
                  a20 20 0 0 1 20 20
                  c0 11-13 32-20 36
                  c-7-4-20-25-20-36
                  a20 20 0 0 1 20-20z"
               fill="${cor}" stroke="#444" stroke-width="1"/>
-        <!-- Sombra inclinada -->
         <polygon points="24,4 44,24 24,44" fill="#000" fill-opacity="0.12"/>
-        <!-- Número -->
         <text x="24" y="29" text-anchor="middle" font-size="18" font-family="Arial" font-weight="bold" fill="#fff" stroke="#222" stroke-width="0.8" dy=".3em">${numero}</text>
       </svg>
     `);
 }
 
-// Inicializa o mapa e os pins
 window.initMap = function() {
     markers = [];
+    geocoder = new google.maps.Geocoder();
     var enderecos = [
         {% for item in lista %}
         {% if item.latitude and item.longitude %}
@@ -95,7 +89,8 @@ window.initMap = function() {
             lng: {{ item.longitude }},
             title: "{{ item.order_number }} - {{ item.address | replace('"', "'") }}",
             status: "{{ 'valid' if item.cep_ok else 'invalid' }}",
-            numero_pacote: "{{ item.order_number }}"
+            numero_pacote: "{{ item.order_number }}",
+            idx: {{ loop.index0 }}
         },
         {% endif %}
         {% endfor %}
@@ -114,8 +109,34 @@ window.initMap = function() {
             icon: {
                 url: svgPin(e.numero_pacote, cor),
                 scaledSize: new google.maps.Size(48, 64)
-            }
+            },
+            draggable: true
         });
+
+        // Evento: ao arrastar e soltar o marcador, atualiza endereço e cep na linha da tabela
+        marker.addListener('dragend', function(event) {
+            var pos = event.latLng;
+            geocoder.geocode({'location': pos}, function(results, status) {
+                if (status === "OK" && results[0]) {
+                    var address = results[0].formatted_address || '';
+                    var cep = '-';
+                    // Procura o CEP nos componentes do endereço
+                    for (var i=0; i < results[0].address_components.length; i++) {
+                        var c = results[0].address_components[i];
+                        if (c.types.indexOf('postal_code') >= 0) {
+                            cep = c.long_name;
+                        }
+                    }
+                    // Atualiza campos na tabela (endereço e cep)
+                    var row = document.getElementById('linha-' + e.idx);
+                    row.querySelector('input[name="endereco_' + e.idx + '"]').value = address;
+                    row.querySelector('input[name="cep_' + e.idx + '"]').value = cep;
+                    // Opcional: pode chamar validarLinha(e.idx) automaticamente aqui
+                    validarLinha(e.idx);
+                }
+            });
+        });
+
         markers.push(marker);
     });
 }
@@ -123,7 +144,7 @@ window.initMap = function() {
 // Atualiza apenas o pin do endereço corrigido/validado
 function atualizarPin(idx, lat, lng, numero_pacote, status) {
     if (markers[idx]) {
-        markers[idx].setMap(null); // Remove antigo
+        markers[idx].setMap(null);
     }
     var cor = (status === 'valid') ? "#3adb31" : "#e74c3c";
     markers[idx] = new google.maps.Marker({
@@ -133,7 +154,28 @@ function atualizarPin(idx, lat, lng, numero_pacote, status) {
         icon: {
             url: svgPin(numero_pacote, cor),
             scaledSize: new google.maps.Size(48, 64)
-        }
+        },
+        draggable: true
+    });
+    // Reatribui o evento dragend para esse marker
+    markers[idx].addListener('dragend', function(event) {
+        var pos = event.latLng;
+        geocoder.geocode({'location': pos}, function(results, status) {
+            if (status === "OK" && results[0]) {
+                var address = results[0].formatted_address || '';
+                var cep = '-';
+                for (var i=0; i < results[0].address_components.length; i++) {
+                    var c = results[0].address_components[i];
+                    if (c.types.indexOf('postal_code') >= 0) {
+                        cep = c.long_name;
+                    }
+                }
+                var row = document.getElementById('linha-' + idx);
+                row.querySelector('input[name="endereco_' + idx + '"]').value = address;
+                row.querySelector('input[name="cep_' + idx + '"]').value = cep;
+                validarLinha(idx);
+            }
+        });
     });
 }
 
@@ -159,7 +201,6 @@ window.validarLinha = function(idx) {
         row.querySelector('input[name="endereco_' + idx + '"]').value = data.address;
         row.querySelector('input[name="cep_' + idx + '"]').value = data.cep;
         row.querySelector('td.cep-encontrado').innerHTML = data.postal_code_encontrado || "-";
-        row.querySelector('td.freguesia-google').innerHTML = data.freguesia_google || "-";
         let tdGoogle = row.querySelector('td.status-google');
         if (data.status_google === "OK") {
             tdGoogle.innerHTML = '<span class="text-success">OK</span>';
