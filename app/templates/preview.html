@@ -10,7 +10,6 @@
                 <th>Endereço</th>
                 <th>CEP Informado</th>
                 <th>CEP Google</th>
-                <th>Status GEOAPI</th>
                 <th>Status Google</th>
                 <th>Corrigir/Confirmar</th>
             </tr>
@@ -27,7 +26,6 @@
                     <input type="text" class="form-control" name="cep_{{ loop.index0 }}" value="{{item['cep']}}">
                 </td>
                 <td class="cep-encontrado">-</td>
-                <td class="status-geoapi"><span class="text-secondary">Não verificado</span></td>
                 <td class="status-google"><span class="text-secondary">Não verificado</span></td>
                 <td>
                     <button type="button" onclick="validarLinha({{ loop.index0 }})" class="btn btn-warning btn-sm">Validar</button>
@@ -65,14 +63,6 @@ function validarLinha(idx) {
         row.querySelector('input[name="cep_' + idx + '"]').value = data.cep;
         // CEP Google
         row.querySelector('td.cep-encontrado').innerHTML = data.postal_code_encontrado || "-";
-        // Status GEOAPI
-        let tdGeoapi = row.querySelector('td.status-geoapi');
-        if (data.status_geoapi === "OK") {
-            tdGeoapi.innerHTML = '<span class="text-success">OK</span>';
-        } else {
-            tdGeoapi.innerHTML = '<span class="text-danger">' + (data.status_geoapi || "NÃO ENCONTRADO") + '</span>'
-                + ((data.ruas_validas && data.ruas_validas.length) ? '<br><small>Sugestões: ' + data.ruas_validas.join(", ") + '</small>' : '');
-        }
         // Status Google
         let tdGoogle = row.querySelector('td.status-google');
         if (data.status_google === "OK") {
@@ -80,8 +70,8 @@ function validarLinha(idx) {
         } else {
             tdGoogle.innerHTML = '<span class="text-danger">' + (data.status_google || "NÃO ENCONTRADO") + '</span>';
         }
-        // Verificação de validade total (GEOAPI + Google + CEP igual)
-        let ok = (data.status_geoapi == "OK" && data.status_google == "OK" && data.cep == data.postal_code_encontrado);
+        // Verificação de validade total: Google OK + CEP informado igual ao encontrado
+        let ok = (data.status_google == "OK" && data.cep == data.postal_code_encontrado);
         if (ok) {
             row.className = "table-success";
             btn.classList.add("d-none");
