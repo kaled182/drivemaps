@@ -10,13 +10,14 @@
                 <th>Endereço</th>
                 <th>CEP Informado</th>
                 <th>CEP Google</th>
+                <th>Freguesia</th>
                 <th>Status Google</th>
                 <th>Corrigir/Confirmar</th>
             </tr>
         </thead>
         <tbody>
             {% for item in lista %}
-            <tr id="linha-{{ loop.index0 }}">
+            <tr id="linha-{{ loop.index0 }}" class="{% if item.cep_ok %}table-success{% else %}table-danger{% endif %}">
                 <td>{{ loop.index }}</td>
                 <td>
                     <input type="hidden" name="numero_pacote_{{ loop.index0 }}" value="{{item['order_number']}}">
@@ -25,8 +26,18 @@
                 <td>
                     <input type="text" class="form-control" name="cep_{{ loop.index0 }}" value="{{item['cep']}}">
                 </td>
-                <td class="cep-encontrado">-</td>
-                <td class="status-google"><span class="text-secondary">Não verificado</span></td>
+                <td class="cep-encontrado">{{ item['postal_code_encontrado'] or '-' }}</td>
+                <td class="freguesia-google">{{ item['freguesia'] or '-' }}</td>
+                <td class="status-google">
+                    {% if item.status_google == 'OK' %}
+                        <span class="text-success">OK</span>
+                        {% if not item.rua_bate %}
+                            <br><span class="text-warning">⚠️ Rua diferente do Google!</span>
+                        {% endif %}
+                    {% else %}
+                        <span class="text-danger">{{ item.status_google or 'NÃO ENCONTRADO' }}</span>
+                    {% endif %}
+                </td>
                 <td>
                     <button type="button" onclick="validarLinha({{ loop.index0 }})" class="btn btn-warning btn-sm">Validar</button>
                     <span class="valido-ok d-none text-success">✔️</span>
@@ -36,7 +47,9 @@
         </tbody>
     </table>
     <input type="hidden" name="total" value="{{lista|length}}">
-    <button id="btn-csv" type="submit" name="finalizar" value="1" class="btn btn-success" disabled>Gerar CSV para MyWay</button>
+    <button id="btn-csv" type="submit" name="finalizar" value="1" class="btn btn-success">
+        Gerar CSV para MyWay
+    </button>
 </form>
 
 <script>
@@ -58,57 +71,31 @@ function validarLinha(idx) {
     })
     .then(resp => resp.json())
     .then(data => {
-        // Atualiza campos
         row.querySelector('input[name="endereco_' + idx + '"]').value = data.address;
         row.querySelector('input[name="cep_' + idx + '"]').value = data.cep;
-        // CEP Google
         row.querySelector('td.cep-encontrado').innerHTML = data.postal_code_encontrado || "-";
+        row.querySelector('td.freguesia-google').innerHTML = data.freguesia_google || "-";
         // Status Google
         let tdGoogle = row.querySelector('td.status-google');
         if (data.status_google === "OK") {
             tdGoogle.innerHTML = '<span class="text-success">OK</span>';
-        } else {
-            tdGoogle.innerHTML = '<span class="text-danger">' + (data.status_google || "NÃO ENCONTRADO") + '</span>';
-        }
-        // Se CEP bate, valida independente da rua!
-        if (data.cep_ok) {
-            row.className = "table-success";
-            btn.classList.add("d-none");
-            row.querySelector('.valido-ok').classList.remove("d-none");
-            row.querySelector('input[name="endereco_' + idx + '"]').setAttribute('readonly', 'readonly');
-            row.querySelector('input[name="cep_' + idx + '"]').setAttribute('readonly', 'readonly');
-            // Aviso se a rua divergir
             if (!data.rua_bate) {
                 tdGoogle.innerHTML += '<br><span class="text-warning">⚠️ Rua diferente do Google!</span>';
             }
+            row.className = "table-success";
         } else {
+            tdGoogle.innerHTML = '<span class="text-danger">' + (data.status_google || "NÃO ENCONTRADO") + '</span>';
             row.className = "table-danger";
-            btn.disabled = false;
-            btn.textContent = "Validar";
-            row.querySelector('.valido-ok').classList.add("d-none");
-            row.querySelector('input[name="endereco_' + idx + '"]').removeAttribute('readonly');
-            row.querySelector('input[name="cep_' + idx + '"]').removeAttribute('readonly');
         }
-        atualizarBotaoCSV();
+        btn.disabled = false;
+        btn.textContent = "Validar";
     })
     .catch(() => {
         btn.disabled = false;
         btn.textContent = "Validar";
         alert("Erro ao validar endereço! Tente novamente.");
-        atualizarBotaoCSV();
     });
     return false;
-}
-
-function atualizarBotaoCSV() {
-    // Habilita botão CSV só se todas as linhas estiverem table-success (ou seja, validadas por CEP)
-    let tudoOK = true;
-    document.querySelectorAll("#tabela-enderecos tbody tr").forEach(function(row) {
-        if (!row.classList.contains("table-success")) {
-            tudoOK = false;
-        }
-    });
-    document.getElementById("btn-csv").disabled = !tudoOK;
 }
 </script>
 {% endblock %}
