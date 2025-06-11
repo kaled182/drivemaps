@@ -57,14 +57,14 @@
 
 {% block scripts %}
 <script>
-// Função SVG dinâmica (Garante que o PIN nunca ficará transparente)
+// Gera SVG para PIN (fixo, sem transparência)
 function makeSvgPin(numero, corHex) {
     let n = String(numero).substring(0, 3);
     let svg = `<svg width="44" height="54" viewBox="0 0 44 54" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <ellipse cx="22" cy="22" rx="21" ry="21" fill="${corHex}"/>
-  <rect x="18" y="37" width="8" height="13" rx="4" fill="${corHex}"/>
-  <text x="22" y="30" text-anchor="middle" font-size="20" fill="#fff" font-family="Arial" font-weight="bold" alignment-baseline="central">${n}</text>
-</svg>`;
+      <ellipse cx="22" cy="22" rx="21" ry="21" fill="${corHex}"/>
+      <rect x="18" y="37" width="8" height="13" rx="4" fill="${corHex}"/>
+      <text x="22" y="31" text-anchor="middle" font-size="20" fill="#fff" font-family="Arial" font-weight="bold" alignment-baseline="middle" dominant-baseline="middle">${n}</text>
+    </svg>`;
     return "data:image/svg+xml;base64," + btoa(svg);
 }
 
