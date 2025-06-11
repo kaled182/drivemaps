@@ -57,6 +57,17 @@
 
 {% block scripts %}
 <script>
+// Função SVG dinâmica (Garante que o PIN nunca ficará transparente)
+function makeSvgPin(numero, corHex) {
+    let n = String(numero).substring(0, 3);
+    let svg = `<svg width="44" height="54" viewBox="0 0 44 54" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <ellipse cx="22" cy="22" rx="21" ry="21" fill="${corHex}"/>
+  <rect x="18" y="37" width="8" height="13" rx="4" fill="${corHex}"/>
+  <text x="22" y="30" text-anchor="middle" font-size="20" fill="#fff" font-family="Arial" font-weight="bold" alignment-baseline="central">${n}</text>
+</svg>`;
+    return "data:image/svg+xml;base64," + btoa(svg);
+}
+
 let map;
 let markers = [];
 let enderecosData = [
@@ -65,7 +76,7 @@ let enderecosData = [
         idx: {{ loop.index0 }},
         lat: {{ item.latitude|default('null') }},
         lng: {{ item.longitude|default('null') }},
-        numero_pacote: "{{ item.order_number|default(loop.index)|e }}",
+        numero_pacote: "{{ item['order_number'] or loop.index }}",
         address: `{{ item.address|default('')|replace('`','\'')|e }}`,
         status: "{{ 'valid' if item.cep_ok else 'invalid' }}",
         cep_ok: {{ 'true' if item.cep_ok else 'false' }}
@@ -89,7 +100,6 @@ function initMap() {
         }
     });
 
-    // Ajuste de bounds para englobar todos os PINs
     const bounds = new google.maps.LatLngBounds();
 
     coordenadasValidas.forEach(e => {
@@ -100,9 +110,8 @@ function initMap() {
         bounds.extend(position);
 
         const numero = e.numero_pacote || (e.idx + 1);
-        // Cores em HEX SEM '#'
-        const cor = e.cep_ok ? "00AA00" : "FF0000";
-        const pinUrl = `https://chart.googleapis.com/chart?chst=d_map_pin_letter&chld=${encodeURIComponent(numero)}|${cor}|FFFFFF`;
+        const cor = e.cep_ok ? "#44B100" : "#D82B2B";
+        const pinUrl = makeSvgPin(numero, cor);
 
         const marker = new google.maps.Marker({
             position: position,
@@ -110,7 +119,7 @@ function initMap() {
             title: `${numero} - ${e.address}`,
             icon: {
                 url: pinUrl,
-                scaledSize: new google.maps.Size(40, 40)
+                scaledSize: new google.maps.Size(44, 54)
             }
         });
 
@@ -127,7 +136,6 @@ function loadGoogleMaps() {
     script.defer = true;
     document.head.appendChild(script);
 }
-
 document.addEventListener('DOMContentLoaded', loadGoogleMaps);
 
 function validarLinha(idx) {
@@ -165,25 +173,17 @@ function validarLinha(idx) {
         btn.disabled = false;
         btn.textContent = "Validar";
 
-        if (data.latitude && data.longitude) {
-            const novaLat = parseFloat(data.latitude);
-            const novaLng = parseFloat(data.longitude);
-            enderecosData[idx].lat = novaLat;
-            enderecosData[idx].lng = novaLng;
-            enderecosData[idx].cep_ok = data.cep_ok;
-
-            if (markers[idx]) {
-                markers[idx].setPosition({lat: novaLat, lng: novaLng});
-                // Atualiza cor do PIN após validação
-                const numero = data.order_number || (idx + 1);
-                const cor = data.cep_ok ? "00AA00" : "FF0000";
-                const pinUrl = `https://chart.googleapis.com/chart?chst=d_map_pin_letter&chld=${encodeURIComponent(numero)}|${cor}|FFFFFF`;
-                markers[idx].setIcon({
-                    url: pinUrl,
-                    scaledSize: new google.maps.Size(40, 40)
-                });
-                map.panTo({lat: novaLat, lng: novaLng});
-            }
+        if (data.latitude && data.longitude && markers[idx]) {
+            let novaLat = parseFloat(data.latitude);
+            let novaLng = parseFloat(data.longitude);
+            markers[idx].setPosition({lat: novaLat, lng: novaLng});
+            let cor = data.cep_ok ? "#44B100" : "#D82B2B";
+            let numero = data.order_number || (idx + 1);
+            markers[idx].setIcon({
+                url: makeSvgPin(numero, cor),
+                scaledSize: new google.maps.Size(44, 54)
+            });
+            map.panTo({lat: novaLat, lng: novaLng});
         }
     })
     .catch(() => {
