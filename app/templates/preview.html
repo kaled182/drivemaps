@@ -65,7 +65,7 @@ let enderecosData = [
         idx: {{ loop.index0 }},
         lat: {{ item.latitude or 'null' }},
         lng: {{ item.longitude or 'null' }},
-        numero_pacote: `{{ item.order_number|e }}`,
+        numero_pacote: "{{ item.order_number|e }}",
         address: `{{ item.address|replace('`','\'')|e }}`,
         status: "{{ 'valid' if item.cep_ok else 'invalid' }}"
     },
@@ -91,19 +91,19 @@ function initMap() {
     // Cria marcadores
     enderecosData.forEach(function(e, idx) {
         if (!e.lat || !e.lng) return;
-        // PIN: número, mas sempre string, fallback para "?" se vazio ou estranho
-        let numPacote = (e.numero_pacote && e.numero_pacote.trim()) ? encodeURIComponent(e.numero_pacote) : "%3F";
+        // Use sempre um número no PIN
+        let numero = (e.numero_pacote && e.numero_pacote !== "null" && e.numero_pacote !== "") ? e.numero_pacote : (idx+1);
         let cor = (e.status === 'valid') ? pinGreen : pinRed;
+        let pinUrl = pinBase + encodeURIComponent(numero) + cor;
         let marker = new google.maps.Marker({
             position: {lat: e.lat, lng: e.lng},
             map: map,
-            title: e.numero_pacote + " - " + e.address,
-            icon: pinBase + numPacote + cor,
+            title: numero + " - " + e.address,
+            icon: pinUrl,
             draggable: true
         });
 
         marker.addListener('dragend', function(event) {
-            // Pergunta antes de atualizar
             if(confirm("Deseja atualizar o endereço para esta nova localização?")) {
                 fetch("/api/reverse-geocode", {
                     method: "POST",
@@ -125,10 +125,10 @@ function initMap() {
                         enderecosData[e.idx].lat = event.latLng.lat();
                         enderecosData[e.idx].lng = event.latLng.lng();
                         // Atualiza pin (verde)
-                        marker.setIcon(pinBase + numPacote + pinGreen);
+                        marker.setIcon(pinBase + encodeURIComponent(numero) + pinGreen);
                     } else {
                         alert("Endereço não encontrado!");
-                        marker.setPosition({lat: e.lat, lng: e.lng}); // Volta para original
+                        marker.setPosition({lat: e.lat, lng: e.lng});
                     }
                 })
                 .catch(() => {
@@ -136,7 +136,7 @@ function initMap() {
                     marker.setPosition({lat: e.lat, lng: e.lng});
                 });
             } else {
-                marker.setPosition({lat: e.lat, lng: e.lng}); // Volta para original
+                marker.setPosition({lat: e.lat, lng: e.lng});
             }
         });
 
@@ -185,11 +185,10 @@ function validarLinha(idx) {
             let novaLng = parseFloat(data.longitude);
             if (markers[idx]) {
                 markers[idx].setPosition({lat: novaLat, lng: novaLng});
+                let numero = (data.order_number && data.order_number !== "null" && data.order_number !== "") ? data.order_number : (idx+1);
                 let cor = (data.cep_ok ? "|44B100|fff" : "|D82B2B|fff");
-                // PIN: número, mas sempre string, fallback para "?" se vazio ou estranho
-                let numPacote = (data.order_number && data.order_number.trim()) ? encodeURIComponent(data.order_number) : "%3F";
                 let pinUrl = "https://chart.googleapis.com/chart?chst=d_map_pin_letter&chld=" +
-                            numPacote + cor;
+                            encodeURIComponent(numero) + cor;
                 markers[idx].setIcon(pinUrl);
                 map.panTo({lat: novaLat, lng: novaLng});
             }
