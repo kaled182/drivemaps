@@ -57,7 +57,7 @@
 
 {% block scripts %}
 <script>
-// Gera SVG PIN
+// Função PIN customizado para fallback clássico
 function makeSvgPin(numero, corHex) {
     let n = String(numero).substring(0, 3);
     let svg = `<svg width="44" height="54" viewBox="0 0 44 54" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -84,6 +84,135 @@ let enderecosData = [
     {% endfor %}
 ];
 
+function addPin(markerObj, idx, useAdvanced) {
+    const numero = markerObj.numero_pacote || (idx + 1);
+    const cor = markerObj.cep_ok ? "#44B100" : "#D82B2B";
+
+    // NOVO SISTEMA: AdvancedMarkerElement (Google Maps JS v3.55+)
+    if (useAdvanced && window.google && window.google.maps && window.google.maps.marker) {
+        // Cria o PIN customizado
+        const content = document.createElement('div');
+        content.style.display = 'flex';
+        content.style.alignItems = 'center';
+        content.style.justifyContent = 'center';
+        content.style.background = cor;
+        content.style.width = '38px';
+        content.style.height = '38px';
+        content.style.borderRadius = '50%';
+        content.style.boxShadow = '0 3px 7px 0 rgba(60,60,60,0.2)';
+        content.style.color = '#fff';
+        content.style.fontWeight = 'bold';
+        content.style.fontSize = '18px';
+        content.textContent = numero;
+
+        // Marker
+        let marker = new window.google.maps.marker.AdvancedMarkerElement({
+            map: map,
+            position: {lat: parseFloat(markerObj.lat), lng: parseFloat(markerObj.lng)},
+            content: content,
+            title: `${numero} - ${markerObj.address}`,
+            gmpDraggable: true // importante!
+        });
+
+        // DragEnd event
+        marker.addListener('dragend', (event) => {
+            onPinDragEnd(idx, event.latLng.lat(), event.latLng.lng(), marker, numero, cor, true);
+        });
+
+        markers[idx] = marker;
+    } else {
+        // SISTEMA CLÁSSICO fallback (SVG custom)
+        let pinUrl = makeSvgPin(numero, cor);
+        let marker = new google.maps.Marker({
+            position: {lat: parseFloat(markerObj.lat), lng: parseFloat(markerObj.lng)},
+            map: map,
+            title: `${numero} - ${markerObj.address}`,
+            icon: {
+                url: pinUrl,
+                scaledSize: new google.maps.Size(44, 54)
+            },
+            draggable: true
+        });
+
+        marker.addListener('dragend', function(event) {
+            onPinDragEnd(idx, event.latLng.lat(), event.latLng.lng(), marker, numero, cor, false);
+        });
+
+        markers[idx] = marker;
+    }
+}
+
+// Função DRAGEND usada por ambos os sistemas!
+function onPinDragEnd(idx, lat, lng, marker, numero, cor, isAdvanced) {
+    if (confirm("Deseja atualizar o endereço para esta nova localização?")) {
+        fetch("/api/reverse-geocode", {
+            method: "POST",
+            body: new URLSearchParams({
+                idx: idx,
+                lat: lat,
+                lng: lng
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if(data.sucesso) {
+                // Atualiza linha na tabela
+                let row = document.getElementById('linha-' + idx);
+                row.querySelector('input[name="endereco_' + idx + '"]').value = data.address;
+                row.querySelector('input[name="cep_' + idx + '"]').value = data.cep;
+
+                if(row.querySelector('td.cep-encontrado')) {
+                    row.querySelector('td.cep-encontrado').innerHTML = data.cep || "-";
+                }
+
+                // Validação Google para cor/status
+                fetch("/api/validar-linha", {
+                    method: "POST",
+                    body: new URLSearchParams({
+                        endereco: data.address,
+                        cep: data.cep,
+                        numero_pacote: numero
+                    })
+                })
+                .then(resp => resp.json())
+                .then(val => {
+                    // Atualiza status
+                    let tdGoogle = row.querySelector('td.status-google');
+                    if (val.status_google === "OK") {
+                        tdGoogle.innerHTML = '<span class="text-success">OK</span>' +
+                            (val.rua_bate ? '' : '<span title="Rua diferente do Google!">⚠️</span>');
+                        row.className = "table-success";
+                    } else {
+                        tdGoogle.innerHTML = '<span class="text-danger">' + (val.status_google || "NÃO ENCONTRADO") + '</span>';
+                        row.className = "table-danger";
+                    }
+                    // Atualiza PIN (Advanced ou clássico)
+                    let corNova = val.cep_ok ? "#44B100" : "#D82B2B";
+                    if (isAdvanced && marker.content) {
+                        marker.content.style.background = corNova;
+                    } else if (marker.setIcon) {
+                        marker.setIcon({
+                            url: makeSvgPin(numero, corNova),
+                            scaledSize: new google.maps.Size(44, 54)
+                        });
+                    }
+                });
+            } else {
+                alert("Endereço não encontrado!");
+                // Volta o marcador pra posição original
+                marker.setPosition({lat: enderecosData[idx].lat, lng: enderecosData[idx].lng});
+            }
+        })
+        .catch(() => {
+            alert("Erro ao validar novo local! Tente novamente.");
+            marker.setPosition({lat: enderecosData[idx].lat, lng: enderecosData[idx].lng});
+        });
+    } else {
+        marker.setPosition({lat: enderecosData[idx].lat, lng: enderecosData[idx].lng});
+    }
+}
+
+// Inicialização
 function initMap() {
     const coordenadasValidas = enderecosData.filter(e => e.lat && e.lng);
     if (coordenadasValidas.length === 0) {
@@ -100,105 +229,28 @@ function initMap() {
         }
     });
 
+    // Bounds
     const bounds = new google.maps.LatLngBounds();
-
-    coordenadasValidas.forEach(e => {
-        const position = {
-            lat: parseFloat(e.lat),
-            lng: parseFloat(e.lng)
-        };
-        bounds.extend(position);
-
-        const numero = e.numero_pacote || (e.idx + 1);
-        const cor = e.cep_ok ? "#44B100" : "#D82B2B";
-        const pinUrl = makeSvgPin(numero, cor);
-
-        const marker = new google.maps.Marker({
-            position: position,
-            map: map,
-            title: `${numero} - ${e.address}`,
-            icon: {
-                url: pinUrl,
-                scaledSize: new google.maps.Size(44, 54)
-            },
-            draggable: true
-        });
-
-        // Evento de arrastar
-        marker.addListener('dragend', function(event) {
-            if (confirm("Deseja atualizar o endereço para esta nova localização?")) {
-                fetch("/api/reverse-geocode", {
-                    method: "POST",
-                    body: new URLSearchParams({
-                        idx: e.idx,
-                        lat: event.latLng.lat(),
-                        lng: event.latLng.lng()
-                    })
-                })
-                .then(r => r.json())
-                .then(data => {
-                    if(data.sucesso) {
-                        // Atualiza linha na tabela
-                        let row = document.getElementById('linha-' + e.idx);
-                        row.querySelector('input[name="endereco_' + e.idx + '"]').value = data.address;
-                        row.querySelector('input[name="cep_' + e.idx + '"]').value = data.cep;
-
-                        // (Opcional) atualiza a coluna CODP Google, se resposta trouxer
-                        if(row.querySelector('td.cep-encontrado')) {
-                            row.querySelector('td.cep-encontrado').innerHTML = data.cep || "-";
-                        }
-
-                        // Consulta Google para status e cor
-                        fetch("/api/validar-linha", {
-                            method: "POST",
-                            body: new URLSearchParams({
-                                endereco: data.address,
-                                cep: data.cep,
-                                numero_pacote: numero
-                            })
-                        })
-                        .then(resp => resp.json())
-                        .then(val => {
-                            // Atualiza status/cor
-                            let tdGoogle = row.querySelector('td.status-google');
-                            if (val.status_google === "OK") {
-                                tdGoogle.innerHTML = '<span class="text-success">OK</span>' +
-                                    (val.rua_bate ? '' : '<span title="Rua diferente do Google!">⚠️</span>');
-                                row.className = "table-success";
-                            } else {
-                                tdGoogle.innerHTML = '<span class="text-danger">' + (val.status_google || "NÃO ENCONTRADO") + '</span>';
-                                row.className = "table-danger";
-                            }
-                            // Atualiza PIN
-                            let corNova = val.cep_ok ? "#44B100" : "#D82B2B";
-                            marker.setIcon({
-                                url: makeSvgPin(numero, corNova),
-                                scaledSize: new google.maps.Size(44, 54)
-                            });
-                        });
-                    } else {
-                        alert("Endereço não encontrado!");
-                        marker.setPosition({lat: e.lat, lng: e.lng}); // Volta para original
-                    }
-                })
-                .catch(() => {
-                    alert("Erro ao validar novo local! Tente novamente.");
-                    marker.setPosition({lat: e.lat, lng: e.lng});
-                });
-            } else {
-                marker.setPosition({lat: e.lat, lng: e.lng}); // Volta para original
-            }
-        });
-
-        markers[e.idx] = marker;
-    });
-
+    coordenadasValidas.forEach(e => bounds.extend({lat: parseFloat(e.lat), lng: parseFloat(e.lng)}));
     map.fitBounds(bounds);
+
+    // Tenta AdvancedMarkerElement
+    let useAdvanced = false;
+    if (window.google && window.google.maps && window.google.maps.marker && window.google.maps.marker.AdvancedMarkerElement) {
+        useAdvanced = true;
+    }
+
+    // Adiciona cada PIN
+    coordenadasValidas.forEach((e, idx) => {
+        addPin(e, e.idx, useAdvanced);
+    });
 }
 
+// Google Maps JS API + marker library para AdvancedMarkerElement
 function loadGoogleMaps() {
+    const markerLib = "&libraries=marker";
     const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&callback=initMap`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&callback=initMap${markerLib}`;
     script.async = true;
     script.defer = true;
     document.head.appendChild(script);
@@ -240,16 +292,23 @@ function validarLinha(idx) {
         btn.disabled = false;
         btn.textContent = "Validar";
 
+        // Atualiza o marcador no mapa se houver novas coordenadas
         if (data.latitude && data.longitude && markers[idx]) {
             let novaLat = parseFloat(data.latitude);
             let novaLng = parseFloat(data.longitude);
             markers[idx].setPosition({lat: novaLat, lng: novaLng});
             let cor = data.cep_ok ? "#44B100" : "#D82B2B";
             let numero = data.order_number || (idx + 1);
-            markers[idx].setIcon({
-                url: makeSvgPin(numero, cor),
-                scaledSize: new google.maps.Size(44, 54)
-            });
+
+            // Advanced ou fallback
+            if (markers[idx].content) {
+                markers[idx].content.style.background = cor;
+            } else {
+                markers[idx].setIcon({
+                    url: makeSvgPin(numero, cor),
+                    scaledSize: new google.maps.Size(44, 54)
+                });
+            }
             map.panTo({lat: novaLat, lng: novaLng});
         }
     })
