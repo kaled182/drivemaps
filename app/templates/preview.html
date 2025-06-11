@@ -1,19 +1,31 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="mb-3" style="position:relative;">
+<style>
+  /* Mapa fixo no topo da tela */
+  #map-top-sticky {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: #f8fafd;
+    box-shadow: 0 4px 18px #0001;
+    border-radius: 0 0 14px 14px;
+  }
+  @media (max-width: 600px) {
+    #map-top-sticky { height: 240px !important; max-height: 45vh; }
+  }
+  @media (min-width: 601px) {
+    #map-top-sticky { height: 420px !important; max-height: 55vh; }
+  }
+  /* Garante espaço extra para a tabela não "colar" */
+  .table-responsive { margin-top: 6px; }
+</style>
+
+<div id="map-top-sticky">
     <div id="map"
-         style="width:100%;height:420px;max-height:50vh;position:sticky;top:0;z-index:2;border-radius:10px;margin-bottom:18px;box-shadow:0 4px 16px #0001;">
+         style="width:100%;height:100%;min-height:220px;">
     </div>
 </div>
-<style>
-    @media (max-width: 600px) {
-      #map { height: 340px !important; max-height: 70vh; }
-    }
-    @media (min-width: 601px) {
-      #map { height: 480px !important; }
-    }
-</style>
 
 <div class="table-responsive">
 <form id="form-csv" action="{{ url_for('main.generate') }}" method="post" autocomplete="off">
@@ -67,7 +79,7 @@
 
 {% block scripts %}
 <script>
-// Gera SVG PIN (mantém visual e reduz o tamanho real no mapa)
+// Gera SVG PIN (metade do tamanho visual anterior)
 function makeSvgPin(numero, corHex) {
     let n = String(numero).substring(0, 3);
     let svg = `<svg width="44" height="54" viewBox="0 0 44 54" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -129,7 +141,7 @@ function initMap() {
             title: `${numero} - ${e.address}`,
             icon: {
                 url: pinUrl,
-                scaledSize: new google.maps.Size(22, 27) // <-- metade do tamanho original
+                scaledSize: new google.maps.Size(22, 27)
             },
             draggable: true
         });
@@ -153,7 +165,6 @@ function initMap() {
                         row.querySelector('input[name="endereco_' + e.idx + '"]').value = data.address;
                         row.querySelector('input[name="cep_' + e.idx + '"]').value = data.cep;
 
-                        // (Opcional) atualiza a coluna CODP Google, se resposta trouxer
                         if(row.querySelector('td.cep-encontrado')) {
                             row.querySelector('td.cep-encontrado').innerHTML = data.cep || "-";
                         }
