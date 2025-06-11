@@ -21,7 +21,7 @@
         <tbody>
             {% for item in lista %}
             <tr id="linha-{{ loop.index0 }}" class="{% if item.cep_ok %}table-success{% else %}table-danger{% endif %}">
-                <td style="font-weight: bold; text-align:center;">{{ item['order_number'] }}</td>
+                <td style="font-weight: bold; text-align:center;">{{ item['order_number'] or loop.index }}</td>
                 <td>
                     <input type="hidden" name="numero_pacote_{{ loop.index0 }}" value="{{item['order_number']}}">
                     <input type="text" class="form-control" name="endereco_{{ loop.index0 }}" value="{{item['address']}}">
@@ -57,18 +57,15 @@
 
 {% block scripts %}
 <script>
-// Configuração inicial do mapa
 let map;
 let markers = [];
-
-// Dados dos endereços com tratamento seguro
 let enderecosData = [
     {% for item in lista %}
     {
         idx: {{ loop.index0 }},
         lat: {{ item.latitude|default('null') }},
         lng: {{ item.longitude|default('null') }},
-        numero_pacote: "{{ item.order_number|default('')|e }}",
+        numero_pacote: "{{ item.order_number|default(loop.index)|e }}",
         address: `{{ item.address|default('')|replace('`','\'')|e }}`,
         status: "{{ 'valid' if item.cep_ok else 'invalid' }}",
         cep_ok: {{ 'true' if item.cep_ok else 'false' }}
@@ -76,18 +73,14 @@ let enderecosData = [
     {% endfor %}
 ];
 
-// Função para inicializar o mapa
 function initMap() {
-    // Filtra apenas coordenadas válidas
     const coordenadasValidas = enderecosData.filter(e => e.lat && e.lng);
-    
     if (coordenadasValidas.length === 0) {
-        document.getElementById('map').innerHTML = 
+        document.getElementById('map').innerHTML =
             '<div class="alert alert-warning">Nenhuma coordenada válida para exibir</div>';
         return;
     }
 
-    // Cria o mapa centralizado no primeiro endereço válido
     map = new google.maps.Map(document.getElementById('map'), {
         zoom: 12,
         center: {
@@ -96,22 +89,21 @@ function initMap() {
         }
     });
 
-    // Cria bounds para ajustar o zoom
+    // Ajuste de bounds para englobar todos os PINs
     const bounds = new google.maps.LatLngBounds();
 
-    // Adiciona marcadores
     coordenadasValidas.forEach(e => {
         const position = {
             lat: parseFloat(e.lat),
             lng: parseFloat(e.lng)
         };
-        
         bounds.extend(position);
 
         const numero = e.numero_pacote || (e.idx + 1);
+        // Cores em HEX SEM '#'
         const cor = e.cep_ok ? "00AA00" : "FF0000";
         const pinUrl = `https://chart.googleapis.com/chart?chst=d_map_pin_letter&chld=${encodeURIComponent(numero)}|${cor}|FFFFFF`;
-        
+
         const marker = new google.maps.Marker({
             position: position,
             map: map,
@@ -125,11 +117,9 @@ function initMap() {
         markers[e.idx] = marker;
     });
 
-    // Ajusta o zoom para todos os marcadores
     map.fitBounds(bounds);
 }
 
-// Carrega a API do Google Maps
 function loadGoogleMaps() {
     const script = document.createElement('script');
     script.src = `https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&callback=initMap`;
@@ -138,19 +128,8 @@ function loadGoogleMaps() {
     document.head.appendChild(script);
 }
 
-// Verifica se a API está carregada
-function checkGoogleMaps() {
-    if (window.google && window.google.maps) {
-        initMap();
-    } else {
-        setTimeout(checkGoogleMaps, 100);
-    }
-}
-
-// Inicia o carregamento quando a página estiver pronta
 document.addEventListener('DOMContentLoaded', loadGoogleMaps);
 
-// Função para validar linha (mantida conforme seu original)
 function validarLinha(idx) {
     const row = document.getElementById('linha-' + idx);
     const endereco = row.querySelector('input[name="endereco_' + idx + '"]').value;
@@ -170,12 +149,10 @@ function validarLinha(idx) {
     })
     .then(resp => resp.json())
     .then(data => {
-        // Atualiza os dados na tabela
         row.querySelector('input[name="endereco_' + idx + '"]').value = data.address;
         row.querySelector('input[name="cep_' + idx + '"]').value = data.cep;
         row.querySelector('td.cep-encontrado').innerHTML = data.postal_code_encontrado || "-";
-        
-        // Atualiza status
+
         let tdGoogle = row.querySelector('td.status-google');
         if (data.status_google === "OK") {
             tdGoogle.innerHTML = '<span class="text-success">OK</span>' +
@@ -188,37 +165,25 @@ function validarLinha(idx) {
         btn.disabled = false;
         btn.textContent = "Validar";
 
-        // Atualiza o marcador no mapa se houver novas coordenadas
         if (data.latitude && data.longitude) {
             const novaLat = parseFloat(data.latitude);
             const novaLng = parseFloat(data.longitude);
-            
-            // Atualiza o array de dados
             enderecosData[idx].lat = novaLat;
             enderecosData[idx].lng = novaLng;
             enderecosData[idx].cep_ok = data.cep_ok;
-            
-            // Atualiza ou cria o marcador
+
             if (markers[idx]) {
                 markers[idx].setPosition({lat: novaLat, lng: novaLng});
-            } else {
+                // Atualiza cor do PIN após validação
                 const numero = data.order_number || (idx + 1);
                 const cor = data.cep_ok ? "00AA00" : "FF0000";
                 const pinUrl = `https://chart.googleapis.com/chart?chst=d_map_pin_letter&chld=${encodeURIComponent(numero)}|${cor}|FFFFFF`;
-                
-                markers[idx] = new google.maps.Marker({
-                    position: {lat: novaLat, lng: novaLng},
-                    map: map,
-                    title: `${numero} - ${data.address}`,
-                    icon: {
-                        url: pinUrl,
-                        scaledSize: new google.maps.Size(40, 40)
-                    }
+                markers[idx].setIcon({
+                    url: pinUrl,
+                    scaledSize: new google.maps.Size(40, 40)
                 });
+                map.panTo({lat: novaLat, lng: novaLng});
             }
-            
-            // Centraliza o mapa no novo marcador
-            map.panTo({lat: novaLat, lng: novaLng});
         }
     })
     .catch(() => {
