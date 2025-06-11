@@ -57,7 +57,7 @@
 
 {% block scripts %}
 <script>
-// Gera SVG para PIN (fixo, sem transparência)
+// Gera SVG PIN
 function makeSvgPin(numero, corHex) {
     let n = String(numero).substring(0, 3);
     let svg = `<svg width="44" height="54" viewBox="0 0 44 54" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -120,6 +120,73 @@ function initMap() {
             icon: {
                 url: pinUrl,
                 scaledSize: new google.maps.Size(44, 54)
+            },
+            draggable: true
+        });
+
+        // Evento de arrastar
+        marker.addListener('dragend', function(event) {
+            if (confirm("Deseja atualizar o endereço para esta nova localização?")) {
+                fetch("/api/reverse-geocode", {
+                    method: "POST",
+                    body: new URLSearchParams({
+                        idx: e.idx,
+                        lat: event.latLng.lat(),
+                        lng: event.latLng.lng()
+                    })
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if(data.sucesso) {
+                        // Atualiza linha na tabela
+                        let row = document.getElementById('linha-' + e.idx);
+                        row.querySelector('input[name="endereco_' + e.idx + '"]').value = data.address;
+                        row.querySelector('input[name="cep_' + e.idx + '"]').value = data.cep;
+
+                        // (Opcional) atualiza a coluna CODP Google, se resposta trouxer
+                        if(row.querySelector('td.cep-encontrado')) {
+                            row.querySelector('td.cep-encontrado').innerHTML = data.cep || "-";
+                        }
+
+                        // Consulta Google para status e cor
+                        fetch("/api/validar-linha", {
+                            method: "POST",
+                            body: new URLSearchParams({
+                                endereco: data.address,
+                                cep: data.cep,
+                                numero_pacote: numero
+                            })
+                        })
+                        .then(resp => resp.json())
+                        .then(val => {
+                            // Atualiza status/cor
+                            let tdGoogle = row.querySelector('td.status-google');
+                            if (val.status_google === "OK") {
+                                tdGoogle.innerHTML = '<span class="text-success">OK</span>' +
+                                    (val.rua_bate ? '' : '<span title="Rua diferente do Google!">⚠️</span>');
+                                row.className = "table-success";
+                            } else {
+                                tdGoogle.innerHTML = '<span class="text-danger">' + (val.status_google || "NÃO ENCONTRADO") + '</span>';
+                                row.className = "table-danger";
+                            }
+                            // Atualiza PIN
+                            let corNova = val.cep_ok ? "#44B100" : "#D82B2B";
+                            marker.setIcon({
+                                url: makeSvgPin(numero, corNova),
+                                scaledSize: new google.maps.Size(44, 54)
+                            });
+                        });
+                    } else {
+                        alert("Endereço não encontrado!");
+                        marker.setPosition({lat: e.lat, lng: e.lng}); // Volta para original
+                    }
+                })
+                .catch(() => {
+                    alert("Erro ao validar novo local! Tente novamente.");
+                    marker.setPosition({lat: e.lat, lng: e.lng});
+                });
+            } else {
+                marker.setPosition({lat: e.lat, lng: e.lng}); // Volta para original
             }
         });
 
