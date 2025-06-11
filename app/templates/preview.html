@@ -56,94 +56,101 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&callback=initMap" async defer></script>
 <script>
+// Configuração inicial do mapa
+let map;
 let markers = [];
+
+// Dados dos endereços com tratamento seguro
 let enderecosData = [
     {% for item in lista %}
     {
         idx: {{ loop.index0 }},
-        lat: {{ item.latitude or 'null' }},
-        lng: {{ item.longitude or 'null' }},
-        numero_pacote: "{{ item.order_number|e }}",
-        address: `{{ item.address|replace('`','\'')|e }}`,
-        status: "{{ 'valid' if item.cep_ok else 'invalid' }}"
-    },
+        lat: {{ item.latitude|default('null') }},
+        lng: {{ item.longitude|default('null') }},
+        numero_pacote: "{{ item.order_number|default('')|e }}",
+        address: `{{ item.address|default('')|replace('`','\'')|e }}`,
+        status: "{{ 'valid' if item.cep_ok else 'invalid' }}",
+        cep_ok: {{ 'true' if item.cep_ok else 'false' }}
+    }{% if not loop.last %},{% endif %}
     {% endfor %}
 ];
 
-let map;
-
+// Função para inicializar o mapa
 function initMap() {
-    // Foco inicial: primeiro endereço válido ou centro genérico
-    let primeiro = enderecosData.find(e => e.lat && e.lng);
-    let center = primeiro ? {lat: primeiro.lat, lng: primeiro.lng} : {lat: 41.7, lng: -8.8};
+    // Filtra apenas coordenadas válidas
+    const coordenadasValidas = enderecosData.filter(e => e.lat && e.lng);
+    
+    if (coordenadasValidas.length === 0) {
+        document.getElementById('map').innerHTML = 
+            '<div class="alert alert-warning">Nenhuma coordenada válida para exibir</div>';
+        return;
+    }
 
+    // Cria o mapa centralizado no primeiro endereço válido
     map = new google.maps.Map(document.getElementById('map'), {
-        zoom: 11,
-        center: center
+        zoom: 12,
+        center: {
+            lat: parseFloat(coordenadasValidas[0].lat),
+            lng: parseFloat(coordenadasValidas[0].lng)
+        }
     });
 
-    let pinBase = "https://chart.googleapis.com/chart?chst=d_map_pin_letter&chld=";
-    let pinGreen = "|44B100|fff";
-    let pinRed = "|D82B2B|fff";
+    // Cria bounds para ajustar o zoom
+    const bounds = new google.maps.LatLngBounds();
 
-    // Cria marcadores
-    enderecosData.forEach(function(e, idx) {
-        if (!e.lat || !e.lng) return;
-        // Use sempre um número no PIN
-        let numero = (e.numero_pacote && e.numero_pacote !== "null" && e.numero_pacote !== "") ? e.numero_pacote : (idx+1);
-        let cor = (e.status === 'valid') ? pinGreen : pinRed;
-        let pinUrl = pinBase + encodeURIComponent(numero) + cor;
-        let marker = new google.maps.Marker({
-            position: {lat: e.lat, lng: e.lng},
+    // Adiciona marcadores
+    coordenadasValidas.forEach(e => {
+        const position = {
+            lat: parseFloat(e.lat),
+            lng: parseFloat(e.lng)
+        };
+        
+        bounds.extend(position);
+
+        const numero = e.numero_pacote || (e.idx + 1);
+        const cor = e.cep_ok ? "00AA00" : "FF0000";
+        const pinUrl = `https://chart.googleapis.com/chart?chst=d_map_pin_letter&chld=${encodeURIComponent(numero)}|${cor}|FFFFFF`;
+        
+        const marker = new google.maps.Marker({
+            position: position,
             map: map,
-            title: numero + " - " + e.address,
-            icon: pinUrl,
-            draggable: true
-        });
-
-        marker.addListener('dragend', function(event) {
-            if(confirm("Deseja atualizar o endereço para esta nova localização?")) {
-                fetch("/api/reverse-geocode", {
-                    method: "POST",
-                    body: new URLSearchParams({
-                        idx: e.idx,
-                        lat: event.latLng.lat(),
-                        lng: event.latLng.lng()
-                    })
-                })
-                .then(r => r.json())
-                .then(data => {
-                    if(data.sucesso) {
-                        // Atualiza linha na tabela
-                        let row = document.getElementById('linha-' + e.idx);
-                        row.querySelector('input[name="endereco_' + e.idx + '"]').value = data.address;
-                        row.querySelector('input[name="cep_' + e.idx + '"]').value = data.cep;
-                        row.className = "table-success";
-                        // Atualiza também nosso array
-                        enderecosData[e.idx].lat = event.latLng.lat();
-                        enderecosData[e.idx].lng = event.latLng.lng();
-                        // Atualiza pin (verde)
-                        marker.setIcon(pinBase + encodeURIComponent(numero) + pinGreen);
-                    } else {
-                        alert("Endereço não encontrado!");
-                        marker.setPosition({lat: e.lat, lng: e.lng});
-                    }
-                })
-                .catch(() => {
-                    alert("Erro ao validar novo local! Tente novamente.");
-                    marker.setPosition({lat: e.lat, lng: e.lng});
-                });
-            } else {
-                marker.setPosition({lat: e.lat, lng: e.lng});
+            title: `${numero} - ${e.address}`,
+            icon: {
+                url: pinUrl,
+                scaledSize: new google.maps.Size(40, 40)
             }
         });
 
-        markers.push(marker);
+        markers[e.idx] = marker;
     });
+
+    // Ajusta o zoom para todos os marcadores
+    map.fitBounds(bounds);
 }
 
+// Carrega a API do Google Maps
+function loadGoogleMaps() {
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&callback=initMap`;
+    script.async = true;
+    script.defer = true;
+    document.head.appendChild(script);
+}
+
+// Verifica se a API está carregada
+function checkGoogleMaps() {
+    if (window.google && window.google.maps) {
+        initMap();
+    } else {
+        setTimeout(checkGoogleMaps, 100);
+    }
+}
+
+// Inicia o carregamento quando a página estiver pronta
+document.addEventListener('DOMContentLoaded', loadGoogleMaps);
+
+// Função para validar linha (mantida conforme seu original)
 function validarLinha(idx) {
     const row = document.getElementById('linha-' + idx);
     const endereco = row.querySelector('input[name="endereco_' + idx + '"]').value;
@@ -163,10 +170,12 @@ function validarLinha(idx) {
     })
     .then(resp => resp.json())
     .then(data => {
+        // Atualiza os dados na tabela
         row.querySelector('input[name="endereco_' + idx + '"]').value = data.address;
         row.querySelector('input[name="cep_' + idx + '"]').value = data.cep;
         row.querySelector('td.cep-encontrado').innerHTML = data.postal_code_encontrado || "-";
-        // Atualiza status/cor
+        
+        // Atualiza status
         let tdGoogle = row.querySelector('td.status-google');
         if (data.status_google === "OK") {
             tdGoogle.innerHTML = '<span class="text-success">OK</span>' +
@@ -179,22 +188,37 @@ function validarLinha(idx) {
         btn.disabled = false;
         btn.textContent = "Validar";
 
-        // Atualiza pin do mapa (se coordenadas vieram)
+        // Atualiza o marcador no mapa se houver novas coordenadas
         if (data.latitude && data.longitude) {
-            let novaLat = parseFloat(data.latitude);
-            let novaLng = parseFloat(data.longitude);
-            if (markers[idx]) {
-                markers[idx].setPosition({lat: novaLat, lng: novaLng});
-                let numero = (data.order_number && data.order_number !== "null" && data.order_number !== "") ? data.order_number : (idx+1);
-                let cor = (data.cep_ok ? "|44B100|fff" : "|D82B2B|fff");
-                let pinUrl = "https://chart.googleapis.com/chart?chst=d_map_pin_letter&chld=" +
-                            encodeURIComponent(numero) + cor;
-                markers[idx].setIcon(pinUrl);
-                map.panTo({lat: novaLat, lng: novaLng});
-            }
-            // Atualiza também no array
+            const novaLat = parseFloat(data.latitude);
+            const novaLng = parseFloat(data.longitude);
+            
+            // Atualiza o array de dados
             enderecosData[idx].lat = novaLat;
             enderecosData[idx].lng = novaLng;
+            enderecosData[idx].cep_ok = data.cep_ok;
+            
+            // Atualiza ou cria o marcador
+            if (markers[idx]) {
+                markers[idx].setPosition({lat: novaLat, lng: novaLng});
+            } else {
+                const numero = data.order_number || (idx + 1);
+                const cor = data.cep_ok ? "00AA00" : "FF0000";
+                const pinUrl = `https://chart.googleapis.com/chart?chst=d_map_pin_letter&chld=${encodeURIComponent(numero)}|${cor}|FFFFFF`;
+                
+                markers[idx] = new google.maps.Marker({
+                    position: {lat: novaLat, lng: novaLng},
+                    map: map,
+                    title: `${numero} - ${data.address}`,
+                    icon: {
+                        url: pinUrl,
+                        scaledSize: new google.maps.Size(40, 40)
+                    }
+                });
+            }
+            
+            // Centraliza o mapa no novo marcador
+            map.panTo({lat: novaLat, lng: novaLng});
         }
     })
     .catch(() => {
@@ -202,7 +226,6 @@ function validarLinha(idx) {
         btn.textContent = "Validar";
         alert("Erro ao validar endereço! Tente novamente.");
     });
-    return false;
 }
 </script>
 {% endblock %}
