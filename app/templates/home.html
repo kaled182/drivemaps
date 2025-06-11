@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h2>DriveMaps – Validação de Endereços PAACK</h2>
+<h2>DriveMaps – Leguas</h2>
 <form action="{{ url_for('main.preview') }}" method="POST">
     <div class="mb-3">
         <label for="enderecos" class="form-label">
@@ -18,13 +18,12 @@
     <ol>
         <li>Cole a lista completa da PAACK no campo acima (copiada do sistema/app).</li>
         <li>Clique em “Pré-visualizar Endereços”.</li>
-        <li>Na tela seguinte, confira a cor de cada linha (verde = CEP válido, vermelho = CEP divergente).</li>
-        <li>Confira a <b>freguesia</b> retornada pelo Google para maior precisão.</li>
+        <li>Na tela seguinte, confira a cor de cada linha (verde = CEP válido, vermelho = CEP ou rua divergente).</li>
         <li>Se necessário, corrija e clique em "Validar" em qualquer linha alterada.</li>
-        <li>O botão "Gerar CSV para MyWay" está sempre disponível!</li>
+        <li>Seleciona o App de sua preferência e mande gerar o arquivo CSV!</li>
     </ol>
     <div class="alert alert-info mt-3">
-        <strong>Dica:</strong> Se copiar grandes volumes de endereços, divida em lotes para não sobrecarregar!
+        <strong>Dica:</strong> De acordo com a quantidade de endereços e o tempo espera pode aumentar.
     </div>
 </div>
 {% endblock %}
