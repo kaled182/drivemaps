@@ -12,12 +12,6 @@
     <div id="map" style="width:100%;height:100%;min-height:220px;"></div>
 </div>
 
-<div class="d-flex justify-content-end my-2">
-    <button class="btn btn-primary" onclick="adicionarEnderecoManual()">
-        + Adicionar endereço
-    </button>
-</div>
-
 <div class="table-responsive">
 <form id="form-csv" action="{{ url_for('main.generate') }}" method="post" autocomplete="off">
     <table class="table table-bordered align-middle" id="tabela-enderecos">
@@ -60,6 +54,14 @@
             {% endfor %}
         </tbody>
     </table>
+
+    <!-- Botão de adicionar endereço manual na parte inferior -->
+    <div class="d-flex justify-content-end my-2">
+        <button type="button" class="btn btn-primary" onclick="adicionarEnderecoManual()">
+            + Adicionar endereço
+        </button>
+    </div>
+
     <input type="hidden" name="total" id="total-linhas" value="{{lista|length}}">
     <button id="btn-csv" type="submit" name="finalizar" value="1" class="btn btn-success w-100 mt-3">
         Gerar CSV para MyWay
