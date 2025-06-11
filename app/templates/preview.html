@@ -2,8 +2,18 @@
 
 {% block content %}
 <div class="mb-3" style="position:relative;">
-    <div id="map" style="width:100%;height:350px;position:sticky;top:0;z-index:2;border-radius:10px;margin-bottom:18px;"></div>
+    <div id="map"
+         style="width:100%;height:420px;max-height:50vh;position:sticky;top:0;z-index:2;border-radius:10px;margin-bottom:18px;box-shadow:0 4px 16px #0001;">
+    </div>
 </div>
+<style>
+    @media (max-width: 600px) {
+      #map { height: 340px !important; max-height: 70vh; }
+    }
+    @media (min-width: 601px) {
+      #map { height: 480px !important; }
+    }
+</style>
 
 <div class="table-responsive">
 <form id="form-csv" action="{{ url_for('main.generate') }}" method="post" autocomplete="off">
@@ -57,7 +67,7 @@
 
 {% block scripts %}
 <script>
-// Gera SVG PIN
+// Gera SVG PIN (mantém visual e reduz o tamanho real no mapa)
 function makeSvgPin(numero, corHex) {
     let n = String(numero).substring(0, 3);
     let svg = `<svg width="44" height="54" viewBox="0 0 44 54" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -119,7 +129,7 @@ function initMap() {
             title: `${numero} - ${e.address}`,
             icon: {
                 url: pinUrl,
-                scaledSize: new google.maps.Size(44, 54)
+                scaledSize: new google.maps.Size(22, 27) // <-- metade do tamanho original
             },
             draggable: true
         });
@@ -173,7 +183,7 @@ function initMap() {
                             let corNova = val.cep_ok ? "#44B100" : "#D82B2B";
                             marker.setIcon({
                                 url: makeSvgPin(numero, corNova),
-                                scaledSize: new google.maps.Size(44, 54)
+                                scaledSize: new google.maps.Size(22, 27)
                             });
                         });
                     } else {
@@ -248,7 +258,7 @@ function validarLinha(idx) {
             let numero = data.order_number || (idx + 1);
             markers[idx].setIcon({
                 url: makeSvgPin(numero, cor),
-                scaledSize: new google.maps.Size(44, 54)
+                scaledSize: new google.maps.Size(22, 27)
             });
             map.panTo({lat: novaLat, lng: novaLng});
         }
