@@ -99,14 +99,88 @@ let enderecosData = [
     {% endfor %}
 ];
 
+// Função centralizada para criar marcador drag&drop e atualizar linha na tabela ao mover
+function criarMarker(idx, data) {
+    // Remove marcador antigo se existir
+    if (markers[idx]) {
+        markers[idx].setMap(null);
+    }
+    const position = {lat: parseFloat(data.latitude), lng: parseFloat(data.longitude)};
+    const cor = data.cep_ok ? "#44B100" : "#D82B2B";
+    const pinUrl = makeSvgPin(data.order_number || (idx+1), cor);
+    let marker = new google.maps.Marker({
+        position: position,
+        map: map,
+        title: `${data.order_number || (idx+1)} - ${data.address}`,
+        icon: { url: pinUrl, scaledSize: new google.maps.Size(22, 27) },
+        draggable: true
+    });
+
+    marker.addListener('dragend', function(event) {
+        if (confirm("Deseja atualizar o endereço para esta nova localização?")) {
+            fetch("/api/reverse-geocode", {
+                method: "POST",
+                body: new URLSearchParams({
+                    idx: idx,
+                    lat: event.latLng.lat(),
+                    lng: event.latLng.lng()
+                })
+            })
+            .then(r => r.json())
+            .then(res => {
+                if(res.sucesso) {
+                    let row = document.getElementById('linha-' + idx);
+                    row.querySelector('input[name="endereco_' + idx + '"]').value = res.address;
+                    row.querySelector('input[name="cep_' + idx + '"]').value = res.cep;
+                    if(row.querySelector('td.cep-encontrado')) {
+                        row.querySelector('td.cep-encontrado').innerHTML = res.cep || "-";
+                    }
+                    fetch("/api/validar-linha", {
+                        method: "POST",
+                        body: new URLSearchParams({
+                            endereco: res.address,
+                            cep: res.cep,
+                            numero_pacote: data.order_number || (idx+1)
+                        })
+                    })
+                    .then(resp => resp.json())
+                    .then(val => {
+                        let tdGoogle = row.querySelector('td.status-google');
+                        if (val.status_google === "OK") {
+                            tdGoogle.innerHTML = '<span class="text-success">OK</span>' +
+                                (val.rua_bate ? '' : '<span title="Rua diferente do Google!">⚠️</span>');
+                            row.className = "table-success";
+                        } else {
+                            tdGoogle.innerHTML = '<span class="text-danger">' + (val.status_google || "NÃO ENCONTRADO") + '</span>';
+                            row.className = "table-danger";
+                        }
+                        let corNova = val.cep_ok ? "#44B100" : "#D82B2B";
+                        marker.setIcon({
+                            url: makeSvgPin(data.order_number || (idx+1), corNova),
+                            scaledSize: new google.maps.Size(22, 27)
+                        });
+                    });
+                } else {
+                    alert("Endereço não encontrado!");
+                    marker.setPosition(position);
+                }
+            })
+            .catch(() => {
+                alert("Erro ao validar novo local! Tente novamente.");
+                marker.setPosition(position);
+            });
+        } else {
+            marker.setPosition(position);
+        }
+    });
+    markers[idx] = marker;
+}
+
 // --- NOVO: Adicionar endereço manual ---
 function adicionarEnderecoManual() {
-    // Descobre o próximo índice
     let tbody = document.getElementById('corpo-tabela');
     let total = tbody.children.length;
     let nextIdx = total;
-
-    // Evita múltiplos inputs de adição
     if (document.getElementById('linha-nova')) return;
 
     let tr = document.createElement('tr');
@@ -143,8 +217,6 @@ function salvarNovoEndereco() {
         alert("Preencha endereço e CEP.");
         return;
     }
-
-    // Chama a mesma API de validação usada pelo botão Validar
     fetch("/api/validar-linha", {
         method: "POST",
         body: new URLSearchParams({
@@ -155,7 +227,6 @@ function salvarNovoEndereco() {
     })
     .then(resp => resp.json())
     .then(data => {
-        // Atualiza o total
         let tbody = document.getElementById('corpo-tabela');
         let total = tbody.children.length - (document.getElementById('linha-nova') ? 1 : 0);
         let idx = total;
@@ -184,10 +255,7 @@ function salvarNovoEndereco() {
         `;
         tbody.appendChild(row);
 
-        // Atualiza o total para envio do CSV
         document.getElementById('total-linhas').value = idx + 1;
-
-        // Adiciona no array JS para mapa (sem coordenada por enquanto)
         enderecosData.push({
             idx: idx,
             lat: data.latitude || null,
@@ -198,21 +266,10 @@ function salvarNovoEndereco() {
             cep_ok: data.cep_ok
         });
 
-        // Se tiver coordenada, adiciona no mapa:
+        // Se tiver coordenada, adiciona o marcador com drag sync:
         if (data.latitude && data.longitude) {
-            const position = {lat: parseFloat(data.latitude), lng: parseFloat(data.longitude)};
-            const cor = data.cep_ok ? "#44B100" : "#D82B2B";
-            const pinUrl = makeSvgPin(data.order_number || (idx+1), cor);
-            let marker = new google.maps.Marker({
-                position: position,
-                map: map,
-                title: `${data.order_number || (idx+1)} - ${data.address}`,
-                icon: { url: pinUrl, scaledSize: new google.maps.Size(22, 27) },
-                draggable: true
-            });
-            markers[idx] = marker;
+            criarMarker(idx, data);
         }
-
         removerNovaLinha();
     })
     .catch(() => alert("Erro ao validar endereço!"));
@@ -237,87 +294,14 @@ function initMap() {
     const bounds = new google.maps.LatLngBounds();
 
     coordenadasValidas.forEach(e => {
-        const position = {
-            lat: parseFloat(e.lat),
-            lng: parseFloat(e.lng)
-        };
-        bounds.extend(position);
-
-        const numero = e.numero_pacote || (e.idx + 1);
-        const cor = e.cep_ok ? "#44B100" : "#D82B2B";
-        const pinUrl = makeSvgPin(numero, cor);
-
-        const marker = new google.maps.Marker({
-            position: position,
-            map: map,
-            title: `${numero} - ${e.address}`,
-            icon: {
-                url: pinUrl,
-                scaledSize: new google.maps.Size(22, 27)
-            },
-            draggable: true
+        criarMarker(e.idx, {
+            latitude: e.lat,
+            longitude: e.lng,
+            cep_ok: e.cep_ok,
+            address: e.address,
+            order_number: e.numero_pacote
         });
-
-        // Evento de arrastar
-        marker.addListener('dragend', function(event) {
-            if (confirm("Deseja atualizar o endereço para esta nova localização?")) {
-                fetch("/api/reverse-geocode", {
-                    method: "POST",
-                    body: new URLSearchParams({
-                        idx: e.idx,
-                        lat: event.latLng.lat(),
-                        lng: event.latLng.lng()
-                    })
-                })
-                .then(r => r.json())
-                .then(data => {
-                    if(data.sucesso) {
-                        let row = document.getElementById('linha-' + e.idx);
-                        row.querySelector('input[name="endereco_' + e.idx + '"]').value = data.address;
-                        row.querySelector('input[name="cep_' + e.idx + '"]').value = data.cep;
-                        if(row.querySelector('td.cep-encontrado')) {
-                            row.querySelector('td.cep-encontrado').innerHTML = data.cep || "-";
-                        }
-                        fetch("/api/validar-linha", {
-                            method: "POST",
-                            body: new URLSearchParams({
-                                endereco: data.address,
-                                cep: data.cep,
-                                numero_pacote: numero
-                            })
-                        })
-                        .then(resp => resp.json())
-                        .then(val => {
-                            let tdGoogle = row.querySelector('td.status-google');
-                            if (val.status_google === "OK") {
-                                tdGoogle.innerHTML = '<span class="text-success">OK</span>' +
-                                    (val.rua_bate ? '' : '<span title="Rua diferente do Google!">⚠️</span>');
-                                row.className = "table-success";
-                            } else {
-                                tdGoogle.innerHTML = '<span class="text-danger">' + (val.status_google || "NÃO ENCONTRADO") + '</span>';
-                                row.className = "table-danger";
-                            }
-                            let corNova = val.cep_ok ? "#44B100" : "#D82B2B";
-                            marker.setIcon({
-                                url: makeSvgPin(numero, corNova),
-                                scaledSize: new google.maps.Size(22, 27)
-                            });
-                        });
-                    } else {
-                        alert("Endereço não encontrado!");
-                        marker.setPosition({lat: e.lat, lng: e.lng});
-                    }
-                })
-                .catch(() => {
-                    alert("Erro ao validar novo local! Tente novamente.");
-                    marker.setPosition({lat: e.lat, lng: e.lng});
-                });
-            } else {
-                marker.setPosition({lat: e.lat, lng: e.lng});
-            }
-        });
-
-        markers[e.idx] = marker;
+        bounds.extend({lat: parseFloat(e.lat), lng: parseFloat(e.lng)});
     });
 
     map.fitBounds(bounds);
