@@ -57,7 +57,7 @@
 
 {% block scripts %}
 <script>
-// Função PIN customizado para fallback clássico
+// Função PIN customizado (SVG) para fallback clássico
 function makeSvgPin(numero, corHex) {
     let n = String(numero).substring(0, 3);
     let svg = `<svg width="44" height="54" viewBox="0 0 44 54" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -84,13 +84,13 @@ let enderecosData = [
     {% endfor %}
 ];
 
+// Função para adicionar o PIN (Advanced ou fallback)
 function addPin(markerObj, idx, useAdvanced) {
     const numero = markerObj.numero_pacote || (idx + 1);
     const cor = markerObj.cep_ok ? "#44B100" : "#D82B2B";
 
-    // NOVO SISTEMA: AdvancedMarkerElement (Google Maps JS v3.55+)
+    // AdvancedMarkerElement
     if (useAdvanced && window.google && window.google.maps && window.google.maps.marker) {
-        // Cria o PIN customizado
         const content = document.createElement('div');
         content.style.display = 'flex';
         content.style.alignItems = 'center';
@@ -105,23 +105,21 @@ function addPin(markerObj, idx, useAdvanced) {
         content.style.fontSize = '18px';
         content.textContent = numero;
 
-        // Marker
         let marker = new window.google.maps.marker.AdvancedMarkerElement({
             map: map,
             position: {lat: parseFloat(markerObj.lat), lng: parseFloat(markerObj.lng)},
             content: content,
             title: `${numero} - ${markerObj.address}`,
-            gmpDraggable: true // importante!
+            gmpDraggable: true
         });
 
-        // DragEnd event
         marker.addListener('dragend', (event) => {
             onPinDragEnd(idx, event.latLng.lat(), event.latLng.lng(), marker, numero, cor, true);
         });
 
         markers[idx] = marker;
     } else {
-        // SISTEMA CLÁSSICO fallback (SVG custom)
+        // Fallback SVG
         let pinUrl = makeSvgPin(numero, cor);
         let marker = new google.maps.Marker({
             position: {lat: parseFloat(markerObj.lat), lng: parseFloat(markerObj.lng)},
@@ -142,7 +140,7 @@ function addPin(markerObj, idx, useAdvanced) {
     }
 }
 
-// Função DRAGEND usada por ambos os sistemas!
+// Evento DRAGEND para ambos sistemas!
 function onPinDragEnd(idx, lat, lng, marker, numero, cor, isAdvanced) {
     if (confirm("Deseja atualizar o endereço para esta nova localização?")) {
         fetch("/api/reverse-geocode", {
@@ -186,7 +184,7 @@ function onPinDragEnd(idx, lat, lng, marker, numero, cor, isAdvanced) {
                         tdGoogle.innerHTML = '<span class="text-danger">' + (val.status_google || "NÃO ENCONTRADO") + '</span>';
                         row.className = "table-danger";
                     }
-                    // Atualiza PIN (Advanced ou clássico)
+                    // Atualiza PIN (Advanced ou fallback)
                     let corNova = val.cep_ok ? "#44B100" : "#D82B2B";
                     if (isAdvanced && marker.content) {
                         marker.content.style.background = corNova;
@@ -199,7 +197,6 @@ function onPinDragEnd(idx, lat, lng, marker, numero, cor, isAdvanced) {
                 });
             } else {
                 alert("Endereço não encontrado!");
-                // Volta o marcador pra posição original
                 marker.setPosition({lat: enderecosData[idx].lat, lng: enderecosData[idx].lng});
             }
         })
@@ -212,7 +209,6 @@ function onPinDragEnd(idx, lat, lng, marker, numero, cor, isAdvanced) {
     }
 }
 
-// Inicialização
 function initMap() {
     const coordenadasValidas = enderecosData.filter(e => e.lat && e.lng);
     if (coordenadasValidas.length === 0) {
@@ -227,6 +223,8 @@ function initMap() {
             lat: parseFloat(coordenadasValidas[0].lat),
             lng: parseFloat(coordenadasValidas[0].lng)
         }
+        // Se quiser usar MAP_ID (apenas se você tiver gerado no Google Cloud):
+        //, mapId: "{{ MAP_ID }}"
     });
 
     // Bounds
@@ -234,19 +232,17 @@ function initMap() {
     coordenadasValidas.forEach(e => bounds.extend({lat: parseFloat(e.lat), lng: parseFloat(e.lng)}));
     map.fitBounds(bounds);
 
-    // Tenta AdvancedMarkerElement
     let useAdvanced = false;
     if (window.google && window.google.maps && window.google.maps.marker && window.google.maps.marker.AdvancedMarkerElement) {
         useAdvanced = true;
     }
 
-    // Adiciona cada PIN
     coordenadasValidas.forEach((e, idx) => {
         addPin(e, e.idx, useAdvanced);
     });
 }
 
-// Google Maps JS API + marker library para AdvancedMarkerElement
+// Google Maps API + marker library
 function loadGoogleMaps() {
     const markerLib = "&libraries=marker";
     const script = document.createElement('script');
