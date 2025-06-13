@@ -10,42 +10,17 @@
     box-shadow: 0 4px 18px #0001; 
     border-radius: 0 0 14px 14px; 
   }
-  
   @media (max-width: 600px) { 
-    #map-top-sticky { 
-      height: 240px !important; 
-      max-height: 45vh; 
-    } 
-    .table-responsive { 
-      overflow-x: auto; 
-    }
-    .mobile-hidden { 
-      display: none; 
-    }
+    #map-top-sticky { height: 240px !important; max-height: 45vh; } 
+    .table-responsive { overflow-x: auto; }
+    .mobile-hidden { display: none; }
   }
-  
   @media (min-width: 601px) { 
-    #map-top-sticky { 
-      height: 420px !important; 
-      max-height: 55vh; 
-    } 
+    #map-top-sticky { height: 420px !important; max-height: 55vh; } 
   }
-  
-  .table-responsive { 
-    margin-top: 6px; 
-  }
-  
-  .filter-badge {
-    display: inline-block;
-    padding: 3px 8px;
-    border-radius: 12px;
-    font-size: 12px;
-    margin-right: 5px;
-  }
-  
-  .progress-sm {
-    height: 24px;
-  }
+  .table-responsive { margin-top: 6px; }
+  .filter-badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 12px; margin-right: 5px; }
+  .progress-sm { height: 24px; }
 </style>
 
 <div id="map-top-sticky">
@@ -55,21 +30,14 @@
 <!-- Filtros e Controles -->
 <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
     <div class="d-flex flex-row gap-2">
-        <!-- Filtro por origem -->
         <select id="filtro-origem" class="form-select form-select-sm" onchange="filtrarPorOrigem()">
             <option value="">Todas as origens</option>
             {% for origem in origens %}
                 <option value="{{ origem }}">{{ origem|capitalize }}</option>
             {% endfor %}
         </select>
-        
-        <!-- Botão Validar Tudo -->
-        <button type="button" class="btn btn-warning btn-sm" onclick="validarTudo()">
-            Validar Tudo
-        </button>
+        <button type="button" class="btn btn-warning btn-sm" onclick="validarTudo()">Validar Tudo</button>
     </div>
-    
-    <!-- Upload de arquivo -->
     <form id="form-upload" enctype="multipart/form-data" method="post" action="{{ url_for('main.import_planilha') }}" class="d-flex flex-row gap-2">
         <select name="empresa" class="form-select form-select-sm" style="width:auto;" required>
             <option value="">Empresa</option>
@@ -81,12 +49,10 @@
     </form>
 </div>
 
-<!-- Progresso da Validação -->
 <div id="progresso-validacao" class="progress progress-sm mb-3" style="display: none;">
     <div id="progresso-barra" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%">0%</div>
 </div>
 
-<!-- Tabela de Endereços -->
 <div class="table-responsive">
 <form id="form-csv" action="{{ url_for('main.generate') }}" method="post" autocomplete="off">
     <table class="table table-bordered align-middle" id="tabela-enderecos">
@@ -127,7 +93,8 @@
                     {% endif %}
                 </td>
                 <td class="mobile-hidden">
-                    <span class="filter-badge" style="background-color:{{ item.cor|default:'#0074D9' }}; color: white;">
+                    <span class="filter-badge"
+                        style="background-color:{{ item.cor|default('#0074D9') }}; color: white;">
                         {{ item.importacao_tipo|capitalize }}
                     </span>
                 </td>
@@ -138,8 +105,6 @@
             {% endfor %}
         </tbody>
     </table>
-
-    <!-- Botões de Ação -->
     <div class="d-flex justify-content-between my-2">
         <button type="button" class="btn btn-primary" onclick="adicionarEnderecoManual()">
             + Adicionar endereço
@@ -148,7 +113,6 @@
             Gerar CSV para MyWay
         </button>
     </div>
-
     <input type="hidden" name="total" id="total-linhas" value="{{lista|length}}">
 </form>
 </div>
@@ -156,7 +120,7 @@
 
 {% block scripts %}
 <script>
-// -- Função SVG PIN (metade do tamanho visual anterior) --
+// -- Função SVG PIN --
 function makeSvgPin(numero, corHex) {
     let n = String(numero).substring(0, 3);
     let svg = `<svg width="44" height="54" viewBox="0 0 44 54" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -181,52 +145,36 @@ let enderecosData = [
         status: "{{ 'valid' if item.cep_ok else 'invalid' }}",
         cep_ok: {{ 'true' if item.cep_ok else 'false' }},
         importacao_tipo: "{{ item.importacao_tipo }}",
-        cor: "{{ item.cor|default:'#0074D9' }}"
+        cor: "{{ item.cor|default('#0074D9') }}"
     }{% if not loop.last %},{% endif %}
     {% endfor %}
 ];
 
-// Função centralizada para criar marcador drag&drop e atualizar linha na tabela ao mover
 function criarMarker(idx, data) {
-    // Remove marcador antigo se existir
     if (markers[idx]) {
         markers[idx].setMap(null);
-        if (markerCluster) {
-            markerCluster.removeMarker(markers[idx]);
-        }
+        if (markerCluster) markerCluster.removeMarker(markers[idx]);
     }
-    if (!data.latitude || !data.longitude || isNaN(data.latitude) || isNaN(data.longitude)) {
-        return null;
-    }
+    if (!data.latitude || !data.longitude || isNaN(data.latitude) || isNaN(data.longitude)) return null;
     const position = {lat: parseFloat(data.latitude), lng: parseFloat(data.longitude)};
     const cor = data.cep_ok ? "#44B100" : "#D82B2B";
-    const pinUrl = makeSvgPin(data.order_number || (idx+1), cor);
-    
+    const pinUrl = makeSvgPin(data.order_number || (idx+1), data.cor || cor);
     let marker = new google.maps.Marker({
         position: position,
         map: map,
         title: `${data.order_number || (idx+1)} - ${data.address}`,
         icon: { url: pinUrl, scaledSize: new google.maps.Size(22, 27) },
         draggable: true,
-        visible: !document.getElementById('filtro-origem').value || 
+        visible: !document.getElementById('filtro-origem').value ||
                  document.getElementById('filtro-origem').value === data.importacao_tipo
     });
-
-    marker.addListener('dragend', function(event) {
-        // ... aqui igual seu script original (não muda)
-    });
-    
+    // Se quiser, adicione listeners conforme seu script
     markers[idx] = marker;
-    if (markerCluster) {
-        markerCluster.addMarker(marker);
-    }
+    if (markerCluster) markerCluster.addMarker(marker);
     return marker;
 }
 
-// ... (demais funções JS: adicionarEnderecoManual, salvarNovoEndereco, filtrarPorOrigem, etc, permanecem IGUAIS ao seu template)
-
 function initMap() {
-    // Filtra apenas pontos válidos
     const coordenadasValidas = enderecosData.filter(e =>
         e.lat !== null && e.lng !== null && !isNaN(e.lat) && !isNaN(e.lng)
     );
@@ -235,7 +183,6 @@ function initMap() {
             '<div class="alert alert-warning">Nenhuma coordenada válida para exibir</div>';
         return;
     }
-
     map = new google.maps.Map(document.getElementById('map'), {
         zoom: 12,
         center: {
@@ -243,9 +190,7 @@ function initMap() {
             lng: parseFloat(coordenadasValidas[0].lng)
         }
     });
-
     markerCluster = new markerClusterer.MarkerClusterer({ map, markers: [] });
-
     coordenadasValidas.forEach(e => {
         criarMarker(e.idx, {
             latitude: e.lat,
@@ -258,25 +203,19 @@ function initMap() {
             cor: e.cor
         });
     });
-
     const bounds = new google.maps.LatLngBounds();
     coordenadasValidas.forEach(e => {
         bounds.extend({lat: parseFloat(e.lat), lng: parseFloat(e.lng)});
     });
-    if (!bounds.isEmpty()) {
-        map.fitBounds(bounds);
-    }
+    if (!bounds.isEmpty()) map.fitBounds(bounds);
 }
 
 function loadGoogleMaps() {
-    // Carrega a API do Google Maps com o callback correto
     const script = document.createElement('script');
     script.src = `https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&callback=initMap`;
     script.async = true;
     script.defer = true;
     document.head.appendChild(script);
-    
-    // Clusterização
     const clusterScript = document.createElement('script');
     clusterScript.src = "https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js";
     document.head.appendChild(clusterScript);
