@@ -101,7 +101,7 @@ def import_planilha():
         return "Empresa não suportada para importação!", 400
 
     # Mescla com lista já existente na sessão (empilha os novos)
-    lista_atual = session.get('lista', [])
+    lista_atual = session.get('lista', []) or []
     novo_idx_base = len(lista_atual)
     for idx, (endereco, cep) in enumerate(zip(enderecos, ceps)):
         res_google = valida_rua_google(endereco, cep)
