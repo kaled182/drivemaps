@@ -26,7 +26,7 @@ def preview():
     enderecos_brutos = request.form['enderecos']
     regex_cep = re.compile(r'(\d{4}-\d{3})')
     linhas = [linha.strip() for linha in enderecos_brutos.split('\n') if linha.strip()]
-    lista = []
+    lista_preview = []
     i = 0
     while i < len(linhas) - 2:
         linha = linhas[i]
@@ -41,7 +41,7 @@ def preview():
                 rua_google = res_google.get('route_encontrada', '')
                 rua_bate = normalizar(rua_digitada) in normalizar(rua_google) or normalizar(rua_google) in normalizar(rua_digitada)
                 cep_ok = cep == res_google.get('postal_code_encontrado', '')
-                lista.append({
+                lista_preview.append({
                     "order_number": numero_pacote,
                     "address": linha,
                     "cep": cep,
@@ -61,12 +61,18 @@ def preview():
         else:
             i += 1
 
-    # Acumula os endereços na sessão
+    # Se não digitou nada, mantém o que já tinha na sessão
     lista_atual = session.get('lista', [])
-    session['lista'] = lista_atual + lista
+    if lista_preview:
+        lista_final = lista_atual + lista_preview
+    else:
+        lista_final = lista_atual
+
+    # Atualiza a sessão para sempre acumular
+    session['lista'] = lista_final
 
     google_api_key = os.environ.get("GOOGLE_API_KEY", "")
-    return render_template("preview.html", lista=session['lista'], GOOGLE_API_KEY=google_api_key)
+    return render_template("preview.html", lista=lista_final, GOOGLE_API_KEY=google_api_key)
 
 # -------- ROTA DE IMPORTAÇÃO DE PLANILHA XLS/XLSX/CSV --------
 @main_routes.route('/import_planilha', methods=['POST'])
@@ -127,9 +133,14 @@ def import_planilha():
             "rua_bate": rua_bate,
             "freguesia": res_google.get('sublocality', ''),
         })
+
+    # Reindexa todos os order_number para garantir que não repete ID após múltiplas importações
+    for i, item in enumerate(lista_atual, 1):
+        item['order_number'] = i
     session['lista'] = lista_atual
+
     google_api_key = os.environ.get("GOOGLE_API_KEY", "")
-    return render_template("preview.html", lista=session['lista'], GOOGLE_API_KEY=google_api_key)
+    return render_template("preview.html", lista=lista_atual, GOOGLE_API_KEY=google_api_key)
 # -------- FIM DA ROTA DE IMPORTAÇÃO --------
 
 @main_routes.route('/api/validar-linha', methods=['POST'])
