@@ -3,6 +3,7 @@ import re
 import csv
 import io
 import os
+import pandas as pd
 from .utils import valida_rua_google
 
 main_routes = Blueprint('main', __name__)
@@ -62,6 +63,59 @@ def preview():
     session['lista'] = lista
     google_api_key = os.environ.get("GOOGLE_API_KEY", "")
     return render_template("preview.html", lista=lista, GOOGLE_API_KEY=google_api_key)
+
+# -------- ROTA DE IMPORTAÇÃO DE PLANILHA XLS/XLSX/CSV --------
+@main_routes.route('/import_planilha', methods=['POST'])
+def import_planilha():
+    file = request.files.get('planilha')
+    if not file:
+        return "Nenhum arquivo enviado", 400
+
+    # Detecta extensão e lê para pandas
+    try:
+        if file.filename.lower().endswith('.csv'):
+            df = pd.read_csv(file)
+        else:
+            df = pd.read_excel(file)
+    except Exception as e:
+        return f"Erro ao ler arquivo: {str(e)}", 400
+
+    # Identifica as colunas de endereço e CEP/postal
+    col_end = [c for c in df.columns if 'endereco' in c.lower() or 'address' in c.lower()]
+    col_cep = [c for c in df.columns if 'cep' in c.lower() or 'postal' in c.lower()]
+    if not col_end or not col_cep:
+        return "A planilha deve conter colunas de endereço e CEP!", 400
+
+    enderecos = df[col_end[0]].astype(str).tolist()
+    ceps = df[col_cep[0]].astype(str).tolist()
+
+    # Mescla com lista já existente na sessão
+    lista_atual = session.get('lista', [])
+    novo_idx_base = len(lista_atual)
+    for idx, (endereco, cep) in enumerate(zip(enderecos, ceps)):
+        res_google = valida_rua_google(endereco, cep)
+        rua_digitada = endereco.split(',')[0] if endereco else ''
+        rua_google = res_google.get('route_encontrada', '')
+        rua_bate = normalizar(rua_digitada) in normalizar(rua_google) or normalizar(rua_google) in normalizar(rua_digitada)
+        cep_ok = cep == res_google.get('postal_code_encontrado', '')
+        lista_atual.append({
+            "order_number": novo_idx_base + idx + 1,
+            "address": endereco,
+            "cep": cep,
+            "status_google": res_google.get('status'),
+            "postal_code_encontrado": res_google.get('postal_code_encontrado', ''),
+            "endereco_formatado": res_google.get('endereco_formatado', ''),
+            "latitude": res_google.get('coordenadas', {}).get('lat', ''),
+            "longitude": res_google.get('coordenadas', {}).get('lng', ''),
+            "rua_google": rua_google,
+            "cep_ok": cep_ok,
+            "rua_bate": rua_bate,
+            "freguesia": res_google.get('sublocality', ''),
+        })
+    session['lista'] = lista_atual
+    google_api_key = os.environ.get("GOOGLE_API_KEY", "")
+    return render_template("preview.html", lista=lista_atual, GOOGLE_API_KEY=google_api_key)
+# -------- FIM DA ROTA DE IMPORTAÇÃO --------
 
 @main_routes.route('/api/validar-linha', methods=['POST'])
 def validar_linha():
@@ -147,7 +201,6 @@ def download():
         download_name="enderecos_myway.csv"
     )
 
-# --- NOVA ROTA para reverse-geocode ---
 @main_routes.route('/api/reverse-geocode', methods=['POST'])
 def reverse_geocode():
     idx = int(request.form.get('idx'))
