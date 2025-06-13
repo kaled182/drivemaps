@@ -38,13 +38,12 @@ def registro_unico(lista, novo):
 
 @main_routes.route('/', methods=['GET'])
 def home():
-    # Limpa sessão ao acessar a home, inicia sempre do zero
+    # Limpa sessão ao entrar na home (garante que sempre começa limpo!)
     session['lista'] = []
     return render_template("home.html")
 
 @main_routes.route('/preview', methods=['POST'])
 def preview():
-    # Só acumula na sessão atual!
     enderecos_brutos = request.form.get('enderecos', '')
     regex_cep = re.compile(r'(\d{4}-\d{3})')
     linhas = [linha.strip() for linha in enderecos_brutos.split('\n') if linha.strip()]
@@ -110,6 +109,9 @@ def import_planilha():
     if not file or not empresa:
         return "Arquivo ou empresa não especificados", 400
 
+    # Sempre pega a lista atual da sessão para ACUMULAR
+    lista_atual = session.get('lista', [])
+
     if empresa == "delnext":
         file.seek(0)
         if file.filename.lower().endswith('.csv'):
@@ -122,7 +124,7 @@ def import_planilha():
             return "A planilha da Delnext deve conter as colunas 'Morada' e 'Código Postal'!", 400
         enderecos = df[col_end[0]].astype(str).tolist()
         ceps = df[col_cep[0]].astype(str).tolist()
-        order_numbers = [str(i+1) for i in range(len(enderecos))]
+        order_numbers = [str(i+1+len(lista_atual)) for i in range(len(enderecos))]
         tipo_import = "delnext"
 
     elif empresa == "paack":
@@ -154,12 +156,11 @@ def import_planilha():
                 return "A planilha deve conter colunas de endereço e CEP!", 400
             enderecos = df[col_end[0]].astype(str).tolist()
             ceps = df[col_cep[0]].astype(str).tolist()
-            order_numbers = [str(i+1) for i in range(len(enderecos))]
+            order_numbers = [str(i+1+len(lista_atual)) for i in range(len(enderecos))]
             tipo_import = "paack"
     else:
         return "Empresa não suportada para importação!", 400
 
-    lista_atual = session.get('lista', [])
     for endereco, cep, order_number in zip(enderecos, ceps, order_numbers):
         res_google = valida_rua_google(endereco, cep)
         rua_digitada = endereco.split(',')[0] if endereco else ''
@@ -198,6 +199,7 @@ def import_planilha():
         origens=origens
     )
 
+# -- RESTANTE DAS ROTAS INALTERADAS --
 @main_routes.route('/api/validar-linha', methods=['POST'])
 def validar_linha():
     endereco = request.form.get('endereco')
