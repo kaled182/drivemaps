@@ -25,6 +25,17 @@ CORES_IMPORTACAO = [
     "#FF4136",  # Vermelho
 ]
 
+def registro_unico(lista, novo):
+    """Impede duplicidade de endereço + cep + tipo de importação."""
+    for item in lista:
+        if (
+            normalizar(item["address"]) == normalizar(novo["address"]) and
+            normalizar(item["cep"]) == normalizar(novo["cep"]) and
+            item.get("importacao_tipo") == novo.get("importacao_tipo")
+        ):
+            return False
+    return True
+
 @main_routes.route('/', methods=['GET'])
 def home():
     return render_template("home.html")
@@ -69,27 +80,29 @@ def preview():
         else:
             i += 1
 
-    # Acumula na sessão sem sobrescrever (adiciona)
     lista_atual = session.get('lista', [])
-    if lista_preview:
-        lista_final = lista_atual + lista_preview
-    else:
-        lista_final = lista_atual
+    # Adiciona, evitando duplicidade manual
+    for novo in lista_preview:
+        if registro_unico(lista_atual, novo):
+            lista_atual.append(novo)
 
     # Gera lista de origens distintas para exibir filtros/badges
-    origens = list({item.get('importacao_tipo', 'manual') for item in lista_final})
+    origens = list({item.get('importacao_tipo', 'manual') for item in lista_atual})
 
-    session['lista'] = lista_final
+    # Reindexa order_number
+    for i, item in enumerate(lista_atual, 1):
+        item['order_number'] = i
+
+    session['lista'] = lista_atual
     google_api_key = os.environ.get("GOOGLE_API_KEY", "")
     return render_template(
         "preview.html",
-        lista=lista_final,
+        lista=lista_atual,
         GOOGLE_API_KEY=google_api_key,
         CORES_IMPORTACAO=CORES_IMPORTACAO,
         origens=origens
     )
 
-# -------- ROTA DE IMPORTAÇÃO DE PLANILHA XLS/XLSX/CSV --------
 @main_routes.route('/import_planilha', methods=['POST'])
 def import_planilha():
     file = request.files.get('planilha')
@@ -113,13 +126,27 @@ def import_planilha():
         tipo_import = "delnext"
 
     elif empresa == "paack":
-        # Leitura personalizada para padrão Paack em TXT ou CSV
         file.seek(0)
         if file.filename.lower().endswith('.csv') or file.filename.lower().endswith('.txt'):
             conteudo = file.read().decode("utf-8")
             linhas = conteudo.splitlines()
+            regex_cep = re.compile(r'(\d{4}-\d{3})')
+            enderecos, ceps, order_numbers = [], [], []
+            i = 0
+            while i < len(linhas) - 3:
+                endereco_linha = linhas[i].strip()
+                if linhas[i+2].strip() == endereco_linha:
+                    order_number = linhas[i+3].strip()
+                    cep_match = regex_cep.search(endereco_linha)
+                    cep = cep_match.group(1) if cep_match else ""
+                    enderecos.append(endereco_linha)
+                    ceps.append(cep)
+                    order_numbers.append(order_number)
+                    i += 4
+                else:
+                    i += 1
+            tipo_import = "paack"
         else:
-            # fallback para xls/xlsx, trata como delnext
             df = pd.read_excel(file, header=0)
             col_end = [c for c in df.columns if 'endereco' in c.lower() or 'address' in c.lower()]
             col_cep = [c for c in df.columns if 'cep' in c.lower() or 'postal' in c.lower()]
@@ -129,75 +156,17 @@ def import_planilha():
             ceps = df[col_cep[0]].astype(str).tolist()
             order_numbers = [str(i+1) for i in range(len(enderecos))]
             tipo_import = "paack"
-            # Pula lógica especial de TXT
-            lista_atual = session.get('lista', [])
-            novo_idx_base = len(lista_atual)
-            for idx, (endereco, cep, order_number) in enumerate(zip(enderecos, ceps, order_numbers)):
-                res_google = valida_rua_google(endereco, cep)
-                rua_digitada = endereco.split(',')[0] if endereco else ''
-                rua_google = res_google.get('route_encontrada', '')
-                rua_bate = normalizar(rua_digitada) in normalizar(rua_google) or normalizar(rua_google) in normalizar(rua_digitada)
-                cep_ok = cep == res_google.get('postal_code_encontrado', '')
-                lista_atual.append({
-                    "order_number": order_number,
-                    "address": endereco,
-                    "cep": cep,
-                    "status_google": res_google.get('status'),
-                    "postal_code_encontrado": res_google.get('postal_code_encontrado', ''),
-                    "endereco_formatado": res_google.get('endereco_formatado', ''),
-                    "latitude": res_google.get('coordenadas', {}).get('lat', ''),
-                    "longitude": res_google.get('coordenadas', {}).get('lng', ''),
-                    "rua_google": rua_google,
-                    "cep_ok": cep_ok,
-                    "rua_bate": rua_bate,
-                    "freguesia": res_google.get('sublocality', ''),
-                    "importacao_tipo": tipo_import
-                })
-            # Reindexa order_number
-            for i, item in enumerate(lista_atual, 1):
-                item['order_number'] = i
-            origens = list({item.get('importacao_tipo', 'manual') for item in lista_atual})
-            session['lista'] = lista_atual
-            google_api_key = os.environ.get("GOOGLE_API_KEY", "")
-            return render_template(
-                "preview.html",
-                lista=lista_atual,
-                GOOGLE_API_KEY=google_api_key,
-                CORES_IMPORTACAO=CORES_IMPORTACAO,
-                origens=origens
-            )
-
-        # Padrão Paack TXT: Endereço, (id?), endereço repetido, número_pacote...
-        regex_cep = re.compile(r'(\d{4}-\d{3})')
-        enderecos = []
-        ceps = []
-        order_numbers = []
-        i = 0
-        while i < len(linhas) - 3:
-            endereco_linha = linhas[i].strip()
-            if linhas[i+2].strip() == endereco_linha:
-                order_number = linhas[i+3].strip()
-                cep_match = regex_cep.search(endereco_linha)
-                cep = cep_match.group(1) if cep_match else ""
-                enderecos.append(endereco_linha)
-                ceps.append(cep)
-                order_numbers.append(order_number)
-                i += 4
-            else:
-                i += 1
-        tipo_import = "paack"
     else:
         return "Empresa não suportada para importação!", 400
 
     lista_atual = session.get('lista', [])
-    novo_idx_base = len(lista_atual)
-    for idx, (endereco, cep, order_number) in enumerate(zip(enderecos, ceps, order_numbers)):
+    for endereco, cep, order_number in zip(enderecos, ceps, order_numbers):
         res_google = valida_rua_google(endereco, cep)
         rua_digitada = endereco.split(',')[0] if endereco else ''
         rua_google = res_google.get('route_encontrada', '')
         rua_bate = normalizar(rua_digitada) in normalizar(rua_google) or normalizar(rua_google) in normalizar(rua_digitada)
         cep_ok = cep == res_google.get('postal_code_encontrado', '')
-        lista_atual.append({
+        novo = {
             "order_number": order_number,
             "address": endereco,
             "cep": cep,
@@ -211,9 +180,11 @@ def import_planilha():
             "rua_bate": rua_bate,
             "freguesia": res_google.get('sublocality', ''),
             "importacao_tipo": tipo_import
-        })
+        }
+        if registro_unico(lista_atual, novo):
+            lista_atual.append(novo)
 
-    # Reindexa order_number sequencialmente
+    # Reindexa order_number sequencial
     for i, item in enumerate(lista_atual, 1):
         item['order_number'] = i
 
@@ -227,7 +198,8 @@ def import_planilha():
         CORES_IMPORTACAO=CORES_IMPORTACAO,
         origens=origens
     )
-# -------- FIM DA ROTA DE IMPORTAÇÃO --------
+
+# -- DEMAIS ROTAS INALTERADAS ABAIXO --
 
 @main_routes.route('/api/validar-linha', methods=['POST'])
 def validar_linha():
