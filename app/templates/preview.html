@@ -145,7 +145,6 @@ let enderecosData = [
     {% endfor %}
 ];
 
-// Sempre limpe marcadores antes de redesenhar
 function limparTodosMarcadores() {
     if (markers.length) {
         markers.forEach(m => m && m.setMap(null));
@@ -170,9 +169,38 @@ function criarMarker(idx, data) {
                  document.getElementById('filtro-origem').value === data.importacao_tipo
     });
 
+    // Adiciona evento para arrastar marcador
+    marker.addListener('dragend', function() {
+        const newLat = marker.getPosition().lat();
+        const newLng = marker.getPosition().lng();
+        atualizarCoordenadasLinha(idx, newLat, newLng);
+    });
+
     markers[idx] = marker;
     if (markerCluster) markerCluster.addMarker(marker);
     return marker;
+}
+
+function atualizarCoordenadasLinha(idx, lat, lng) {
+    fetch("{{ url_for('main.reverse_geocode') }}", {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `idx=${idx}&lat=${lat}&lng=${lng}`
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.sucesso) {
+            const linha = document.getElementById(`linha-${idx}`);
+            if (linha) {
+                linha.querySelector(`input[name="endereco_${idx}"]`).value = data.address;
+                if (data.cep) {
+                    linha.querySelector(`input[name="cep_${idx}"]`).value = data.cep;
+                }
+            }
+        }
+    });
 }
 
 function filtrarPorOrigem() {
@@ -200,28 +228,174 @@ function atualizarMarcadoresVisiveis() {
 }
 
 function validarLinha(idx) {
-    // Exemplo: abrir modal, validar backend, atualizar linha...
-    alert('Função validarLinha a implementar!');
+    const endereco = document.querySelector(`input[name="endereco_${idx}"]`).value;
+    const cep = document.querySelector(`input[name="cep_${idx}"]`).value;
+    const numero_pacote = document.querySelector(`input[name="numero_pacote_${idx}"]`).value;
+
+    fetch("{{ url_for('main.validar_linha') }}", {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `endereco=${encodeURIComponent(endereco)}&cep=${encodeURIComponent(cep)}&numero_pacote=${encodeURIComponent(numero_pacote)}`
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data) {
+            // Atualiza a linha com os novos dados
+            const linha = document.getElementById(`linha-${idx}`);
+            if (linha) {
+                linha.querySelector(`input[name="endereco_${idx}"]`).value = data.address;
+                linha.querySelector(`input[name="cep_${idx}"]`).value = data.cep;
+                linha.querySelector('.cep-encontrado').textContent = data.postal_code_encontrado || '-';
+                
+                // Atualiza status
+                const statusCell = linha.querySelector('.status-google');
+                if (statusCell) {
+                    if (data.status_google === 'OK') {
+                        statusCell.innerHTML = '<span class="text-success">OK</span>' + 
+                            (data.rua_bate ? '' : '<span title="Rua diferente do Google!">⚠️</span>');
+                    } else {
+                        statusCell.innerHTML = `<span class="text-danger">${data.status_google || 'NÃO ENCONTRADO'}</span>`;
+                    }
+                }
+                
+                // Atualiza classe da linha
+                linha.className = data.cep_ok ? 'table-success' : 'table-danger';
+                linha.dataset.origem = data.importacao_tipo || 'manual';
+                
+                // Atualiza dados no array enderecosData
+                if (enderecosData[idx]) {
+                    enderecosData[idx] = {
+                        ...enderecosData[idx],
+                        address: data.address,
+                        cep: data.cep,
+                        status_google: data.status_google,
+                        postal_code_encontrado: data.postal_code_encontrado,
+                        latitude: data.latitude,
+                        longitude: data.longitude,
+                        cep_ok: data.cep_ok,
+                        rua_bate: data.rua_bate,
+                        importacao_tipo: data.importacao_tipo || 'manual'
+                    };
+                }
+                
+                // Recria o marcador no mapa
+                if (markers[idx]) {
+                    markers[idx].setMap(null);
+                }
+                criarMarker(idx, enderecosData[idx]);
+            }
+        }
+    });
 }
 
 function validarTudo() {
-    alert('Função validarTudo a implementar!');
+    const total = enderecosData.length;
+    if (total === 0) return;
+
+    const progresso = document.getElementById('progresso-validacao');
+    const barra = document.getElementById('progresso-barra');
+    progresso.style.display = '';
+    barra.style.width = '0%';
+    barra.textContent = '0%';
+
+    let concluidos = 0;
+    
+    function processarProximo() {
+        if (concluidos >= total) {
+            barra.style.width = '100%';
+            barra.textContent = '100%';
+            setTimeout(() => progresso.style.display = 'none', 1000);
+            return;
+        }
+        
+        validarLinha(concluidos);
+        concluidos++;
+        const percentual = Math.round((concluidos / total) * 100);
+        barra.style.width = `${percentual}%`;
+        barra.textContent = `${percentual}%`;
+        
+        // Processa próximo com pequeno delay para não sobrecarregar
+        setTimeout(processarProximo, 300);
+    }
+    
+    processarProximo();
 }
 
 function adicionarEnderecoManual() {
-    alert('Função adicionarEnderecoManual a implementar!');
+    const totalAtual = enderecosData.length;
+    const novaLinha = `
+        <tr id="linha-${totalAtual}" class="table-warning" data-origem="manual">
+            <td style="font-weight: bold; text-align:center;">${totalAtual + 1}</td>
+            <td>
+                <input type="hidden" name="numero_pacote_${totalAtual}" value="${totalAtual + 1}">
+                <input type="hidden" name="importacao_id_${totalAtual}" value="">
+                <input type="hidden" name="importacao_tipo_${totalAtual}" value="manual">
+                <input type="hidden" name="cor_${totalAtual}" value="#0074D9">
+                <input type="text" class="form-control" name="endereco_${totalAtual}" value="" placeholder="Endereço completo">
+            </td>
+            <td>
+                <input type="text" class="form-control" name="cep_${totalAtual}" value="" placeholder="CEP">
+            </td>
+            <td class="cep-encontrado">-</td>
+            <td class="status-google text-center mobile-hidden">
+                <span class="text-secondary">NÃO VALIDADO</span>
+            </td>
+            <td class="mobile-hidden">
+                <span class="filter-badge" style="background-color:#0074D9; color: white;">
+                    Manual
+                </span>
+            </td>
+            <td class="text-center">
+                <button type="button" onclick="validarLinha(${totalAtual})" class="btn btn-warning btn-sm w-100 mb-1">Validar</button>
+            </td>
+        </tr>
+    `;
+    
+    document.getElementById('corpo-tabela').insertAdjacentHTML('beforeend', novaLinha);
+    document.getElementById('total-linhas').value = totalAtual + 1;
+    
+    // Adiciona ao array enderecosData
+    enderecosData.push({
+        idx: totalAtual,
+        latitude: null,
+        longitude: null,
+        numero_pacote: String(totalAtual + 1),
+        address: '',
+        status: 'unvalidated',
+        cep_ok: false,
+        importacao_tipo: 'manual',
+        cor: '#0074D9'
+    });
+}
+
+function recarregarMapa() {
+    if (typeof google !== 'undefined' && google.maps) {
+        initMap();
+    } else {
+        // Se a API do Google Maps não estiver carregada, força o recarregamento
+        const script = document.createElement('script');
+        script.src = `https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&callback=initMap`;
+        document.body.appendChild(script);
+    }
 }
 
 function initMap() {
     limparTodosMarcadores();
-    const coordenadasValidas = enderecosData.filter(e =>
-        e.latitude !== null && e.longitude !== null && !isNaN(e.latitude) && !isNaN(e.longitude)
+    
+    // Filtra apenas coordenadas válidas
+    const coordenadasValidas = enderecosData.filter(e => 
+        e.latitude && e.longitude && !isNaN(e.latitude) && !isNaN(e.longitude)
     );
+    
     if (coordenadasValidas.length === 0) {
         document.getElementById('map').innerHTML =
             '<div class="alert alert-warning">Nenhuma coordenada válida para exibir</div>';
         return;
     }
+
+    // Cria o mapa centralizado na primeira coordenada válida
     map = new google.maps.Map(document.getElementById('map'), {
         zoom: 12,
         center: {
@@ -229,16 +403,38 @@ function initMap() {
             lng: parseFloat(coordenadasValidas[0].longitude)
         }
     });
+
+    // Cria cluster de marcadores
     markerCluster = new markerClusterer.MarkerClusterer({ map, markers: [] });
+
+    // Adiciona todos os marcadores válidos
     coordenadasValidas.forEach(e => {
         criarMarker(e.idx, e);
     });
+
+    // Ajusta o zoom para mostrar todos os marcadores
     const bounds = new google.maps.LatLngBounds();
     coordenadasValidas.forEach(e => {
         bounds.extend({lat: parseFloat(e.latitude), lng: parseFloat(e.longitude)});
     });
-    if (!bounds.isEmpty()) map.fitBounds(bounds);
+    
+    if (!bounds.isEmpty()) {
+        map.fitBounds(bounds);
+        
+        // Se o zoom for muito amplo (mostrando o mundo inteiro), ajusta para um zoom mais próximo
+        if (map.getZoom() < 5) {
+            map.setZoom(12);
+        }
+    }
 }
+
+// Recarrega o mapa quando a página é carregada
+document.addEventListener('DOMContentLoaded', function() {
+    // Adiciona listener para o formulário de upload para recarregar o mapa após sucesso
+    document.getElementById('form-upload').addEventListener('submit', function() {
+        setTimeout(recarregarMapa, 1000);
+    });
+});
 </script>
 <script async defer src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&callback=initMap"></script>
 {% endblock %}
