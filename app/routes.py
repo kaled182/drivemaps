@@ -38,12 +38,13 @@ def registro_unico(lista, novo):
 
 @main_routes.route('/', methods=['GET'])
 def home():
-    # Limpa sessão ao entrar na home (garante que sempre começa limpo!)
+    # Limpa sessão ao acessar a home, inicia sempre do zero
     session['lista'] = []
     return render_template("home.html")
 
 @main_routes.route('/preview', methods=['POST'])
 def preview():
+    # Só acumula na sessão atual!
     enderecos_brutos = request.form.get('enderecos', '')
     regex_cep = re.compile(r'(\d{4}-\d{3})')
     linhas = [linha.strip() for linha in enderecos_brutos.split('\n') if linha.strip()]
@@ -159,7 +160,6 @@ def import_planilha():
         return "Empresa não suportada para importação!", 400
 
     lista_atual = session.get('lista', [])
-    # *** GARANTE QUE ACUMULA ***
     for endereco, cep, order_number in zip(enderecos, ceps, order_numbers):
         res_google = valida_rua_google(endereco, cep)
         rua_digitada = endereco.split(',')[0] if endereco else ''
@@ -198,5 +198,114 @@ def import_planilha():
         origens=origens
     )
 
-# -- RESTANTE DAS ROTAS IGUAIS --
-# (não há alteração após isso)
+@main_routes.route('/api/validar-linha', methods=['POST'])
+def validar_linha():
+    endereco = request.form.get('endereco')
+    cep = request.form.get('cep')
+    numero_pacote = request.form.get('numero_pacote')
+    res_google = valida_rua_google(endereco, cep)
+    rua_digitada = endereco.split(',')[0] if endereco else ''
+    rua_google = res_google.get('route_encontrada', '')
+    rua_bate = normalizar(rua_digitada) in normalizar(rua_google) or normalizar(rua_google) in normalizar(rua_digitada)
+    cep_ok = cep == res_google.get('postal_code_encontrado', '')
+    return jsonify({
+        'order_number': numero_pacote,
+        'address': endereco,
+        'cep': cep,
+        'status_google': res_google.get('status'),
+        'postal_code_encontrado': res_google.get('postal_code_encontrado', ''),
+        'endereco_formatado': res_google.get('endereco_formatado', ''),
+        'latitude': res_google.get('coordenadas', {}).get('lat', ''),
+        'longitude': res_google.get('coordenadas', {}).get('lng', ''),
+        'rua_google': rua_google,
+        'cep_ok': cep_ok,
+        'rua_bate': rua_bate,
+        'freguesia_google': res_google.get('sublocality', ''),
+    })
+
+@main_routes.route('/generate', methods=['POST'])
+def generate():
+    global csv_content
+    total = int(request.form['total'])
+    lista = []
+    for i in range(total):
+        numero_pacote = request.form.get(f'numero_pacote_{i}', '')
+        endereco = request.form.get(f'endereco_{i}', '')
+        cep = request.form.get(f'cep_{i}', '')
+        res_google = valida_rua_google(endereco, cep)
+        postal_code_encontrado = res_google.get('postal_code_encontrado', '')
+        rua_digitada = endereco.split(',')[0] if endereco else ''
+        rua_google = res_google.get('route_encontrada', '')
+        rua_bate = normalizar(rua_digitada) in normalizar(rua_google) or normalizar(rua_google) in normalizar(rua_digitada)
+        cep_ok = cep == postal_code_encontrado
+        lista.append({
+            "order_number": numero_pacote,
+            "address": endereco,
+            "cep": cep,
+            "status_google": res_google.get('status'),
+            "postal_code_encontrado": postal_code_encontrado,
+            "latitude": res_google.get('coordenadas', {}).get('lat', ''),
+            "longitude": res_google.get('coordenadas', {}).get('lng', ''),
+            "rua_google": rua_google,
+            "cep_ok": cep_ok,
+            "rua_bate": rua_bate,
+            "freguesia": res_google.get('sublocality', ''),
+        })
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "order number", "name", "address", "latitude", "longitude", "duration", "start time",
+        "end time", "phone", "contact", "notes", "color", "Group", "rua_google", "freguesia_google", "status"
+    ])
+    for row in lista:
+        aviso = ""
+        if not row["cep_ok"]:
+            aviso = "CEP divergente"
+        elif not row["rua_bate"]:
+            aviso = "Rua divergente"
+        else:
+            aviso = "Validado"
+        writer.writerow([
+            row["order_number"], "", row["address"], row["latitude"], row["longitude"], "", "", "", "", "",
+            row["postal_code_encontrado"] or row["cep"], "", "", row["rua_google"], row.get("freguesia", ""), aviso
+        ])
+    csv_content = output.getvalue()
+    return redirect(url_for('main.download'))
+
+@main_routes.route('/download')
+def download():
+    global csv_content
+    return send_file(
+        io.BytesIO(csv_content.encode("utf-8")),
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name="enderecos_myway.csv"
+    )
+
+@main_routes.route('/api/reverse-geocode', methods=['POST'])
+def reverse_geocode():
+    idx = int(request.form.get('idx'))
+    lat = request.form.get('lat')
+    lng = request.form.get('lng')
+    if not lat or not lng:
+        return jsonify({'sucesso': False}), 400
+    import requests
+    api_key = os.environ.get('GOOGLE_API_KEY', '')
+    url = "https://maps.googleapis.com/maps/api/geocode/json"
+    params = {'latlng': f"{lat},{lng}", 'key': api_key, 'region': 'pt'}
+    r = requests.get(url, params=params, timeout=7)
+    data = r.json()
+    if not data.get('results'):
+        return jsonify({'sucesso': False})
+    res = data['results'][0]
+    address = res['formatted_address']
+    postal_code = ''
+    for c in res['address_components']:
+        if 'postal_code' in c['types']:
+            postal_code = c['long_name']
+            break
+    return jsonify({
+        'sucesso': True,
+        'address': address,
+        'cep': postal_code
+    })
