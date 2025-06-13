@@ -68,10 +68,11 @@ def preview():
 @main_routes.route('/import_planilha', methods=['POST'])
 def import_planilha():
     file = request.files.get('planilha')
-    if not file:
-        return "Nenhum arquivo enviado", 400
+    empresa = request.form.get('empresa', '').lower()
+    if not file or not empresa:
+        return "Arquivo ou empresa não especificados", 400
 
-    # Detecta extensão e lê para pandas
+    # Lê o arquivo na memória
     try:
         if file.filename.lower().endswith('.csv'):
             df = pd.read_csv(file)
@@ -80,16 +81,29 @@ def import_planilha():
     except Exception as e:
         return f"Erro ao ler arquivo: {str(e)}", 400
 
-    # Identifica as colunas de endereço e CEP/postal
-    col_end = [c for c in df.columns if 'endereco' in c.lower() or 'address' in c.lower()]
-    col_cep = [c for c in df.columns if 'cep' in c.lower() or 'postal' in c.lower()]
-    if not col_end or not col_cep:
-        return "A planilha deve conter colunas de endereço e CEP!", 400
+    # --- SELECIONA O PARSER POR EMPRESA ---
+    enderecos, ceps = [], []
+    if empresa == "delnext":
+        # Delnext: Tenta identificar colunas por nome ou formato
+        # Exemplo de colunas típicas: 'Morada', 'Código Postal'
+        col_end = [c for c in df.columns if 'morada' in c.lower() or 'endereco' in c.lower()]
+        col_cep = [c for c in df.columns if 'codigo postal' in c.lower() or 'cod postal' in c.lower() or 'cep' in c.lower() or 'postal' in c.lower()]
+        if not col_end or not col_cep:
+            return "A planilha da Delnext deve conter as colunas 'Morada' e 'Código Postal'!", 400
+        enderecos = df[col_end[0]].astype(str).tolist()
+        ceps = df[col_cep[0]].astype(str).tolist()
+    elif empresa == "paack":
+        # Paack: lógica padrão, tenta as mesmas colunas que já usava
+        col_end = [c for c in df.columns if 'endereco' in c.lower() or 'address' in c.lower()]
+        col_cep = [c for c in df.columns if 'cep' in c.lower() or 'postal' in c.lower()]
+        if not col_end or not col_cep:
+            return "A planilha deve conter colunas de endereço e CEP!", 400
+        enderecos = df[col_end[0]].astype(str).tolist()
+        ceps = df[col_cep[0]].astype(str).tolist()
+    else:
+        return "Empresa não suportada para importação!", 400
 
-    enderecos = df[col_end[0]].astype(str).tolist()
-    ceps = df[col_cep[0]].astype(str).tolist()
-
-    # Mescla com lista já existente na sessão
+    # Mescla com lista já existente na sessão (empilha os novos)
     lista_atual = session.get('lista', [])
     novo_idx_base = len(lista_atual)
     for idx, (endereco, cep) in enumerate(zip(enderecos, ceps)):
