@@ -26,18 +26,20 @@ CORES_IMPORTACAO = [
 ]
 
 def registro_unico(lista, novo):
-    """Impede duplicidade de endereço + cep + tipo de importação."""
+    """Evita duplicidade de endereço+cep+origem."""
     for item in lista:
         if (
-            normalizar(item["address"]) == normalizar(novo["address"]) and
-            normalizar(item["cep"]) == normalizar(novo["cep"]) and
-            item.get("importacao_tipo") == novo.get("importacao_tipo")
+            normalizar(item["address"]) == normalizar(novo["address"])
+            and normalizar(item["cep"]) == normalizar(novo["cep"])
+            and item.get("importacao_tipo") == novo.get("importacao_tipo")
         ):
             return False
     return True
 
 @main_routes.route('/', methods=['GET'])
 def home():
+    # Limpa a sessão ao acessar home (sempre recomeça do zero)
+    session['lista'] = []
     return render_template("home.html")
 
 @main_routes.route('/preview', methods=['POST'])
@@ -81,18 +83,15 @@ def preview():
             i += 1
 
     lista_atual = session.get('lista', [])
-    # Adiciona, evitando duplicidade manual
     for novo in lista_preview:
         if registro_unico(lista_atual, novo):
             lista_atual.append(novo)
-
-    # Gera lista de origens distintas para exibir filtros/badges
-    origens = list({item.get('importacao_tipo', 'manual') for item in lista_atual})
 
     # Reindexa order_number
     for i, item in enumerate(lista_atual, 1):
         item['order_number'] = i
 
+    origens = list({item.get('importacao_tipo', 'manual') for item in lista_atual})
     session['lista'] = lista_atual
     google_api_key = os.environ.get("GOOGLE_API_KEY", "")
     return render_template(
@@ -110,6 +109,7 @@ def import_planilha():
     if not file or not empresa:
         return "Arquivo ou empresa não especificados", 400
 
+    # --- Delnext ---
     if empresa == "delnext":
         file.seek(0)
         if file.filename.lower().endswith('.csv'):
@@ -125,6 +125,7 @@ def import_planilha():
         order_numbers = [str(i+1) for i in range(len(enderecos))]
         tipo_import = "delnext"
 
+    # --- Paack ---
     elif empresa == "paack":
         file.seek(0)
         if file.filename.lower().endswith('.csv') or file.filename.lower().endswith('.txt'):
@@ -198,8 +199,6 @@ def import_planilha():
         CORES_IMPORTACAO=CORES_IMPORTACAO,
         origens=origens
     )
-
-# -- DEMAIS ROTAS INALTERADAS ABAIXO --
 
 @main_routes.route('/api/validar-linha', methods=['POST'])
 def validar_linha():
