@@ -109,33 +109,96 @@ def import_planilha():
             return "A planilha da Delnext deve conter as colunas 'Morada' e 'Código Postal'!", 400
         enderecos = df[col_end[0]].astype(str).tolist()
         ceps = df[col_cep[0]].astype(str).tolist()
+        order_numbers = [str(i+1) for i in range(len(enderecos))]
         tipo_import = "delnext"
+
     elif empresa == "paack":
+        # Leitura personalizada para padrão Paack em TXT ou CSV
         file.seek(0)
-        if file.filename.lower().endswith('.csv'):
-            df = pd.read_csv(file, header=0)
+        if file.filename.lower().endswith('.csv') or file.filename.lower().endswith('.txt'):
+            conteudo = file.read().decode("utf-8")
+            linhas = conteudo.splitlines()
         else:
+            # fallback para xls/xlsx, trata como delnext
             df = pd.read_excel(file, header=0)
-        col_end = [c for c in df.columns if 'endereco' in c.lower() or 'address' in c.lower()]
-        col_cep = [c for c in df.columns if 'cep' in c.lower() or 'postal' in c.lower()]
-        if not col_end or not col_cep:
-            return "A planilha deve conter colunas de endereço e CEP!", 400
-        enderecos = df[col_end[0]].astype(str).tolist()
-        ceps = df[col_cep[0]].astype(str).tolist()
+            col_end = [c for c in df.columns if 'endereco' in c.lower() or 'address' in c.lower()]
+            col_cep = [c for c in df.columns if 'cep' in c.lower() or 'postal' in c.lower()]
+            if not col_end or not col_cep:
+                return "A planilha deve conter colunas de endereço e CEP!", 400
+            enderecos = df[col_end[0]].astype(str).tolist()
+            ceps = df[col_cep[0]].astype(str).tolist()
+            order_numbers = [str(i+1) for i in range(len(enderecos))]
+            tipo_import = "paack"
+            # Pula lógica especial de TXT
+            lista_atual = session.get('lista', [])
+            novo_idx_base = len(lista_atual)
+            for idx, (endereco, cep, order_number) in enumerate(zip(enderecos, ceps, order_numbers)):
+                res_google = valida_rua_google(endereco, cep)
+                rua_digitada = endereco.split(',')[0] if endereco else ''
+                rua_google = res_google.get('route_encontrada', '')
+                rua_bate = normalizar(rua_digitada) in normalizar(rua_google) or normalizar(rua_google) in normalizar(rua_digitada)
+                cep_ok = cep == res_google.get('postal_code_encontrado', '')
+                lista_atual.append({
+                    "order_number": order_number,
+                    "address": endereco,
+                    "cep": cep,
+                    "status_google": res_google.get('status'),
+                    "postal_code_encontrado": res_google.get('postal_code_encontrado', ''),
+                    "endereco_formatado": res_google.get('endereco_formatado', ''),
+                    "latitude": res_google.get('coordenadas', {}).get('lat', ''),
+                    "longitude": res_google.get('coordenadas', {}).get('lng', ''),
+                    "rua_google": rua_google,
+                    "cep_ok": cep_ok,
+                    "rua_bate": rua_bate,
+                    "freguesia": res_google.get('sublocality', ''),
+                    "importacao_tipo": tipo_import
+                })
+            # Reindexa order_number
+            for i, item in enumerate(lista_atual, 1):
+                item['order_number'] = i
+            origens = list({item.get('importacao_tipo', 'manual') for item in lista_atual})
+            session['lista'] = lista_atual
+            google_api_key = os.environ.get("GOOGLE_API_KEY", "")
+            return render_template(
+                "preview.html",
+                lista=lista_atual,
+                GOOGLE_API_KEY=google_api_key,
+                CORES_IMPORTACAO=CORES_IMPORTACAO,
+                origens=origens
+            )
+
+        # Padrão Paack TXT: Endereço, (id?), endereço repetido, número_pacote...
+        regex_cep = re.compile(r'(\d{4}-\d{3})')
+        enderecos = []
+        ceps = []
+        order_numbers = []
+        i = 0
+        while i < len(linhas) - 3:
+            endereco_linha = linhas[i].strip()
+            if linhas[i+2].strip() == endereco_linha:
+                order_number = linhas[i+3].strip()
+                cep_match = regex_cep.search(endereco_linha)
+                cep = cep_match.group(1) if cep_match else ""
+                enderecos.append(endereco_linha)
+                ceps.append(cep)
+                order_numbers.append(order_number)
+                i += 4
+            else:
+                i += 1
         tipo_import = "paack"
     else:
         return "Empresa não suportada para importação!", 400
 
-    # NÃO ACUMULAR lista, zere sempre ao importar planilha!
-    lista_nova = []
-    for idx, (endereco, cep) in enumerate(zip(enderecos, ceps)):
+    lista_atual = session.get('lista', [])
+    novo_idx_base = len(lista_atual)
+    for idx, (endereco, cep, order_number) in enumerate(zip(enderecos, ceps, order_numbers)):
         res_google = valida_rua_google(endereco, cep)
         rua_digitada = endereco.split(',')[0] if endereco else ''
         rua_google = res_google.get('route_encontrada', '')
         rua_bate = normalizar(rua_digitada) in normalizar(rua_google) or normalizar(rua_google) in normalizar(rua_digitada)
         cep_ok = cep == res_google.get('postal_code_encontrado', '')
-        lista_nova.append({
-            "order_number": idx + 1,
+        lista_atual.append({
+            "order_number": order_number,
             "address": endereco,
             "cep": cep,
             "status_google": res_google.get('status'),
@@ -150,12 +213,16 @@ def import_planilha():
             "importacao_tipo": tipo_import
         })
 
-    origens = list({item.get('importacao_tipo', 'manual') for item in lista_nova})
-    session['lista'] = lista_nova
+    # Reindexa order_number sequencialmente
+    for i, item in enumerate(lista_atual, 1):
+        item['order_number'] = i
+
+    origens = list({item.get('importacao_tipo', 'manual') for item in lista_atual})
+    session['lista'] = lista_atual
     google_api_key = os.environ.get("GOOGLE_API_KEY", "")
     return render_template(
         "preview.html",
-        lista=lista_nova,
+        lista=lista_atual,
         GOOGLE_API_KEY=google_api_key,
         CORES_IMPORTACAO=CORES_IMPORTACAO,
         origens=origens
