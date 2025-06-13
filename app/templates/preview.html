@@ -10,31 +10,15 @@
     box-shadow: 0 4px 18px #0001; 
     border-radius: 0 0 14px 14px; 
   }
-  
   @media (max-width: 600px) { 
-    #map-top-sticky { 
-      height: 240px !important; 
-      max-height: 45vh; 
-    } 
-    .table-responsive { 
-      overflow-x: auto; 
-    }
-    .mobile-hidden { 
-      display: none; 
-    }
+    #map-top-sticky { height: 240px !important; max-height: 45vh; }
+    .table-responsive { overflow-x: auto; }
+    .mobile-hidden { display: none; }
   }
-  
   @media (min-width: 601px) { 
-    #map-top-sticky { 
-      height: 420px !important; 
-      max-height: 55vh; 
-    } 
+    #map-top-sticky { height: 420px !important; max-height: 55vh; }
   }
-  
-  .table-responsive { 
-    margin-top: 6px; 
-  }
-  
+  .table-responsive { margin-top: 6px; }
   .filter-badge {
     display: inline-block;
     padding: 3px 8px;
@@ -42,10 +26,7 @@
     font-size: 12px;
     margin-right: 5px;
   }
-  
-  .progress-sm {
-    height: 24px;
-  }
+  .progress-sm { height: 24px; }
 </style>
 
 <div id="map-top-sticky">
@@ -55,21 +36,14 @@
 <!-- Filtros e Controles -->
 <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
     <div class="d-flex flex-row gap-2">
-        <!-- Filtro por origem -->
         <select id="filtro-origem" class="form-select form-select-sm" onchange="filtrarPorOrigem()">
             <option value="">Todas as origens</option>
             {% for origem in origens %}
                 <option value="{{ origem }}">{{ origem|capitalize }}</option>
             {% endfor %}
         </select>
-        
-        <!-- Botão Validar Tudo -->
-        <button type="button" class="btn btn-warning btn-sm" onclick="validarTudo()">
-            Validar Tudo
-        </button>
+        <button type="button" class="btn btn-warning btn-sm" onclick="validarTudo()">Validar Tudo</button>
     </div>
-    
-    <!-- Upload de arquivo -->
     <form id="form-upload" enctype="multipart/form-data" method="post" action="{{ url_for('main.import_planilha') }}" class="d-flex flex-row gap-2">
         <select name="empresa" class="form-select form-select-sm" style="width:auto;" required>
             <option value="">Empresa</option>
@@ -81,12 +55,10 @@
     </form>
 </div>
 
-<!-- Progresso da Validação -->
 <div id="progresso-validacao" class="progress progress-sm mb-3" style="display: none;">
     <div id="progresso-barra" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%">0%</div>
 </div>
 
-<!-- Tabela de Endereços -->
 <div class="table-responsive">
 <form id="form-csv" action="{{ url_for('main.generate') }}" method="post" autocomplete="off">
     <table class="table table-bordered align-middle" id="tabela-enderecos">
@@ -138,17 +110,10 @@
             {% endfor %}
         </tbody>
     </table>
-
-    <!-- Botões de Ação -->
     <div class="d-flex justify-content-between my-2">
-        <button type="button" class="btn btn-primary" onclick="adicionarEnderecoManual()">
-            + Adicionar endereço
-        </button>
-        <button id="btn-csv" type="submit" name="finalizar" value="1" class="btn btn-success">
-            Gerar CSV para MyWay
-        </button>
+        <button type="button" class="btn btn-primary" onclick="adicionarEnderecoManual()">+ Adicionar endereço</button>
+        <button id="btn-csv" type="submit" name="finalizar" value="1" class="btn btn-success">Gerar CSV para MyWay</button>
     </div>
-
     <input type="hidden" name="total" id="total-linhas" value="{{lista|length}}">
 </form>
 </div>
@@ -156,7 +121,7 @@
 
 {% block scripts %}
 <script>
-// -- Função SVG PIN (metade do tamanho visual anterior) --
+/* Seu JS aqui... */
 function makeSvgPin(numero, corHex) {
     let n = String(numero).substring(0, 3);
     let svg = `<svg width="44" height="54" viewBox="0 0 44 54" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -186,8 +151,57 @@ let enderecosData = [
     {% endfor %}
 ];
 
-// ... (O restante do JS permanece igual ao seu arquivo atual. Mantenha os scripts de validação, adicionar endereço manual, mapa etc.)
+function criarMarker(idx, data) {
+    if (markers[idx]) {
+        markers[idx].setMap(null);
+        if (markerCluster) {
+            markerCluster.removeMarker(markers[idx]);
+        }
+    }
+    const position = {lat: parseFloat(data.lat), lng: parseFloat(data.lng)};
+    const cor = data.cep_ok ? "#44B100" : "#D82B2B";
+    const pinUrl = makeSvgPin(data.numero_pacote || (idx+1), cor);
+    let marker = new google.maps.Marker({
+        position: position,
+        map: map,
+        title: `${data.numero_pacote || (idx+1)} - ${data.address}`,
+        icon: { url: pinUrl, scaledSize: new google.maps.Size(22, 27) },
+        draggable: true
+    });
+    markers[idx] = marker;
+    if (markerCluster) markerCluster.addMarker(marker);
+    return marker;
+}
 
-document.addEventListener('DOMContentLoaded', loadGoogleMaps);
+// ... (mantenha aqui o resto do seu JS já existente)
+
+function initMap() {
+    const coordenadasValidas = enderecosData.filter(e => e.lat && e.lng);
+    if (coordenadasValidas.length === 0) {
+        document.getElementById('map').innerHTML =
+            '<div class="alert alert-warning">Nenhuma coordenada válida para exibir</div>';
+        return;
+    }
+    map = new google.maps.Map(document.getElementById('map'), {
+        zoom: 12,
+        center: {
+            lat: parseFloat(coordenadasValidas[0].lat),
+            lng: parseFloat(coordenadasValidas[0].lng)
+        }
+    });
+    markerCluster = new markerClusterer.MarkerClusterer({ map, markers: [] });
+    const bounds = new google.maps.LatLngBounds();
+    coordenadasValidas.forEach(e => {
+        let marker = criarMarker(e.idx, e);
+        if (marker) {
+            bounds.extend({lat: parseFloat(e.lat), lng: parseFloat(e.lng)});
+        }
+    });
+    if (!bounds.isEmpty()) map.fitBounds(bounds);
+}
+window.initMap = initMap;
 </script>
+<!-- Google Maps API e MarkerClusterer -->
+<script src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&libraries=marker&callback=initMap" async defer></script>
+<script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
 {% endblock %}
