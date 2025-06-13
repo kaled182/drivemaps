@@ -38,13 +38,19 @@ def registro_unico(lista, novo):
 
 @main_routes.route('/', methods=['GET'])
 def home():
-    # Limpa sessão ao entrar na home (garante que sempre começa limpo!)
-    session['lista'] = []
+    # Limpa completamente a sessão ao entrar na home
+    session.clear()
     return render_template("home.html")
 
 @main_routes.route('/preview', methods=['POST'])
 def preview():
     enderecos_brutos = request.form.get('enderecos', '')
+    if not enderecos_brutos.strip():
+        return redirect(url_for('main.home'))
+    
+    # Limpa a lista apenas se for uma nova importação manual
+    session['lista'] = []
+    
     regex_cep = re.compile(r'(\d{4}-\d{3})')
     linhas = [linha.strip() for linha in enderecos_brutos.split('\n') if linha.strip()]
     lista_preview = []
@@ -74,7 +80,8 @@ def preview():
                     "cep_ok": cep_ok,
                     "rua_bate": rua_bate,
                     "freguesia": res_google.get('sublocality', ''),
-                    "importacao_tipo": "manual"
+                    "importacao_tipo": "manual",
+                    "cor": CORES_IMPORTACAO[0]
                 })
                 i += 4
             else:
@@ -93,6 +100,8 @@ def preview():
         item['order_number'] = i
 
     session['lista'] = lista_atual
+    session.modified = True
+    
     google_api_key = os.environ.get("GOOGLE_API_KEY", "")
     return render_template(
         "preview.html",
@@ -109,7 +118,7 @@ def import_planilha():
     if not file or not empresa:
         return "Arquivo ou empresa não especificados", 400
 
-    # Sempre pega a lista atual da sessão para ACUMULAR
+    # Mantém a lista existente na sessão para acumular
     lista_atual = session.get('lista', [])
 
     if empresa == "delnext":
@@ -126,6 +135,7 @@ def import_planilha():
         ceps = df[col_cep[0]].astype(str).tolist()
         order_numbers = [str(i+1+len(lista_atual)) for i in range(len(enderecos))]
         tipo_import = "delnext"
+        cor = CORES_IMPORTACAO[1]
 
     elif empresa == "paack":
         file.seek(0)
@@ -148,6 +158,7 @@ def import_planilha():
                 else:
                     i += 1
             tipo_import = "paack"
+            cor = CORES_IMPORTACAO[2]
         else:
             df = pd.read_excel(file, header=0)
             col_end = [c for c in df.columns if 'endereco' in c.lower() or 'address' in c.lower()]
@@ -158,6 +169,7 @@ def import_planilha():
             ceps = df[col_cep[0]].astype(str).tolist()
             order_numbers = [str(i+1+len(lista_atual)) for i in range(len(enderecos))]
             tipo_import = "paack"
+            cor = CORES_IMPORTACAO[2]
     else:
         return "Empresa não suportada para importação!", 400
 
@@ -180,7 +192,8 @@ def import_planilha():
             "cep_ok": cep_ok,
             "rua_bate": rua_bate,
             "freguesia": res_google.get('sublocality', ''),
-            "importacao_tipo": tipo_import
+            "importacao_tipo": tipo_import,
+            "cor": cor
         }
         if registro_unico(lista_atual, novo):
             lista_atual.append(novo)
@@ -190,6 +203,8 @@ def import_planilha():
 
     origens = list({item.get('importacao_tipo', 'manual') for item in lista_atual})
     session['lista'] = lista_atual
+    session.modified = True
+    
     google_api_key = os.environ.get("GOOGLE_API_KEY", "")
     return render_template(
         "preview.html",
@@ -199,19 +214,67 @@ def import_planilha():
         origens=origens
     )
 
-# -- RESTANTE DAS ROTAS INALTERADAS --
 @main_routes.route('/api/validar-linha', methods=['POST'])
 def validar_linha():
     endereco = request.form.get('endereco')
     cep = request.form.get('cep')
     numero_pacote = request.form.get('numero_pacote')
+    importacao_tipo = request.form.get('importacao_tipo', 'manual')
+    idx = int(request.form.get('idx', -1))
+    
     res_google = valida_rua_google(endereco, cep)
     rua_digitada = endereco.split(',')[0] if endereco else ''
     rua_google = res_google.get('route_encontrada', '')
     rua_bate = normalizar(rua_digitada) in normalizar(rua_google) or normalizar(rua_google) in normalizar(rua_digitada)
     cep_ok = cep == res_google.get('postal_code_encontrado', '')
+    
+    # Atualiza a lista na sessão
+    lista_atual = session.get('lista', [])
+    
+    if idx >= 0 and idx < len(lista_atual):
+        # Atualiza linha existente
+        lista_atual[idx].update({
+            "address": endereco,
+            "cep": cep,
+            "status_google": res_google.get('status'),
+            "postal_code_encontrado": res_google.get('postal_code_encontrado', ''),
+            "latitude": res_google.get('coordenadas', {}).get('lat', ''),
+            "longitude": res_google.get('coordenadas', {}).get('lng', ''),
+            "cep_ok": cep_ok,
+            "rua_bate": rua_bate,
+            "rua_google": rua_google,
+            "freguesia": res_google.get('sublocality', '')
+        })
+    else:
+        # Adiciona nova linha
+        cor = CORES_IMPORTACAO[0]  # Cor padrão para manual
+        if importacao_tipo == 'delnext':
+            cor = CORES_IMPORTACAO[1]
+        elif importacao_tipo == 'paack':
+            cor = CORES_IMPORTACAO[2]
+            
+        lista_atual.append({
+            "order_number": numero_pacote or str(len(lista_atual) + 1),
+            "address": endereco,
+            "cep": cep,
+            "status_google": res_google.get('status'),
+            "postal_code_encontrado": res_google.get('postal_code_encontrado', ''),
+            "endereco_formatado": res_google.get('endereco_formatado', ''),
+            "latitude": res_google.get('coordenadas', {}).get('lat', ''),
+            "longitude": res_google.get('coordenadas', {}).get('lng', ''),
+            "rua_google": rua_google,
+            "cep_ok": cep_ok,
+            "rua_bate": rua_bate,
+            "freguesia": res_google.get('sublocality', ''),
+            "importacao_tipo": importacao_tipo,
+            "cor": cor
+        })
+    
+    session['lista'] = lista_atual
+    session.modified = True
+    
     return jsonify({
-        'order_number': numero_pacote,
+        'order_number': numero_pacote or str(len(lista_atual)),
         'address': endereco,
         'cep': cep,
         'status_google': res_google.get('status'),
@@ -223,6 +286,8 @@ def validar_linha():
         'cep_ok': cep_ok,
         'rua_bate': rua_bate,
         'freguesia_google': res_google.get('sublocality', ''),
+        'importacao_tipo': importacao_tipo,
+        'cor': lista_atual[-1]['cor']  # Retorna a cor usada
     })
 
 @main_routes.route('/generate', methods=['POST'])
@@ -234,6 +299,7 @@ def generate():
         numero_pacote = request.form.get(f'numero_pacote_{i}', '')
         endereco = request.form.get(f'endereco_{i}', '')
         cep = request.form.get(f'cep_{i}', '')
+        importacao_tipo = request.form.get(f'importacao_tipo_{i}', 'manual')
         res_google = valida_rua_google(endereco, cep)
         postal_code_encontrado = res_google.get('postal_code_encontrado', '')
         rua_digitada = endereco.split(',')[0] if endereco else ''
@@ -252,6 +318,7 @@ def generate():
             "cep_ok": cep_ok,
             "rua_bate": rua_bate,
             "freguesia": res_google.get('sublocality', ''),
+            "importacao_tipo": importacao_tipo
         })
     output = io.StringIO()
     writer = csv.writer(output)
@@ -267,9 +334,17 @@ def generate():
             aviso = "Rua divergente"
         else:
             aviso = "Validado"
+        
+        # Determina a cor baseada no tipo de importação
+        cor = CORES_IMPORTACAO[0]  # Padrão manual
+        if row["importacao_tipo"] == "delnext":
+            cor = CORES_IMPORTACAO[1]
+        elif row["importacao_tipo"] == "paack":
+            cor = CORES_IMPORTACAO[2]
+            
         writer.writerow([
             row["order_number"], "", row["address"], row["latitude"], row["longitude"], "", "", "", "", "",
-            row["postal_code_encontrado"] or row["cep"], "", "", row["rua_google"], row.get("freguesia", ""), aviso
+            row["postal_code_encontrado"] or row["cep"], cor, "", row["rua_google"], row.get("freguesia", ""), aviso
         ])
     csv_content = output.getvalue()
     return redirect(url_for('main.download'))
@@ -306,6 +381,15 @@ def reverse_geocode():
         if 'postal_code' in c['types']:
             postal_code = c['long_name']
             break
+    
+    # Atualiza a lista na sessão
+    lista_atual = session.get('lista', [])
+    if idx >= 0 and idx < len(lista_atual):
+        lista_atual[idx]['latitude'] = lat
+        lista_atual[idx]['longitude'] = lng
+        session['lista'] = lista_atual
+        session.modified = True
+    
     return jsonify({
         'sucesso': True,
         'address': address,
