@@ -42,7 +42,7 @@ def preview():
                 rua_bate = normalizar(rua_digitada) in normalizar(rua_google) or normalizar(rua_google) in normalizar(rua_digitada)
                 cep_ok = cep == res_google.get('postal_code_encontrado', '')
                 lista_preview.append({
-                    "order_number": numero_pacote,
+                    "order_number": "",  # Só será reindexado ao final
                     "address": linha,
                     "cep": cep,
                     "status_google": res_google.get('status'),
@@ -61,16 +61,15 @@ def preview():
         else:
             i += 1
 
-    # Se não digitou nada, mantém o que já tinha na sessão
+    # Acumula SEMPRE com o que está em sessão, nunca sobrescreve!
     lista_atual = session.get('lista', [])
-    if lista_preview:
-        lista_final = lista_atual + lista_preview
-    else:
-        lista_final = lista_atual
+    lista_final = lista_atual + lista_preview
 
-    # Atualiza a sessão para sempre acumular
+    # Reindexa todos os order_number para garantir IDs únicos
+    for i, item in enumerate(lista_final, 1):
+        item['order_number'] = i
+
     session['lista'] = lista_final
-
     google_api_key = os.environ.get("GOOGLE_API_KEY", "")
     return render_template("preview.html", lista=lista_final, GOOGLE_API_KEY=google_api_key)
 
@@ -110,17 +109,17 @@ def import_planilha():
     else:
         return "Empresa não suportada para importação!", 400
 
-    # Acumula os endereços na sessão (adiciona aos existentes)
+    # Só adiciona novos endereços, nunca apaga os antigos
     lista_atual = session.get('lista', [])
-    novo_idx_base = len(lista_atual)
+    novos = []
     for idx, (endereco, cep) in enumerate(zip(enderecos, ceps)):
         res_google = valida_rua_google(endereco, cep)
         rua_digitada = endereco.split(',')[0] if endereco else ''
         rua_google = res_google.get('route_encontrada', '')
         rua_bate = normalizar(rua_digitada) in normalizar(rua_google) or normalizar(rua_google) in normalizar(rua_digitada)
         cep_ok = cep == res_google.get('postal_code_encontrado', '')
-        lista_atual.append({
-            "order_number": novo_idx_base + idx + 1,
+        novos.append({
+            "order_number": "",  # Será reindexado ao final
             "address": endereco,
             "cep": cep,
             "status_google": res_google.get('status'),
@@ -134,13 +133,15 @@ def import_planilha():
             "freguesia": res_google.get('sublocality', ''),
         })
 
-    # Reindexa todos os order_number para garantir que não repete ID após múltiplas importações
-    for i, item in enumerate(lista_atual, 1):
-        item['order_number'] = i
-    session['lista'] = lista_atual
+    lista_final = lista_atual + novos
 
+    # Reindexa todos os order_number para garantir que não repete ID após múltiplas importações
+    for i, item in enumerate(lista_final, 1):
+        item['order_number'] = i
+
+    session['lista'] = lista_final
     google_api_key = os.environ.get("GOOGLE_API_KEY", "")
-    return render_template("preview.html", lista=lista_atual, GOOGLE_API_KEY=google_api_key)
+    return render_template("preview.html", lista=lista_final, GOOGLE_API_KEY=google_api_key)
 # -------- FIM DA ROTA DE IMPORTAÇÃO --------
 
 @main_routes.route('/api/validar-linha', methods=['POST'])
