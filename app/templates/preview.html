@@ -140,17 +140,21 @@ let enderecosData = [
         status: "{{ 'valid' if item.cep_ok else 'invalid' }}",
         cep_ok: {{ 'true' if item.cep_ok else 'false' }},
         importacao_tipo: "{{ item.importacao_tipo }}",
-        importacao_id: "{{ item.importacao_id if item.importacao_id is defined else '' }}",
         cor: "{{ item.cor|default('#0074D9') }}"
     }{% if not loop.last %},{% endif %}
     {% endfor %}
 ];
 
-function criarMarker(idx, data) {
-    if (markers[idx]) {
-        markers[idx].setMap(null);
-        if (markerCluster) markerCluster.removeMarker(markers[idx]);
+// Sempre limpe marcadores antes de redesenhar
+function limparTodosMarcadores() {
+    if (markers.length) {
+        markers.forEach(m => m && m.setMap(null));
+        markers = [];
     }
+    if (markerCluster) markerCluster.clearMarkers();
+}
+
+function criarMarker(idx, data) {
     if (!data.latitude || !data.longitude || isNaN(data.latitude) || isNaN(data.longitude)) return null;
     const position = {lat: parseFloat(data.latitude), lng: parseFloat(data.longitude)};
     const cor = data.cep_ok ? "#44B100" : "#D82B2B";
@@ -209,6 +213,7 @@ function adicionarEnderecoManual() {
 }
 
 function initMap() {
+    limparTodosMarcadores();
     const coordenadasValidas = enderecosData.filter(e =>
         e.latitude !== null && e.longitude !== null && !isNaN(e.latitude) && !isNaN(e.longitude)
     );
