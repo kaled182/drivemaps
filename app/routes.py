@@ -64,7 +64,7 @@ def preview():
     google_api_key = os.environ.get("GOOGLE_API_KEY", "")
     return render_template("preview.html", lista=lista, GOOGLE_API_KEY=google_api_key)
 
-# -------- ROTA DE IMPORTAÇÃO DE PLANILHA XLS/XLSX/CSV --------
+# -------- ROTA DE IMPORTAÇÃO DE PLANILHA XLS/XLSX/CSV COM DETECÇÃO DE CABEÇALHO --------
 @main_routes.route('/import_planilha', methods=['POST'])
 def import_planilha():
     file = request.files.get('planilha')
@@ -72,20 +72,40 @@ def import_planilha():
     if not file or not empresa:
         return "Arquivo ou empresa não especificados", 400
 
-    # Lê o arquivo na memória
-    try:
-        if file.filename.lower().endswith('.csv'):
-            df = pd.read_csv(file)
-        else:
-            df = pd.read_excel(file)
-    except Exception as e:
-        return f"Erro ao ler arquivo: {str(e)}", 400
+    # Tenta ler as primeiras 10 linhas para encontrar o cabeçalho
+    if file.filename.lower().endswith('.csv'):
+        file.seek(0)
+        amostra = pd.read_csv(file, nrows=10, header=None)
+        file.seek(0)
+    else:
+        file.seek(0)
+        amostra = pd.read_excel(file, nrows=10, header=None)
+        file.seek(0)
+
+    header_row = None
+    for i, row in amostra.iterrows():
+        lower_row = [str(x).strip().lower() for x in row]
+        if (
+            ('morada' in lower_row or 'endereco' in lower_row)
+            and ('codigo postal' in lower_row or 'cod postal' in lower_row or 'cep' in lower_row or 'postal' in lower_row)
+        ):
+            header_row = i
+            break
+
+    if header_row is None:
+        return "Cabeçalho de endereço/CEP não encontrado na planilha!", 400
+
+    # Lê o arquivo a partir da linha correta de cabeçalho
+    if file.filename.lower().endswith('.csv'):
+        file.seek(0)
+        df = pd.read_csv(file, header=header_row)
+    else:
+        file.seek(0)
+        df = pd.read_excel(file, header=header_row)
 
     # --- SELECIONA O PARSER POR EMPRESA ---
     enderecos, ceps = [], []
     if empresa == "delnext":
-        # Delnext: Tenta identificar colunas por nome ou formato
-        # Exemplo de colunas típicas: 'Morada', 'Código Postal'
         col_end = [c for c in df.columns if 'morada' in c.lower() or 'endereco' in c.lower()]
         col_cep = [c for c in df.columns if 'codigo postal' in c.lower() or 'cod postal' in c.lower() or 'cep' in c.lower() or 'postal' in c.lower()]
         if not col_end or not col_cep:
@@ -93,7 +113,6 @@ def import_planilha():
         enderecos = df[col_end[0]].astype(str).tolist()
         ceps = df[col_cep[0]].astype(str).tolist()
     elif empresa == "paack":
-        # Paack: lógica padrão, tenta as mesmas colunas que já usava
         col_end = [c for c in df.columns if 'endereco' in c.lower() or 'address' in c.lower()]
         col_cep = [c for c in df.columns if 'cep' in c.lower() or 'postal' in c.lower()]
         if not col_end or not col_cep:
