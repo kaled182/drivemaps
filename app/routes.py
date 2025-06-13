@@ -9,14 +9,6 @@ from .utils import valida_rua_google
 main_routes = Blueprint('main', __name__)
 csv_content = None
 
-# Cores para cada origem de importação
-CORES_IMPORTACAO = [
-    "#001F3F",  # manual
-    "#2ECC40",  # delnext
-    "#FF851B",  # paack
-    "#FF4136",  # outros
-]
-
 def normalizar(texto):
     import unicodedata
     if not texto:
@@ -25,24 +17,13 @@ def normalizar(texto):
         c for c in unicodedata.normalize('NFKD', texto.lower()) if not unicodedata.combining(c)
     ).strip()
 
-def proxima_cor(origem):
-    # Associa cor à origem (manual/delnext/paack)
-    origem = origem or "manual"
-    cores = {
-        "manual": CORES_IMPORTACAO[0],
-        "delnext": CORES_IMPORTACAO[1],
-        "paack": CORES_IMPORTACAO[2]
-    }
-    return cores.get(origem, CORES_IMPORTACAO[3])
-
-def proximo_id_importacao():
-    # Gera um id crescente para cada grupo de importação
-    lista = session.get('lista', [])
-    if not lista:
-        return 1
-    else:
-        last = [item.get('importacao_id', 0) for item in lista if 'importacao_id' in item]
-        return max(last) + 1 if last else 1
+CORES_IMPORTACAO = [
+    "#0074D9",  # Azul - manual
+    "#FF851B",  # Laranja - delnext
+    "#2ECC40",  # Verde - paack
+    "#B10DC9",  # Roxo
+    "#FF4136",  # Vermelho
+]
 
 @main_routes.route('/', methods=['GET'])
 def home():
@@ -50,15 +31,11 @@ def home():
 
 @main_routes.route('/preview', methods=['POST'])
 def preview():
-    enderecos_brutos = request.form['enderecos']
+    enderecos_brutos = request.form.get('enderecos', '')
     regex_cep = re.compile(r'(\d{4}-\d{3})')
     linhas = [linha.strip() for linha in enderecos_brutos.split('\n') if linha.strip()]
     lista_preview = []
     i = 0
-    importacao_tipo = "manual"
-    cor = proxima_cor(importacao_tipo)
-    importacao_id = proximo_id_importacao()
-
     while i < len(linhas) - 2:
         linha = linhas[i]
         cep_match = regex_cep.search(linha)
@@ -84,9 +61,7 @@ def preview():
                     "cep_ok": cep_ok,
                     "rua_bate": rua_bate,
                     "freguesia": res_google.get('sublocality', ''),
-                    "importacao_tipo": importacao_tipo,
-                    "cor": cor,
-                    "importacao_id": importacao_id
+                    "importacao_tipo": "manual"
                 })
                 i += 4
             else:
@@ -94,28 +69,33 @@ def preview():
         else:
             i += 1
 
-    # Acumula
+    # Acumula na sessão sem sobrescrever (adiciona)
     lista_atual = session.get('lista', [])
-    lista_final = lista_atual + lista_preview if lista_preview else lista_atual
-    # Atualiza todos os order_number para garantir que nunca repete
-    for idx, item in enumerate(lista_final, 1):
-        item['order_number'] = idx
+    if lista_preview:
+        lista_final = lista_atual + lista_preview
+    else:
+        lista_final = lista_atual
+
+    # Gera lista de origens distintas para exibir filtros/badges
+    origens = list({item.get('importacao_tipo', 'manual') for item in lista_final})
+
     session['lista'] = lista_final
-
     google_api_key = os.environ.get("GOOGLE_API_KEY", "")
-    return render_template("preview.html", lista=lista_final, GOOGLE_API_KEY=google_api_key, CORES_IMPORTACAO=CORES_IMPORTACAO)
+    return render_template(
+        "preview.html",
+        lista=lista_final,
+        GOOGLE_API_KEY=google_api_key,
+        CORES_IMPORTACAO=CORES_IMPORTACAO,
+        origens=origens
+    )
 
+# -------- ROTA DE IMPORTAÇÃO DE PLANILHA XLS/XLSX/CSV --------
 @main_routes.route('/import_planilha', methods=['POST'])
 def import_planilha():
     file = request.files.get('planilha')
     empresa = request.form.get('empresa', '').lower()
     if not file or not empresa:
         return "Arquivo ou empresa não especificados", 400
-
-    # Identificação da cor/origem
-    importacao_tipo = empresa
-    cor = proxima_cor(importacao_tipo)
-    importacao_id = proximo_id_importacao()
 
     if empresa == "delnext":
         file.seek(0)
@@ -129,6 +109,7 @@ def import_planilha():
             return "A planilha da Delnext deve conter as colunas 'Morada' e 'Código Postal'!", 400
         enderecos = df[col_end[0]].astype(str).tolist()
         ceps = df[col_cep[0]].astype(str).tolist()
+        tipo_import = "delnext"
     elif empresa == "paack":
         file.seek(0)
         if file.filename.lower().endswith('.csv'):
@@ -141,19 +122,20 @@ def import_planilha():
             return "A planilha deve conter colunas de endereço e CEP!", 400
         enderecos = df[col_end[0]].astype(str).tolist()
         ceps = df[col_cep[0]].astype(str).tolist()
+        tipo_import = "paack"
     else:
         return "Empresa não suportada para importação!", 400
 
     lista_atual = session.get('lista', [])
-    novos = []
-    for endereco, cep in zip(enderecos, ceps):
+    novo_idx_base = len(lista_atual)
+    for idx, (endereco, cep) in enumerate(zip(enderecos, ceps)):
         res_google = valida_rua_google(endereco, cep)
         rua_digitada = endereco.split(',')[0] if endereco else ''
         rua_google = res_google.get('route_encontrada', '')
         rua_bate = normalizar(rua_digitada) in normalizar(rua_google) or normalizar(rua_google) in normalizar(rua_digitada)
         cep_ok = cep == res_google.get('postal_code_encontrado', '')
-        novos.append({
-            "order_number": None,  # Será preenchido depois
+        lista_atual.append({
+            "order_number": novo_idx_base + idx + 1,
             "address": endereco,
             "cep": cep,
             "status_google": res_google.get('status'),
@@ -165,26 +147,30 @@ def import_planilha():
             "cep_ok": cep_ok,
             "rua_bate": rua_bate,
             "freguesia": res_google.get('sublocality', ''),
-            "importacao_tipo": importacao_tipo,
-            "cor": cor,
-            "importacao_id": importacao_id
+            "importacao_tipo": tipo_import
         })
-    lista_final = lista_atual + novos
-    for idx, item in enumerate(lista_final, 1):
-        item['order_number'] = idx
-    session['lista'] = lista_final
 
+    # Reindexa order_number sequencialmente
+    for i, item in enumerate(lista_atual, 1):
+        item['order_number'] = i
+
+    origens = list({item.get('importacao_tipo', 'manual') for item in lista_atual})
+    session['lista'] = lista_atual
     google_api_key = os.environ.get("GOOGLE_API_KEY", "")
-    return render_template("preview.html", lista=lista_final, GOOGLE_API_KEY=google_api_key, CORES_IMPORTACAO=CORES_IMPORTACAO)
+    return render_template(
+        "preview.html",
+        lista=lista_atual,
+        GOOGLE_API_KEY=google_api_key,
+        CORES_IMPORTACAO=CORES_IMPORTACAO,
+        origens=origens
+    )
+# -------- FIM DA ROTA DE IMPORTAÇÃO --------
 
 @main_routes.route('/api/validar-linha', methods=['POST'])
 def validar_linha():
     endereco = request.form.get('endereco')
     cep = request.form.get('cep')
     numero_pacote = request.form.get('numero_pacote')
-    importacao_id = request.form.get('importacao_id', 0)
-    importacao_tipo = request.form.get('importacao_tipo', 'manual')
-    cor = request.form.get('cor', proxima_cor(importacao_tipo))
     res_google = valida_rua_google(endereco, cep)
     rua_digitada = endereco.split(',')[0] if endereco else ''
     rua_google = res_google.get('route_encontrada', '')
@@ -203,9 +189,6 @@ def validar_linha():
         'cep_ok': cep_ok,
         'rua_bate': rua_bate,
         'freguesia_google': res_google.get('sublocality', ''),
-        'importacao_id': importacao_id,
-        'importacao_tipo': importacao_tipo,
-        'cor': cor,
     })
 
 @main_routes.route('/generate', methods=['POST'])
