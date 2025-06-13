@@ -60,9 +60,13 @@ def preview():
                 i += 1
         else:
             i += 1
-    session['lista'] = lista
+
+    # Acumula os endereços na sessão
+    lista_atual = session.get('lista', [])
+    session['lista'] = lista_atual + lista
+
     google_api_key = os.environ.get("GOOGLE_API_KEY", "")
-    return render_template("preview.html", lista=lista, GOOGLE_API_KEY=google_api_key)
+    return render_template("preview.html", lista=session['lista'], GOOGLE_API_KEY=google_api_key)
 
 # -------- ROTA DE IMPORTAÇÃO DE PLANILHA XLS/XLSX/CSV --------
 @main_routes.route('/import_planilha', methods=['POST'])
@@ -100,8 +104,8 @@ def import_planilha():
     else:
         return "Empresa não suportada para importação!", 400
 
-    # Mescla com lista já existente na sessão (empilha os novos)
-    lista_atual = session.get('lista', []) or []
+    # Acumula os endereços na sessão (adiciona aos existentes)
+    lista_atual = session.get('lista', [])
     novo_idx_base = len(lista_atual)
     for idx, (endereco, cep) in enumerate(zip(enderecos, ceps)):
         res_google = valida_rua_google(endereco, cep)
@@ -125,7 +129,7 @@ def import_planilha():
         })
     session['lista'] = lista_atual
     google_api_key = os.environ.get("GOOGLE_API_KEY", "")
-    return render_template("preview.html", lista=lista_atual, GOOGLE_API_KEY=google_api_key)
+    return render_template("preview.html", lista=session['lista'], GOOGLE_API_KEY=google_api_key)
 # -------- FIM DA ROTA DE IMPORTAÇÃO --------
 
 @main_routes.route('/api/validar-linha', methods=['POST'])
