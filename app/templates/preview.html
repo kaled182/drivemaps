@@ -16,7 +16,7 @@
     .mobile-hidden { display: none; }
   }
   @media (min-width: 601px) { 
-    #map-top-sticky { height: 420px !important; max-height: 55vh; } 
+    #map-top-sticky { height: 420px !important; max-height: 55vh; }
   }
   .table-responsive { margin-top: 6px; }
   .filter-badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 12px; margin-right: 5px; }
@@ -30,6 +30,7 @@
 <!-- Filtros e Controles -->
 <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
     <div class="d-flex flex-row gap-2">
+        <!-- Filtro por origem -->
         <select id="filtro-origem" class="form-select form-select-sm" onchange="filtrarPorOrigem()">
             <option value="">Todas as origens</option>
             {% for origem in origens %}
@@ -49,10 +50,12 @@
     </form>
 </div>
 
+<!-- Progresso da Validação -->
 <div id="progresso-validacao" class="progress progress-sm mb-3" style="display: none;">
     <div id="progresso-barra" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%">0%</div>
 </div>
 
+<!-- Tabela de Endereços -->
 <div class="table-responsive">
 <form id="form-csv" action="{{ url_for('main.generate') }}" method="post" autocomplete="off">
     <table class="table table-bordered align-middle" id="tabela-enderecos">
@@ -114,8 +117,9 @@
 {% endblock %}
 
 {% block scripts %}
+<!-- Carrega o clusterizador antes do Maps -->
+<script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
 <script>
-// -- Função SVG PIN --
 function makeSvgPin(numero, corHex) {
     let n = String(numero).substring(0, 3);
     let svg = `<svg width="44" height="54" viewBox="0 0 44 54" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -129,57 +133,92 @@ function makeSvgPin(numero, corHex) {
 let map;
 let markers = [];
 let markerCluster;
-
-// Monta lista de endereços
 let enderecosData = [
     {% for item in lista %}
     {
         idx: {{ loop.index0 }},
-        lat: {{ item.latitude if item.latitude else 'null' }},
-        lng: {{ item.longitude if item.longitude else 'null' }},
+        latitude: {{ item.latitude if item.latitude else 'null' }},
+        longitude: {{ item.longitude if item.longitude else 'null' }},
         numero_pacote: "{{ item['order_number'] or loop.index }}",
         address: `{{ item.address|default('')|replace('`','\'')|e }}`,
         status: "{{ 'valid' if item.cep_ok else 'invalid' }}",
         cep_ok: {{ 'true' if item.cep_ok else 'false' }},
         importacao_tipo: "{{ item.importacao_tipo }}",
+        importacao_id: "{{ item.importacao_id if item.importacao_id is defined else '' }}",
         cor: "{{ item.cor|default('#0074D9') }}"
     }{% if not loop.last %},{% endif %}
     {% endfor %}
 ];
-console.log("enderecosData", enderecosData);
 
 function criarMarker(idx, data) {
-    // Valida tipo
-    if (
-        data.latitude === null || data.longitude === null ||
-        data.latitude === undefined || data.longitude === undefined ||
-        data.latitude === '' || data.longitude === '' ||
-        isNaN(Number(data.latitude)) || isNaN(Number(data.longitude))
-    ) {
-        return null;
+    if (markers[idx]) {
+        markers[idx].setMap(null);
+        if (markerCluster) markerCluster.removeMarker(markers[idx]);
     }
+    if (!data.latitude || !data.longitude || isNaN(data.latitude) || isNaN(data.longitude)) return null;
     const position = {lat: parseFloat(data.latitude), lng: parseFloat(data.longitude)};
     const cor = data.cep_ok ? "#44B100" : "#D82B2B";
-    const pinUrl = makeSvgPin(data.order_number || (idx+1), cor);
+    const pinUrl = makeSvgPin(data.numero_pacote || (idx+1), cor);
+
     let marker = new google.maps.Marker({
         position: position,
         map: map,
-        title: `${data.order_number || (idx+1)} - ${data.address}`,
+        title: `${data.numero_pacote || (idx+1)} - ${data.address}`,
         icon: { url: pinUrl, scaledSize: new google.maps.Size(22, 27) },
         draggable: true,
-        visible: !document.getElementById('filtro-origem').value || 
+        visible: !document.getElementById('filtro-origem').value ||
                  document.getElementById('filtro-origem').value === data.importacao_tipo
     });
+
+    // Ouvinte dragend removido para simplificar; pode ser adicionado conforme seu backend.
     markers[idx] = marker;
     if (markerCluster) markerCluster.addMarker(marker);
     return marker;
 }
 
+function filtrarPorOrigem() {
+    const origem = document.getElementById('filtro-origem').value;
+    const linhas = document.querySelectorAll('#corpo-tabela tr');
+    linhas.forEach(linha => {
+        if (linha.id === 'linha-nova') return;
+        linha.style.display = (!origem || linha.dataset.origem === origem) ? '' : 'none';
+    });
+    atualizarMarcadoresVisiveis();
+}
+
+function atualizarMarcadoresVisiveis() {
+    const origem = document.getElementById('filtro-origem').value;
+    markers.forEach((marker, idx) => {
+        if (marker) {
+            const linha = document.getElementById('linha-' + idx);
+            if (linha) {
+                const deveMostrar = !origem || linha.dataset.origem === origem;
+                marker.setVisible(deveMostrar);
+            }
+        }
+    });
+    if (markerCluster) markerCluster.repaint();
+}
+
+function validarLinha(idx) {
+    // Seu código para validar linha aqui
+    // (Pode ser colado igual estava no seu template anterior)
+    alert('Função validarLinha a implementar!');
+}
+
+function validarTudo() {
+    // Seu código para validar tudo aqui
+    alert('Função validarTudo a implementar!');
+}
+
+function adicionarEnderecoManual() {
+    // Seu código para adicionar endereço manual aqui
+    alert('Função adicionarEnderecoManual a implementar!');
+}
+
 function initMap() {
-    // Só plota se tiver lat/lng válidos!
     const coordenadasValidas = enderecosData.filter(e =>
-        e.lat !== null && e.lng !== null && e.lat !== '' && e.lng !== '' &&
-        !isNaN(Number(e.lat)) && !isNaN(Number(e.lng))
+        e.latitude !== null && e.longitude !== null && !isNaN(e.latitude) && !isNaN(e.longitude)
     );
     if (coordenadasValidas.length === 0) {
         document.getElementById('map').innerHTML =
@@ -189,42 +228,22 @@ function initMap() {
     map = new google.maps.Map(document.getElementById('map'), {
         zoom: 12,
         center: {
-            lat: parseFloat(coordenadasValidas[0].lat),
-            lng: parseFloat(coordenadasValidas[0].lng)
+            lat: parseFloat(coordenadasValidas[0].latitude),
+            lng: parseFloat(coordenadasValidas[0].longitude)
         }
     });
     markerCluster = new markerClusterer.MarkerClusterer({ map, markers: [] });
     coordenadasValidas.forEach(e => {
-        criarMarker(e.idx, {
-            latitude: e.lat,
-            longitude: e.lng,
-            cep_ok: e.cep_ok,
-            address: e.address,
-            order_number: e.numero_pacote,
-            importacao_tipo: e.importacao_tipo,
-            cor: e.cor
-        });
+        criarMarker(e.idx, e);
     });
-    // Ajusta bounds
     const bounds = new google.maps.LatLngBounds();
     coordenadasValidas.forEach(e => {
-        bounds.extend({lat: parseFloat(e.lat), lng: parseFloat(e.lng)});
+        bounds.extend({lat: parseFloat(e.latitude), lng: parseFloat(e.longitude)});
     });
     if (!bounds.isEmpty()) map.fitBounds(bounds);
 }
 
-function loadGoogleMaps() {
-    const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&callback=initMap`;
-    script.async = true;
-    script.defer = true;
-    document.head.appendChild(script);
-    // Clusterização
-    const clusterScript = document.createElement('script');
-    clusterScript.src = "https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js";
-    document.head.appendChild(clusterScript);
-}
-
-document.addEventListener('DOMContentLoaded', loadGoogleMaps);
 </script>
+<!-- Google Maps (callback chama initMap) -->
+<script async defer src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&callback=initMap"></script>
 {% endblock %}
