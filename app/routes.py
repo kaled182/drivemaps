@@ -126,16 +126,16 @@ def import_planilha():
     else:
         return "Empresa não suportada para importação!", 400
 
-    lista_atual = session.get('lista', [])
-    novo_idx_base = len(lista_atual)
+    # NÃO ACUMULAR lista, zere sempre ao importar planilha!
+    lista_nova = []
     for idx, (endereco, cep) in enumerate(zip(enderecos, ceps)):
         res_google = valida_rua_google(endereco, cep)
         rua_digitada = endereco.split(',')[0] if endereco else ''
         rua_google = res_google.get('route_encontrada', '')
         rua_bate = normalizar(rua_digitada) in normalizar(rua_google) or normalizar(rua_google) in normalizar(rua_digitada)
         cep_ok = cep == res_google.get('postal_code_encontrado', '')
-        lista_atual.append({
-            "order_number": novo_idx_base + idx + 1,
+        lista_nova.append({
+            "order_number": idx + 1,
             "address": endereco,
             "cep": cep,
             "status_google": res_google.get('status'),
@@ -150,16 +150,12 @@ def import_planilha():
             "importacao_tipo": tipo_import
         })
 
-    # Reindexa order_number sequencialmente
-    for i, item in enumerate(lista_atual, 1):
-        item['order_number'] = i
-
-    origens = list({item.get('importacao_tipo', 'manual') for item in lista_atual})
-    session['lista'] = lista_atual
+    origens = list({item.get('importacao_tipo', 'manual') for item in lista_nova})
+    session['lista'] = lista_nova
     google_api_key = os.environ.get("GOOGLE_API_KEY", "")
     return render_template(
         "preview.html",
-        lista=lista_atual,
+        lista=lista_nova,
         GOOGLE_API_KEY=google_api_key,
         CORES_IMPORTACAO=CORES_IMPORTACAO,
         origens=origens
