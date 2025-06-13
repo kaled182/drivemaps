@@ -30,7 +30,6 @@
 <!-- Filtros e Controles -->
 <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
     <div class="d-flex flex-row gap-2">
-        <!-- Filtro por origem -->
         <select id="filtro-origem" class="form-select form-select-sm" onchange="filtrarPorOrigem()">
             <option value="">Todas as origens</option>
             {% for origem in origens %}
@@ -50,12 +49,10 @@
     </form>
 </div>
 
-<!-- Progresso da Validação -->
 <div id="progresso-validacao" class="progress progress-sm mb-3" style="display: none;">
     <div id="progresso-barra" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%">0%</div>
 </div>
 
-<!-- Tabela de Endereços -->
 <div class="table-responsive">
 <form id="form-csv" action="{{ url_for('main.generate') }}" method="post" autocomplete="off">
     <table class="table table-bordered align-middle" id="tabela-enderecos">
@@ -117,7 +114,6 @@
 {% endblock %}
 
 {% block scripts %}
-<!-- Carrega o clusterizador antes do Maps -->
 <script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
 <script>
 function makeSvgPin(numero, corHex) {
@@ -170,7 +166,6 @@ function criarMarker(idx, data) {
                  document.getElementById('filtro-origem').value === data.importacao_tipo
     });
 
-    // Ouvinte dragend removido para simplificar; pode ser adicionado conforme seu backend.
     markers[idx] = marker;
     if (markerCluster) markerCluster.addMarker(marker);
     return marker;
@@ -201,18 +196,15 @@ function atualizarMarcadoresVisiveis() {
 }
 
 function validarLinha(idx) {
-    // Seu código para validar linha aqui
-    // (Pode ser colado igual estava no seu template anterior)
+    // Exemplo: abrir modal, validar backend, atualizar linha...
     alert('Função validarLinha a implementar!');
 }
 
 function validarTudo() {
-    // Seu código para validar tudo aqui
     alert('Função validarTudo a implementar!');
 }
 
 function adicionarEnderecoManual() {
-    // Seu código para adicionar endereço manual aqui
     alert('Função adicionarEnderecoManual a implementar!');
 }
 
@@ -242,8 +234,6 @@ function initMap() {
     });
     if (!bounds.isEmpty()) map.fitBounds(bounds);
 }
-
 </script>
-<!-- Google Maps (callback chama initMap) -->
 <script async defer src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&callback=initMap"></script>
 {% endblock %}
