@@ -93,8 +93,7 @@
                     {% endif %}
                 </td>
                 <td class="mobile-hidden">
-                    <span class="filter-badge"
-                        style="background-color:{{ item.cor|default('#0074D9') }}; color: white;">
+                    <span class="filter-badge" style="background-color:{{ item.cor|default('#0074D9') }}; color: white;">
                         {{ item.importacao_tipo|capitalize }}
                     </span>
                 </td>
@@ -106,12 +105,8 @@
         </tbody>
     </table>
     <div class="d-flex justify-content-between my-2">
-        <button type="button" class="btn btn-primary" onclick="adicionarEnderecoManual()">
-            + Adicionar endereço
-        </button>
-        <button id="btn-csv" type="submit" name="finalizar" value="1" class="btn btn-success">
-            Gerar CSV para MyWay
-        </button>
+        <button type="button" class="btn btn-primary" onclick="adicionarEnderecoManual()">+ Adicionar endereço</button>
+        <button id="btn-csv" type="submit" name="finalizar" value="1" class="btn btn-success">Gerar CSV para MyWay</button>
     </div>
     <input type="hidden" name="total" id="total-linhas" value="{{lista|length}}">
 </form>
@@ -134,6 +129,8 @@ function makeSvgPin(numero, corHex) {
 let map;
 let markers = [];
 let markerCluster;
+
+// Monta lista de endereços
 let enderecosData = [
     {% for item in lista %}
     {
@@ -149,34 +146,40 @@ let enderecosData = [
     }{% if not loop.last %},{% endif %}
     {% endfor %}
 ];
+console.log("enderecosData", enderecosData);
 
 function criarMarker(idx, data) {
-    if (markers[idx]) {
-        markers[idx].setMap(null);
-        if (markerCluster) markerCluster.removeMarker(markers[idx]);
+    // Valida tipo
+    if (
+        data.latitude === null || data.longitude === null ||
+        data.latitude === undefined || data.longitude === undefined ||
+        data.latitude === '' || data.longitude === '' ||
+        isNaN(Number(data.latitude)) || isNaN(Number(data.longitude))
+    ) {
+        return null;
     }
-    if (!data.latitude || !data.longitude || isNaN(data.latitude) || isNaN(data.longitude)) return null;
     const position = {lat: parseFloat(data.latitude), lng: parseFloat(data.longitude)};
     const cor = data.cep_ok ? "#44B100" : "#D82B2B";
-    const pinUrl = makeSvgPin(data.order_number || (idx+1), data.cor || cor);
+    const pinUrl = makeSvgPin(data.order_number || (idx+1), cor);
     let marker = new google.maps.Marker({
         position: position,
         map: map,
         title: `${data.order_number || (idx+1)} - ${data.address}`,
         icon: { url: pinUrl, scaledSize: new google.maps.Size(22, 27) },
         draggable: true,
-        visible: !document.getElementById('filtro-origem').value ||
+        visible: !document.getElementById('filtro-origem').value || 
                  document.getElementById('filtro-origem').value === data.importacao_tipo
     });
-    // Se quiser, adicione listeners conforme seu script
     markers[idx] = marker;
     if (markerCluster) markerCluster.addMarker(marker);
     return marker;
 }
 
 function initMap() {
+    // Só plota se tiver lat/lng válidos!
     const coordenadasValidas = enderecosData.filter(e =>
-        e.lat !== null && e.lng !== null && !isNaN(e.lat) && !isNaN(e.lng)
+        e.lat !== null && e.lng !== null && e.lat !== '' && e.lng !== '' &&
+        !isNaN(Number(e.lat)) && !isNaN(Number(e.lng))
     );
     if (coordenadasValidas.length === 0) {
         document.getElementById('map').innerHTML =
@@ -199,10 +202,10 @@ function initMap() {
             address: e.address,
             order_number: e.numero_pacote,
             importacao_tipo: e.importacao_tipo,
-            importacao_id: e.importacao_id,
             cor: e.cor
         });
     });
+    // Ajusta bounds
     const bounds = new google.maps.LatLngBounds();
     coordenadasValidas.forEach(e => {
         bounds.extend({lat: parseFloat(e.lat), lng: parseFloat(e.lng)});
@@ -216,6 +219,7 @@ function loadGoogleMaps() {
     script.async = true;
     script.defer = true;
     document.head.appendChild(script);
+    // Clusterização
     const clusterScript = document.createElement('script');
     clusterScript.src = "https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js";
     document.head.appendChild(clusterScript);
