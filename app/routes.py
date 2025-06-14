@@ -104,7 +104,7 @@ def preview():
                     rua_digitada = linha.split(',')[0] if linha else ''
                     rua_google = res_google.get('route_encontrada', '')
                     rua_bate = (normalizar(rua_digitada) in normalizar(rua_google) or 
-                              normalizar(rua_google) in normalizar(rua_digitada))
+                              normalizar(rua_google) in normalizar(rua_digitada)
                     cep_ok = cep == res_google.get('postal_code_encontrado', '')
                     
                     lista_preview.append({
@@ -147,7 +147,6 @@ def preview():
             GOOGLE_API_KEY=os.environ.get("GOOGLE_API_KEY", ""),
             CORES_IMPORTACAO=CORES_IMPORTACAO,
             origens=list({item.get('importacao_tipo', 'manual') for item in lista_atual})
-        )
     except Exception as e:
         logger.error(f"Erro no preview: {str(e)}", exc_info=True)
         return jsonify({"success": False, "msg": f"Erro: {str(e)}"}), 500
@@ -272,6 +271,19 @@ def import_planilha():
         logger.error(f"Erro na importação: {str(e)}", exc_info=True)
         return jsonify({"success": False, "msg": f"Erro: {str(e)}"}), 500
 
+@main_routes.route('/api/session-data', methods=['GET'])
+def get_session_data():
+    try:
+        return jsonify({
+            "success": True,
+            "lista": session.get('lista', []),
+            "origens": list({item.get("importacao_tipo", "manual") for item in session.get('lista', [])}),
+            "total": len(session.get('lista', []))
+        })
+    except Exception as e:
+        logger.error(f"Erro ao recuperar sessão: {str(e)}", exc_info=True)
+        return jsonify({"success": False, "msg": str(e)}), 500
+
 @main_routes.route('/api/validar-linha', methods=['POST'])
 def validar_linha():
     try:
@@ -341,7 +353,7 @@ def generate():
                 "rua_google": res_google.get('route_encontrada', ''),
                 "cep_ok": item["cep"] == res_google.get('postal_code_encontrado', ''),
                 "rua_bate": (normalizar(item["address"].split(',')[0]) in 
-                           normalizar(res_google.get('route_encontrada', '')) if item["address"] else False,
+                           normalizar(res_google.get('route_encontrada', ''))) if item["address"] else False,
                 "freguesia": res_google.get('sublocality', '')
             })
             
@@ -427,7 +439,7 @@ def reverse_geocode():
         address = result['formatted_address']
         postal_code = next(
             (c['long_name'] for c in result['address_components'] 
-            if 'postal_code' in c['types']),
+             if 'postal_code' in c['types']),
             ''
         )
 
