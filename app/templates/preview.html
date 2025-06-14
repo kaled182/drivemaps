@@ -21,6 +21,7 @@
   .table-responsive { margin-top: 6px; }
   .filter-badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 12px; margin-right: 5px; }
   .progress-sm { height: 24px; }
+  #feedback-msg { min-height: 26px; }
 </style>
 
 <div id="map-top-sticky">
@@ -30,7 +31,6 @@
 <!-- Filtros e Controles -->
 <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
     <div class="d-flex flex-row gap-2">
-        <!-- Filtro por origem -->
         <select id="filtro-origem" class="form-select form-select-sm" onchange="filtrarPorOrigem()">
             <option value="">Todas as origens</option>
             {% for origem in origens %}
@@ -45,10 +45,12 @@
             <option value="delnext">Delnext</option>
             <option value="paack">Paack (Padrão)</option>
         </select>
-        <input type="file" name="planilha" accept=".xls,.xlsx,.csv" required class="form-control form-control-sm">
+        <input type="file" name="planilha" accept=".xls,.xlsx,.csv,.txt" required class="form-control form-control-sm">
         <button type="submit" class="btn btn-secondary btn-sm">Importar</button>
     </form>
 </div>
+
+<div id="feedback-msg" class="mb-2 text-danger fw-bold"></div>
 
 <div id="progresso-validacao" class="progress progress-sm mb-3" style="display: none;">
     <div id="progresso-barra" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%">0%</div>
@@ -69,7 +71,39 @@
             </tr>
         </thead>
         <tbody id="corpo-tabela">
-            <!-- Preenchido via JS -->
+            {% for item in lista %}
+            <tr id="linha-{{ loop.index0 }}" class="{% if item.cep_ok %}table-success{% else %}table-danger{% endif %}" data-origem="{{ item.importacao_tipo }}">
+                <td style="font-weight: bold; text-align:center;">{{ item['order_number'] or loop.index }}</td>
+                <td>
+                    <input type="hidden" name="numero_pacote_{{ loop.index0 }}" value="{{item['order_number']}}">
+                    <input type="hidden" name="importacao_tipo_{{ loop.index0 }}" value="{{item['importacao_tipo']}}">
+                    <input type="hidden" name="cor_{{ loop.index0 }}" value="{{item['cor']}}">
+                    <input type="text" class="form-control" name="endereco_{{ loop.index0 }}" value="{{item['address']}}">
+                </td>
+                <td>
+                    <input type="text" class="form-control" name="cep_{{ loop.index0 }}" value="{{item['cep']}}">
+                </td>
+                <td class="cep-encontrado">{{ item['postal_code_encontrado'] or '-' }}</td>
+                <td class="status-google text-center mobile-hidden">
+                    {% if item.status_google == 'OK' %}
+                        <span class="text-success">OK</span>
+                        {% if not item.rua_bate %}
+                            <span title="Rua diferente do Google!">⚠️</span>
+                        {% endif %}
+                    {% else %}
+                        <span class="text-danger">{{ item.status_google or 'NÃO ENCONTRADO' }}</span>
+                    {% endif %}
+                </td>
+                <td class="mobile-hidden">
+                    <span class="filter-badge" style="background-color:{{ item.cor|default('#0074D9') }}; color: white;">
+                        {{ item.importacao_tipo|capitalize }}
+                    </span>
+                </td>
+                <td class="text-center">
+                    <button type="button" onclick="validarLinha({{ loop.index0 }})" class="btn btn-warning btn-sm w-100 mb-1">Validar</button>
+                </td>
+            </tr>
+            {% endfor %}
         </tbody>
     </table>
     <div class="d-flex justify-content-between my-2">
@@ -84,60 +118,11 @@
 {% block scripts %}
 <script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
 <script>
-let enderecosData = {{ lista|tojson|safe }};
+let map;
+let markers = [];
+let markerCluster;
+let enderecosData = {{ lista | tojson | safe }};
 
-// Renderiza a tabela de endereços
-function renderTabela(lista) {
-    let tbody = document.getElementById('corpo-tabela');
-    if (!tbody) return;
-    tbody.innerHTML = '';
-    lista.forEach((item, idx) => {
-        tbody.innerHTML += `
-        <tr id="linha-${idx}" class="${item.cep_ok ? 'table-success' : 'table-danger'}" data-origem="${item.importacao_tipo}">
-            <td style="font-weight: bold; text-align:center;">${item.order_number || (idx+1)}</td>
-            <td>
-                <input type="hidden" name="numero_pacote_${idx}" value="${item.order_number}">
-                <input type="hidden" name="importacao_tipo_${idx}" value="${item.importacao_tipo}">
-                <input type="hidden" name="cor_${idx}" value="${item.cor || '#0074D9'}">
-                <input type="text" class="form-control" name="endereco_${idx}" value="${item.address || ''}">
-            </td>
-            <td>
-                <input type="text" class="form-control" name="cep_${idx}" value="${item.cep || ''}">
-            </td>
-            <td class="cep-encontrado">${item.postal_code_encontrado || '-'}</td>
-            <td class="status-google text-center mobile-hidden">
-                ${item.status_google == 'OK' ? 
-                    `<span class="text-success">OK</span>${!item.rua_bate ? ' <span title="Rua diferente do Google!">⚠️</span>' : ''}` : 
-                    `<span class="text-danger">${item.status_google || 'NÃO ENCONTRADO'}</span>`
-                }
-            </td>
-            <td class="mobile-hidden">
-                <span class="filter-badge" style="background-color:${item.cor || '#0074D9'}; color: white;">
-                    ${item.importacao_tipo ? (item.importacao_tipo.charAt(0).toUpperCase() + item.importacao_tipo.slice(1)) : 'Manual'}
-                </span>
-            </td>
-            <td class="text-center">
-                <button type="button" onclick="validarLinha(${idx})" class="btn btn-warning btn-sm w-100 mb-1">Validar</button>
-            </td>
-        </tr>
-        `;
-    });
-    document.getElementById('total-linhas').value = lista.length;
-}
-
-// Filtro por origem (mantém igual)
-function filtrarPorOrigem() {
-    const origem = document.getElementById('filtro-origem').value;
-    const linhas = document.querySelectorAll('#corpo-tabela tr');
-    linhas.forEach(linha => {
-        if (linha.id === 'linha-nova') return;
-        linha.style.display = (!origem || linha.dataset.origem === origem) ? '' : 'none';
-    });
-    atualizarMarcadoresVisiveis();
-}
-
-// Google Maps
-let map, markers = [], markerCluster;
 function makeSvgPin(numero, corHex) {
     let n = String(numero).substring(0, 3);
     let svg = `<svg width="44" height="54" viewBox="0 0 44 54" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -147,6 +132,7 @@ function makeSvgPin(numero, corHex) {
     </svg>`;
     return "data:image/svg+xml;base64," + btoa(svg);
 }
+
 function criarMarker(idx, data) {
     if (markers[idx]) {
         markers[idx].setMap(null);
@@ -155,12 +141,12 @@ function criarMarker(idx, data) {
     if (!data.latitude || !data.longitude || isNaN(data.latitude) || isNaN(data.longitude)) return null;
     const position = {lat: parseFloat(data.latitude), lng: parseFloat(data.longitude)};
     const cor = data.cor || (data.cep_ok ? "#44B100" : "#D82B2B");
-    const pinUrl = makeSvgPin(data.numero_pacote || (idx+1), cor);
+    const pinUrl = makeSvgPin(data.order_number || (idx+1), cor);
 
     let marker = new google.maps.Marker({
         position: position,
         map: map,
-        title: `${data.numero_pacote || (idx+1)} - ${data.address}`,
+        title: `${data.order_number || (idx+1)} - ${data.address}`,
         icon: { url: pinUrl, scaledSize: new google.maps.Size(22, 27) },
         draggable: true,
         visible: !document.getElementById('filtro-origem').value ||
@@ -171,6 +157,17 @@ function criarMarker(idx, data) {
     if (markerCluster) markerCluster.addMarker(marker);
     return marker;
 }
+
+function filtrarPorOrigem() {
+    const origem = document.getElementById('filtro-origem').value;
+    const linhas = document.querySelectorAll('#corpo-tabela tr');
+    linhas.forEach(linha => {
+        if (linha.id === 'linha-nova') return;
+        linha.style.display = (!origem || linha.dataset.origem === origem) ? '' : 'none';
+    });
+    atualizarMarcadoresVisiveis();
+}
+
 function atualizarMarcadoresVisiveis() {
     const origem = document.getElementById('filtro-origem').value;
     markers.forEach((marker, idx) => {
@@ -184,10 +181,22 @@ function atualizarMarcadoresVisiveis() {
     });
     if (markerCluster) markerCluster.repaint();
 }
+
+function validarLinha(idx) {
+    // AJAX de validação pode ser implementado aqui
+    alert('Função validarLinha a implementar!');
+}
+
+function validarTudo() {
+    alert('Função validarTudo a implementar!');
+}
+
+function adicionarEnderecoManual() {
+    alert('Função adicionarEnderecoManual a implementar!');
+}
+
 function initMap() {
-    if (!enderecosData) return;
-    markers = [];
-    let coordenadasValidas = enderecosData.filter(e =>
+    const coordenadasValidas = enderecosData.filter(e =>
         e.latitude !== null && e.longitude !== null && !isNaN(e.latitude) && !isNaN(e.longitude)
     );
     if (coordenadasValidas.length === 0) {
@@ -213,69 +222,49 @@ function initMap() {
     if (!bounds.isEmpty()) map.fitBounds(bounds);
 }
 
-function validarLinha(idx) {
-    // Exemplo de envio para validação backend (ajuste conforme sua rota)
-    const linha = enderecosData[idx];
-    fetch("/api/validar-linha", {
-        method: "POST",
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            idx: idx,
-            endereco: linha.address,
-            cep: linha.cep,
-            importacao_tipo: linha.importacao_tipo,
-            numero_pacote: linha.order_number
-        })
-    })
-    .then(resp => resp.json())
-    .then(data => {
-        if (data.success) {
-            enderecosData[idx] = data.item;
-            renderTabela(enderecosData);
-            initMap();
-        } else {
-            alert(data.msg || "Falha na validação.");
-        }
-    })
-    .catch(() => alert("Erro na validação!"));
-}
-
-function validarTudo() {
-    alert('Função validarTudo a implementar!');
-}
-function adicionarEnderecoManual() {
-    alert('Função adicionarEnderecoManual a implementar!');
-}
-
-// --- AJAX PARA IMPORTAÇÃO DE PLANILHA ---
 document.getElementById('form-upload').addEventListener('submit', function(e) {
     e.preventDefault();
-    let form = this;
-    let formData = new FormData(form);
-    fetch(form.action, {
-        method: "POST",
-        body: formData
+    mostrarCarregamento(true);
+    document.getElementById('feedback-msg').textContent = '';
+
+    fetch(this.action, {
+        method: 'POST',
+        body: new FormData(this)
     })
-    .then(resp => resp.json())
+    .then(async response => {
+        if (!response.ok) {
+            let data;
+            try { data = await response.json(); } catch { data = {}; }
+            throw new Error(data.msg || "Erro de rede");
+        }
+        return response.json();
+    })
     .then(data => {
         if (data.success) {
             enderecosData = data.lista;
-            renderTabela(data.lista);
-            // Atualiza filtro de origens
-            let filtro = document.getElementById('filtro-origem');
-            filtro.innerHTML = `<option value="">Todas as origens</option>` +
-                data.origens.map(o => `<option value="${o}">${o.charAt(0).toUpperCase() + o.slice(1)}</option>`).join('');
-            initMap();
+            atualizarInterface(data);
         } else {
-            alert(data.msg || "Erro na importação!");
+            throw new Error(data.msg || "Erro na importação");
         }
     })
-    .catch(() => alert("Erro ao importar planilha!"));
+    .catch(err => {
+        document.getElementById('feedback-msg').textContent = err.message;
+    })
+    .finally(() => mostrarCarregamento(false));
 });
 
-// Inicializa ao carregar
-window.addEventListener("DOMContentLoaded", () => {
-    renderTabela(enderecosData);
+function atualizarInterface(data) {
+    // Atualiza tabela, mapa e filtros (exemplo: recarregue a página)
+    window.location.reload();
+    // Ou pode atualizar manualmente todos os componentes, mas reload resolve para já
+}
+
+function mostrarCarregamento(exibir) {
+    // Exemplo simples, personalize conforme seu gosto
+    document.getElementById('feedback-msg').textContent = exibir ? "Processando importação..." : "";
+}
+
+window.addEventListener('DOMContentLoaded', () => {
     initMap();
 });
 </script>
