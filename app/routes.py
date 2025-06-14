@@ -6,6 +6,8 @@ import os
 import pandas as pd
 import logging
 import requests
+from functools import lru_cache
+import hashlib
 from .utils import valida_rua_google
 
 # --- LOGGING ---
@@ -15,18 +17,9 @@ logger = logging.getLogger(__name__)
 main_routes = Blueprint('main', __name__)
 csv_content = None
 
+# Configurações
 ALLOWED_EXTENSIONS = {'csv', 'xls', 'xlsx', 'txt'}
-
-def extensao_permitida(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-def normalizar(texto):
-    import unicodedata
-    if not texto:
-        return ''
-    return ''.join(
-        c for c in unicodedata.normalize('NFKD', texto.lower()) if not unicodedata.combining(c)
-    ).strip()
+MAX_CONTENT_LENGTH = 5 * 1024 * 1024  # 5MB
 
 CORES_IMPORTACAO = [
     "#0074D9",  # Azul - manual
@@ -36,13 +29,31 @@ CORES_IMPORTACAO = [
     "#FF4136",  # Vermelho
 ]
 
+# --- Funções Auxiliares ---
+def extensao_permitida(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def arquivo_seguro(file):
+    if file.filename == '':
+        return False
+    if not extensao_permitida(file.filename):
+        return False
+    return True
+
+def normalizar(texto):
+    import unicodedata
+    if not texto:
+        return ''
+    return ''.join(
+        c for c in unicodedata.normalize('NFKD', texto.lower()) 
+        if not unicodedata.combining(c)
+    ).strip()
+
 def cor_por_tipo(tipo):
-    if tipo == "delnext":
-        return CORES_IMPORTACAO[1]
-    elif tipo == "paack":
-        return CORES_IMPORTACAO[2]
-    else:
-        return CORES_IMPORTACAO[0]
+    return {
+        "delnext": CORES_IMPORTACAO[1],
+        "paack": CORES_IMPORTACAO[2]
+    }.get(tipo, CORES_IMPORTACAO[0])
 
 def registro_unico(lista, novo):
     return not any(
@@ -52,9 +63,15 @@ def registro_unico(lista, novo):
         for item in lista
     )
 
+@lru_cache(maxsize=1000)
+def valida_rua_google_cache(endereco, cep):
+    chave = hashlib.md5(f"{endereco}{cep}".encode()).hexdigest()
+    return valida_rua_google(endereco, cep)
+
+# --- Rotas ---
 @main_routes.route('/', methods=['GET'])
 def home():
-    session.clear()  # Limpa toda a sessão para sempre começar limpo
+    session.clear()
     return render_template("home.html")
 
 @main_routes.route('/preview', methods=['POST'])
@@ -73,6 +90,7 @@ def preview():
         regex_cep = re.compile(r'(\d{4}-\d{3})')
         linhas = [linha.strip() for linha in enderecos_brutos.split('\n') if linha.strip()]
         lista_preview = []
+        
         i = 0
         while i < len(linhas) - 2:
             linha = linhas[i]
@@ -81,11 +99,14 @@ def preview():
                 if i + 2 < len(linhas) and linhas[i+2] == linha:
                     numero_pacote = linhas[i+3] if (i+3) < len(linhas) else ""
                     cep = cep_match.group(1)
-                    res_google = valida_rua_google(linha, cep)
+                    res_google = valida_rua_google_cache(linha, cep)
+                    
                     rua_digitada = linha.split(',')[0] if linha else ''
                     rua_google = res_google.get('route_encontrada', '')
-                    rua_bate = normalizar(rua_digitada) in normalizar(rua_google) or normalizar(rua_google) in normalizar(rua_digitada)
+                    rua_bate = (normalizar(rua_digitada) in normalizar(rua_google) or 
+                              normalizar(rua_google) in normalizar(rua_digitada))
                     cep_ok = cep == res_google.get('postal_code_encontrado', '')
+                    
                     lista_preview.append({
                         "order_number": numero_pacote,
                         "address": linha,
@@ -113,20 +134,19 @@ def preview():
             if registro_unico(lista_atual, novo):
                 lista_atual.append(novo)
 
-        origens = list({item.get('importacao_tipo', 'manual') for item in lista_atual})
-
+        # Atualizar números de ordem
         for i, item in enumerate(lista_atual, 1):
             item['order_number'] = i
 
         session['lista'] = lista_atual
         session.modified = True
-        google_api_key = os.environ.get("GOOGLE_API_KEY", "")
+        
         return render_template(
             "preview.html",
             lista=lista_atual,
-            GOOGLE_API_KEY=google_api_key,
+            GOOGLE_API_KEY=os.environ.get("GOOGLE_API_KEY", ""),
             CORES_IMPORTACAO=CORES_IMPORTACAO,
-            origens=origens
+            origens=list({item.get('importacao_tipo', 'manual') for item in lista_atual})
         )
     except Exception as e:
         logger.error(f"Erro no preview: {str(e)}", exc_info=True)
@@ -135,141 +155,143 @@ def preview():
 @main_routes.route('/import_planilha', methods=['POST'])
 def import_planilha():
     try:
-        logger.info(f"Iniciando importação para empresa: {request.form.get('empresa')}")
+        if request.content_length > MAX_CONTENT_LENGTH:
+            return jsonify({"success": False, "msg": "Arquivo muito grande (máx. 5MB)"}), 400
+
         file = request.files.get('planilha')
         empresa = request.form.get('empresa', '').lower()
         
         if not file or not empresa:
             return jsonify({"success": False, "msg": "Arquivo ou empresa não especificados"}), 400
             
-        if not extensao_permitida(file.filename):
-            return jsonify({"success": False, "msg": "Tipo de arquivo não permitido"}), 400
+        if not arquivo_seguro(file):
+            return jsonify({"success": False, "msg": "Tipo de arquivo não permitido ou inválido"}), 400
 
         lista_atual = session.get('lista', [])
 
-        if empresa == "delnext":
-            file.seek(0)
-            if file.filename.lower().endswith('.csv'):
-                df = pd.read_csv(file, header=1)
-            else:
-                df = pd.read_excel(file, header=1)
-            col_end = [c for c in df.columns if 'morada' in c.lower() or 'endereco' in c.lower()]
-            col_cep = [c for c in df.columns if 'codigo postal' in c.lower() or 'cod postal' in c.lower() or 'cep' in c.lower() or 'postal' in c.lower()]
-            if not col_end or not col_cep:
-                return jsonify({"success": False, "msg": "A planilha da Delnext deve conter as colunas 'Morada' e 'Código Postal'!"}), 400
-            enderecos = df[col_end[0]].astype(str).tolist()
-            ceps = df[col_cep[0]].astype(str).tolist()
-            order_numbers = [str(i+1+len(lista_atual)) for i in range(len(enderecos))]
-            tipo_import = "delnext"
-
-        elif empresa == "paack":
-            file.seek(0)
-            if file.filename.lower().endswith('.csv') or file.filename.lower().endswith('.txt'):
-                conteudo = file.read().decode("utf-8")
-                linhas = conteudo.splitlines()
-                regex_cep = re.compile(r'(\d{4}-\d{3})')
-                enderecos, ceps, order_numbers = [], [], []
-                i = 0
-                while i < len(linhas) - 3:
-                    endereco_linha = linhas[i].strip()
-                    if linhas[i+2].strip() == endereco_linha:
-                        order_number = linhas[i+3].strip()
-                        cep_match = regex_cep.search(endereco_linha)
-                        cep = cep_match.group(1) if cep_match else ""
-                        enderecos.append(endereco_linha)
-                        ceps.append(cep)
-                        order_numbers.append(order_number)
-                        i += 4
-                    else:
-                        i += 1
-                tipo_import = "paack"
-            else:
-                df = pd.read_excel(file, header=0)
-                col_end = [c for c in df.columns if 'endereco' in c.lower() or 'address' in c.lower()]
-                col_cep = [c for c in df.columns if 'cep' in c.lower() or 'postal' in c.lower()]
+        try:
+            if empresa == "delnext":
+                file.seek(0)
+                if file.filename.lower().endswith('.csv'):
+                    df = pd.read_csv(file, header=1)
+                else:
+                    df = pd.read_excel(file, header=1)
+                
+                col_end = next((c for c in df.columns if 'morada' in c.lower() or 'endereco' in c.lower()), None)
+                col_cep = next((c for c in df.columns if 'codigo postal' in c.lower() or 'cep' in c.lower()), None)
+                
                 if not col_end or not col_cep:
-                    return jsonify({"success": False, "msg": "A planilha deve conter colunas de endereço e CEP!"}), 400
-                enderecos = df[col_end[0]].astype(str).tolist()
-                ceps = df[col_cep[0]].astype(str).tolist()
-                order_numbers = [str(i+1+len(lista_atual)) for i in range(len(enderecos))]
-                tipo_import = "paack"
-        else:
-            return jsonify({"success": False, "msg": "Empresa não suportada para importação!"}), 400
+                    return jsonify({"success": False, "msg": "Colunas 'Morada' e 'Código Postal' não encontradas"}), 400
+                
+                enderecos = df[col_end].astype(str).tolist()
+                ceps = df[col_cep].astype(str).tolist()
+                tipo_import = "delnext"
 
-        for endereco, cep, order_number in zip(enderecos, ceps, order_numbers):
-            res_google = valida_rua_google(endereco, cep)
-            rua_digitada = endereco.split(',')[0] if endereco else ''
-            rua_google = res_google.get('route_encontrada', '')
-            rua_bate = normalizar(rua_digitada) in normalizar(rua_google) or normalizar(rua_google) in normalizar(rua_digitada)
-            cep_ok = cep == res_google.get('postal_code_encontrado', '')
-            novo = {
-                "order_number": order_number,
-                "address": endereco,
-                "cep": cep,
-                "status_google": res_google.get('status'),
-                "postal_code_encontrado": res_google.get('postal_code_encontrado', ''),
-                "endereco_formatado": res_google.get('endereco_formatado', ''),
-                "latitude": res_google.get('coordenadas', {}).get('lat', ''),
-                "longitude": res_google.get('coordenadas', {}).get('lng', ''),
-                "rua_google": rua_google,
-                "cep_ok": cep_ok,
-                "rua_bate": rua_bate,
-                "freguesia": res_google.get('sublocality', ''),
-                "importacao_tipo": tipo_import,
-                "cor": cor_por_tipo(tipo_import)
-            }
-            if registro_unico(lista_atual, novo):
-                lista_atual.append(novo)
+            elif empresa == "paack":
+                file.seek(0)
+                if file.filename.lower().endswith(('.csv', '.txt')):
+                    conteudo = file.read().decode("utf-8")
+                    linhas = conteudo.splitlines()
+                    regex_cep = re.compile(r'(\d{4}-\d{3})')
+                    enderecos, ceps = [], []
+                    
+                    i = 0
+                    while i < len(linhas) - 3:
+                        endereco_linha = linhas[i].strip()
+                        if linhas[i+2].strip() == endereco_linha:
+                            cep_match = regex_cep.search(endereco_linha)
+                            cep = cep_match.group(1) if cep_match else ""
+                            enderecos.append(endereco_linha)
+                            ceps.append(cep)
+                            i += 4
+                        else:
+                            i += 1
+                    tipo_import = "paack"
+                else:
+                    df = pd.read_excel(file, header=0)
+                    col_end = next((c for c in df.columns if 'endereco' in c.lower()), None)
+                    col_cep = next((c for c in df.columns if 'cep' in c.lower()), None)
+                    
+                    if not col_end or not col_cep:
+                        return jsonify({"success": False, "msg": "Colunas 'Endereço' e 'CEP' não encontradas"}), 400
+                    
+                    enderecos = df[col_end].astype(str).tolist()
+                    ceps = df[col_cep].astype(str).tolist()
+                    tipo_import = "paack"
+            else:
+                return jsonify({"success": False, "msg": "Empresa não suportada"}), 400
 
-        for i, item in enumerate(lista_atual, 1):
-            item['order_number'] = i
+            # Processar endereços com cache
+            for endereco, cep in zip(enderecos, ceps):
+                res_google = valida_rua_google_cache(endereco, cep)
+                
+                rua_digitada = endereco.split(',')[0] if endereco else ''
+                rua_google = res_google.get('route_encontrada', '')
+                rua_bate = (normalizar(rua_digitada) in normalizar(rua_google) or 
+                           normalizar(rua_google) in normalizar(rua_digitada))
+                cep_ok = cep == res_google.get('postal_code_encontrado', '')
+                
+                novo = {
+                    "order_number": str(len(lista_atual) + 1),
+                    "address": endereco,
+                    "cep": cep,
+                    "status_google": res_google.get('status'),
+                    "postal_code_encontrado": res_google.get('postal_code_encontrado', ''),
+                    "latitude": res_google.get('coordenadas', {}).get('lat', ''),
+                    "longitude": res_google.get('coordenadas', {}).get('lng', ''),
+                    "rua_google": rua_google,
+                    "cep_ok": cep_ok,
+                    "rua_bate": rua_bate,
+                    "freguesia": res_google.get('sublocality', ''),
+                    "importacao_tipo": tipo_import,
+                    "cor": cor_por_tipo(tipo_import)
+                }
+                
+                if registro_unico(lista_atual, novo):
+                    lista_atual.append(novo)
 
-        origens = list({item.get('importacao_tipo', 'manual') for item in lista_atual})
-        session['lista'] = lista_atual
-        session.modified = True
-        return jsonify({
-            "success": True,
-            "lista": lista_atual,
-            "origens": origens,
-            "total": len(lista_atual)
-        })
+            # Atualizar números de ordem
+            for i, item in enumerate(lista_atual, 1):
+                item['order_number'] = str(i)
+
+            session['lista'] = lista_atual
+            session.modified = True
+            
+            return jsonify({
+                "success": True,
+                "lista": lista_atual,
+                "origens": list({item.get('importacao_tipo', 'manual') for item in lista_atual}),
+                "total": len(lista_atual)
+            })
+
+        except Exception as e:
+            logger.error(f"Erro ao processar arquivo: {str(e)}", exc_info=True)
+            return jsonify({"success": False, "msg": "Erro ao processar arquivo"}), 500
+
     except Exception as e:
         logger.error(f"Erro na importação: {str(e)}", exc_info=True)
         return jsonify({"success": False, "msg": f"Erro: {str(e)}"}), 500
-
-@main_routes.route('/api/session-data', methods=['GET'])
-def get_session_data():
-    try:
-        return jsonify({
-            "success": True,
-            "lista": session.get('lista', []),
-            "origens": list({item.get("importacao_tipo", "manual") for item in session.get('lista', [])}),
-            "total": len(session.get('lista', []))
-        })
-    except Exception as e:
-        logger.error(f"Erro ao recuperar sessão: {str(e)}", exc_info=True)
-        return jsonify({"success": False, "msg": str(e)}), 500
 
 @main_routes.route('/api/validar-linha', methods=['POST'])
 def validar_linha():
     try:
         data = request.get_json()
-        idx = data.get('idx', -1)
-        endereco = data.get('endereco', '')
-        cep = data.get('cep', '')
-        importacao_tipo = data.get('importacao_tipo', 'manual')
-
-        res_google = valida_rua_google(endereco, cep)
-        rua_digitada = endereco.split(',')[0] if endereco else ''
-        rua_google = res_google.get('route_encontrada', '')
-        rua_bate = normalizar(rua_digitada) in normalizar(rua_google) or normalizar(rua_google) in normalizar(rua_digitada)
-        cep_ok = cep == res_google.get('postal_code_encontrado', '')
+        idx = int(data.get('idx', -1))
+        
         lista_atual = session.get('lista', [])
-        cor = cor_por_tipo(importacao_tipo)
-        novo_item = {
-            "order_number": data.get('numero_pacote', str(len(lista_atual) + 1)),
-            "address": endereco,
-            "cep": cep,
+        if idx < 0 or idx >= len(lista_atual):
+            return jsonify({"success": False, "msg": "Índice inválido"}), 400
+
+        item = lista_atual[idx]
+        res_google = valida_rua_google_cache(item["address"], item["cep"])
+        
+        rua_digitada = item["address"].split(',')[0] if item["address"] else ''
+        rua_google = res_google.get('route_encontrada', '')
+        rua_bate = (normalizar(rua_digitada) in normalizar(rua_google) or 
+                   normalizar(rua_google) in normalizar(rua_digitada)
+        cep_ok = item["cep"] == res_google.get('postal_code_encontrado', '')
+        
+        lista_atual[idx].update({
             "status_google": res_google.get('status'),
             "postal_code_encontrado": res_google.get('postal_code_encontrado', ''),
             "latitude": res_google.get('coordenadas', {}).get('lat', ''),
@@ -277,21 +299,18 @@ def validar_linha():
             "rua_google": rua_google,
             "cep_ok": cep_ok,
             "rua_bate": rua_bate,
-            "freguesia": res_google.get('sublocality', ''),
-            "importacao_tipo": importacao_tipo,
-            "cor": cor
-        }
-        if idx >= 0 and idx < len(lista_atual):
-            lista_atual[idx] = novo_item
-        else:
-            lista_atual.append(novo_item)
+            "freguesia": res_google.get('sublocality', '')
+        })
+        
         session['lista'] = lista_atual
         session.modified = True
+        
         return jsonify({
             "success": True,
-            "item": novo_item,
-            "idx": idx if idx >= 0 else len(lista_atual) - 1
+            "item": lista_atual[idx],
+            "idx": idx
         })
+        
     except Exception as e:
         logger.error(f"Erro na validação de linha: {str(e)}", exc_info=True)
         return jsonify({"success": False, "msg": f"Erro: {str(e)}"}), 500
@@ -302,6 +321,7 @@ def generate():
         global csv_content
         total = int(request.form['total'])
         lista = []
+        
         for i in range(total):
             item = {
                 "order_number": request.form.get(f'numero_pacote_{i}', ''),
@@ -310,7 +330,9 @@ def generate():
                 "importacao_tipo": request.form.get(f'importacao_tipo_{i}', 'manual'),
                 "cor": request.form.get(f'cor_{i}', CORES_IMPORTACAO[0])
             }
-            res_google = valida_rua_google(item["address"], item["cep"])
+            
+            res_google = valida_rua_google_cache(item["address"], item["cep"])
+            
             item.update({
                 "status_google": res_google.get('status'),
                 "postal_code_encontrado": res_google.get('postal_code_encontrado', ''),
@@ -318,37 +340,55 @@ def generate():
                 "longitude": res_google.get('coordenadas', {}).get('lng', ''),
                 "rua_google": res_google.get('route_encontrada', ''),
                 "cep_ok": item["cep"] == res_google.get('postal_code_encontrado', ''),
-                "rua_bate": normalizar(item["address"].split(',')[0]) in normalizar(res_google.get('route_encontrada', '')) if item["address"] else False,
+                "rua_bate": (normalizar(item["address"].split(',')[0]) in 
+                           normalizar(res_google.get('route_encontrada', '')) if item["address"] else False,
                 "freguesia": res_google.get('sublocality', '')
             })
+            
             lista.append(item)
 
+        # Gerar CSV
         output = io.StringIO()
         writer = csv.writer(output)
+        
+        # Cabeçalho
         writer.writerow([
-            "order number", "name", "address", "latitude", "longitude", "duration", "start time",
-            "end time", "phone", "contact", "notes", "color", "Group", "rua_google", "freguesia_google", "status"
+            "order number", "name", "address", "latitude", "longitude", 
+            "duration", "start time", "end time", "phone", "contact", 
+            "notes", "color", "Group", "rua_google", "freguesia_google", "status"
         ])
+        
+        # Dados
         for row in lista:
             status = "Validado"
             if not row["cep_ok"]:
                 status = "CEP divergente"
             elif not row["rua_bate"]:
                 status = "Rua divergente"
+                
             writer.writerow([
-                row["order_number"], "", row["address"], row["latitude"], row["longitude"], "", "", "", "", "",
-                row["postal_code_encontrado"] or row["cep"], row["cor"], "", row["rua_google"],
-                row.get("freguesia", ""), status
+                row["order_number"], "", row["address"], 
+                row["latitude"], row["longitude"], 
+                "", "", "", "", "",
+                row["postal_code_encontrado"] or row["cep"], 
+                row["cor"], "", 
+                row["rua_google"],
+                row.get("freguesia", ""), 
+                status
             ])
+        
         csv_content = output.getvalue()
         return redirect(url_for('main.download'))
+        
     except Exception as e:
         logger.error(f"Erro ao gerar CSV: {str(e)}", exc_info=True)
         return jsonify({"success": False, "msg": f"Erro ao gerar CSV: {str(e)}"}), 500
 
 @main_routes.route('/download')
 def download():
-    global csv_content
+    if not csv_content:
+        return redirect(url_for('main.home'))
+        
     return send_file(
         io.BytesIO(csv_content.encode("utf-8")),
         mimetype='text/csv',
@@ -369,25 +409,41 @@ def reverse_geocode():
 
         api_key = os.environ.get('GOOGLE_API_KEY', '')
         url = "https://maps.googleapis.com/maps/api/geocode/json"
-        params = {'latlng': f"{lat},{lng}", 'key': api_key, 'region': 'pt'}
-        r = requests.get(url, params=params, timeout=(3.05, 7))  # timeout adicionado
-        data = r.json()
+        params = {
+            'latlng': f"{lat},{lng}", 
+            'key': api_key, 
+            'region': 'pt',
+            'language': 'pt-PT'
+        }
+        
+        response = requests.get(url, params=params, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        
         if not data.get('results'):
             return jsonify({'success': False, 'msg': 'Endereço não encontrado'})
-        res = data['results'][0]
-        address = res['formatted_address']
-        postal_code = ''
-        for c in res['address_components']:
-            if 'postal_code' in c['types']:
-                postal_code = c['long_name']
-                break
+            
+        result = data['results'][0]
+        address = result['formatted_address']
+        postal_code = next(
+            (c['long_name'] for c in result['address_components'] 
+            if 'postal_code' in c['types']),
+            ''
+        )
 
-        # Atualiza a sessão
+        # Atualizar sessão
         lista_atual = session.get('lista', [])
         if 0 <= idx < len(lista_atual):
             lista_atual[idx].update({
                 "latitude": lat,
-                "longitude": lng
+                "longitude": lng,
+                "address": address,
+                "cep": postal_code,
+                "status_google": "OK",
+                "postal_code_encontrado": postal_code,
+                "endereco_formatado": address,
+                "cep_ok": True,
+                "rua_bate": True
             })
             session['lista'] = lista_atual
             session.modified = True
@@ -395,8 +451,10 @@ def reverse_geocode():
         return jsonify({
             'success': True,
             'address': address,
-            'cep': postal_code
+            'cep': postal_code,
+            'item': lista_atual[idx] if 0 <= idx < len(lista_atual) else None
         })
+        
     except requests.Timeout:
         return jsonify({'success': False, 'msg': 'Timeout ao conectar com o Google Maps'}), 504
     except Exception as e:
