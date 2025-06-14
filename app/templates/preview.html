@@ -2,56 +2,24 @@
 
 {% block content %}
 <style>
-  #map-top-sticky {
-    position: sticky;
-    top: 0;
-    z-index: 100;
-    background: #f8fafd;
-    box-shadow: 0 4px 18px #0001;
-    border-radius: 0 0 14px 14px;
-  }
-  @media (max-width: 600px) {
-    #map-top-sticky { height: 240px !important; max-height: 45vh; }
-    .table-responsive { overflow-x: auto; }
-    .mobile-hidden { display: none; }
-  }
-  @media (min-width: 601px) {
-    #map-top-sticky { height: 420px !important; max-height: 55vh; }
-  }
+  #map-top-sticky { position: sticky; top: 0; z-index: 100; background: #f8fafd; box-shadow: 0 4px 18px #0001; border-radius: 0 0 14px 14px; }
+  @media (max-width: 600px) { #map-top-sticky { height: 240px !important; max-height: 45vh; } .table-responsive { overflow-x: auto; } .mobile-hidden { display: none; } }
+  @media (min-width: 601px) { #map-top-sticky { height: 420px !important; max-height: 55vh; } }
   .table-responsive { margin-top: 6px; }
-  .filter-badge {
-    display: inline-block;
-    padding: 3px 8px;
-    border-radius: 12px;
-    font-size: 12px;
-    margin-right: 5px;
-    color: white;
-  }
+  .filter-badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 12px; margin-right: 5px; }
   .progress-sm { height: 24px; }
-  .marker-cluster {
-    background-clip: padding-box;
-    border-radius: 20px;
-  }
-  .marker-cluster div {
-    width: 30px;
-    height: 30px;
-    margin-left: 5px;
-    margin-top: 5px;
-    text-align: center;
-    border-radius: 15px;
-    font: 12px "Helvetica Neue", Arial, Helvetica, sans-serif;
-    font-weight: bold;
-  }
-  .marker-cluster span {
-    line-height: 30px;
-  }
+  #carregando-overlay { position:fixed; top:0; left:0; right:0; bottom:0; background:#fff8; z-index:9999; display:none; align-items:center; justify-content:center; }
 </style>
+
+<div id="carregando-overlay">
+  <div class="spinner-border text-primary" role="status"></div>
+  <span class="ms-2">Carregando...</span>
+</div>
 
 <div id="map-top-sticky">
     <div id="map" style="width:100%;height:100%;min-height:220px;"></div>
 </div>
 
-<!-- Filtros e Controles -->
 <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
     <div class="d-flex flex-row gap-2">
         <select id="filtro-origem" class="form-select form-select-sm" onchange="filtrarPorOrigem()">
@@ -62,11 +30,11 @@
         </select>
         <button type="button" class="btn btn-warning btn-sm" onclick="validarTudo()">Validar Tudo</button>
     </div>
-    <form id="form-upload" enctype="multipart/form-data" class="d-flex flex-row gap-2">
+    <form id="form-upload" enctype="multipart/form-data" method="post" action="{{ url_for('main.import_planilha') }}" class="d-flex flex-row gap-2">
         <select name="empresa" class="form-select form-select-sm" style="width:auto;" required>
             <option value="">Empresa</option>
             <option value="delnext">Delnext</option>
-            <option value="paack">Paack</option>
+            <option value="paack">Paack (Padrão)</option>
         </select>
         <input type="file" name="planilha" accept=".xls,.xlsx,.csv" required class="form-control form-control-sm">
         <button type="submit" class="btn btn-secondary btn-sm">Importar</button>
@@ -91,79 +59,25 @@
                 <th style="width:120px;">Ação</th>
             </tr>
         </thead>
-        <tbody id="corpo-tabela">
-            {% for item in lista %}
-            <tr id="linha-{{ loop.index0 }}" class="{% if item.cep_ok %}table-success{% else %}table-danger{% endif %}" data-origem="{{ item.importacao_tipo }}">
-                <td style="font-weight: bold; text-align:center;">{{ item.order_number or loop.index }}</td>
-                <td>
-                    <input type="hidden" name="numero_pacote_{{ loop.index0 }}" value="{{ item.order_number }}">
-                    <input type="hidden" name="importacao_tipo_{{ loop.index0 }}" value="{{ item.importacao_tipo }}">
-                    <input type="hidden" name="cor_{{ loop.index0 }}" value="{{ item.cor }}">
-                    <input type="text" class="form-control" name="endereco_{{ loop.index0 }}" value="{{ item.address }}">
-                </td>
-                <td>
-                    <input type="text" class="form-control" name="cep_{{ loop.index0 }}" value="{{ item.cep }}">
-                </td>
-                <td class="cep-encontrado">{{ item.postal_code_encontrado or '-' }}</td>
-                <td class="status-google text-center mobile-hidden">
-                    {% if item.status_google == 'OK' %}
-                        <span class="text-success">OK</span>
-                        {% if not item.rua_bate %}
-                            <span title="Rua diferente do Google!">⚠️</span>
-                        {% endif %}
-                    {% else %}
-                        <span class="text-danger">{{ item.status_google or 'NÃO ENCONTRADO' }}</span>
-                    {% endif %}
-                </td>
-                <td class="mobile-hidden">
-                    <span class="filter-badge" style="background-color:{{ item.cor }};">
-                        {{ item.importacao_tipo|capitalize }}
-                    </span>
-                </td>
-                <td class="text-center">
-                    <button type="button" onclick="validarLinha({{ loop.index0 }})" class="btn btn-warning btn-sm w-100 mb-1">Validar</button>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
+        <tbody id="corpo-tabela"></tbody>
     </table>
     <div class="d-flex justify-content-between my-2">
         <button type="button" class="btn btn-primary" onclick="adicionarEnderecoManual()">+ Adicionar endereço</button>
         <button id="btn-csv" type="submit" name="finalizar" value="1" class="btn btn-success">Gerar CSV para MyWay</button>
     </div>
-    <input type="hidden" name="total" id="total-linhas" value="{{ lista|length }}">
+    <input type="hidden" name="total" id="total-linhas" value="0">
 </form>
-</div>
-
-<!-- Modal de Carregamento -->
-<div class="modal fade" id="loadingModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-body text-center py-4">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">Carregando...</span>
-                </div>
-                <p class="mt-2 mb-0">Processando dados, por favor aguarde...</p>
-            </div>
-        </div>
-    </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
 <script>
-// Configurações globais
-let map;
-let markers = [];
-let markerCluster;
-let enderecosData = {{ lista|tojson|safe }};
-const GOOGLE_API_KEY = "{{ GOOGLE_API_KEY }}";
+let enderecosData = {{ lista|tojson }};
+let map, markers = [], markerCluster = null;
 
-// Funções de utilidade
-function mostrarCarregamento(mostrar) {
-    const modal = new bootstrap.Modal(document.getElementById('loadingModal'));
-    mostrar ? modal.show() : modal.hide();
+function mostrarCarregamento(on) {
+    document.getElementById('carregando-overlay').style.display = on ? 'flex' : 'none';
 }
 
 function makeSvgPin(numero, corHex) {
@@ -176,437 +90,181 @@ function makeSvgPin(numero, corHex) {
     return "data:image/svg+xml;base64," + btoa(svg);
 }
 
-// Funções do Mapa
-function limparTodosMarcadores() {
-    markers.forEach(marker => marker && marker.setMap(null));
-    markers = [];
-    if (markerCluster) {
-        markerCluster.clearMarkers();
-    }
-}
-
 function criarMarker(idx, data) {
+    if (markers[idx]) {
+        markers[idx].setMap(null);
+        if (markerCluster) markerCluster.removeMarker(markers[idx]);
+    }
     if (!data.latitude || !data.longitude || isNaN(data.latitude) || isNaN(data.longitude)) return null;
-    
-    const position = { 
-        lat: parseFloat(data.latitude), 
-        lng: parseFloat(data.longitude) 
-    };
-    
-    const pinUrl = makeSvgPin(data.order_number || (idx + 1), data.cor || '#0074D9');
-    
-    const marker = new google.maps.Marker({
+    const position = {lat: parseFloat(data.latitude), lng: parseFloat(data.longitude)};
+    const pinUrl = makeSvgPin(data.numero_pacote || data.order_number || (idx+1), data.cor || "#0074D9");
+
+    let marker = new google.maps.Marker({
         position: position,
         map: map,
-        title: `${data.order_number || (idx + 1)} - ${data.address}`,
-        icon: {
-            url: pinUrl,
-            scaledSize: new google.maps.Size(22, 27)
-        },
-        draggable: true,
-        visible: !document.getElementById('filtro-origem').value || 
+        title: `${data.numero_pacote || data.order_number || (idx+1)} - ${data.address}`,
+        icon: { url: pinUrl, scaledSize: new google.maps.Size(22, 27) },
+        draggable: false,
+        visible: !document.getElementById('filtro-origem').value ||
                  document.getElementById('filtro-origem').value === data.importacao_tipo
     });
-
-    marker.addListener('dragend', function() {
-        const newPos = marker.getPosition();
-        atualizarCoordenadasLinha(idx, newPos.lat(), newPos.lng());
-    });
-
     markers[idx] = marker;
-    if (markerCluster) {
-        markerCluster.addMarker(marker);
-    }
-    
+    if (markerCluster) markerCluster.addMarker(marker);
     return marker;
 }
 
-function atualizarCoordenadasLinha(idx, lat, lng) {
-    fetch("{{ url_for('main.reverse_geocode') }}", {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            idx: idx,
-            lat: lat,
-            lng: lng
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            const linha = document.getElementById(`linha-${idx}`);
-            if (linha) {
-                linha.querySelector(`input[name="endereco_${idx}"]`).value = data.address;
-                if (data.cep) {
-                    linha.querySelector(`input[name="cep_${idx}"]`).value = data.cep;
-                }
-                // Dispara validação automática
-                validarLinha(idx);
-            }
-        }
-    });
-}
-
-function initMap() {
-    limparTodosMarcadores();
-    
-    const coordenadasValidas = enderecosData.filter(e => 
-        e.latitude && e.longitude && !isNaN(e.latitude) && !isNaN(e.longitude)
-    );
-
-    if (coordenadasValidas.length === 0) {
-        document.getElementById('map').innerHTML = `
-            <div class="alert alert-warning m-2">
-                Nenhuma coordenada válida para exibir. Importe dados ou adicione endereços.
-            </div>`;
-        return;
-    }
-
-    // Centraliza no primeiro ponto válido
-    const primeiroPonto = coordenadasValidas[0];
-    map = new google.maps.Map(document.getElementById('map'), {
-        zoom: 14,
-        center: {
-            lat: parseFloat(primeiroPonto.latitude),
-            lng: parseFloat(primeiroPonto.longitude)
-        }
-    });
-
-    // Configuração do cluster de marcadores
-    markerCluster = new markerClusterer.MarkerClusterer({
-        map,
-        markers: [],
-        styles: [{
-            textColor: 'white',
-            url: 'https://developers.google.com/maps/documentation/javascript/examples/markerclusterer/m1.png',
-            height: 50,
-            width: 50
-        }]
-    });
-
-    // Adiciona todos os marcadores válidos
-    coordenadasValidas.forEach(e => criarMarker(e.idx || enderecosData.indexOf(e), e));
-
-    // Ajusta o zoom para mostrar todos os marcadores
-    const bounds = new google.maps.LatLngBounds();
-    coordenadasValidas.forEach(e => {
-        bounds.extend({
-            lat: parseFloat(e.latitude),
-            lng: parseFloat(e.longitude)
-        });
-    });
-    
-    if (!bounds.isEmpty()) {
-        map.fitBounds(bounds);
-        // Limites de zoom
-        if (map.getZoom() > 18) map.setZoom(18);
-        if (map.getZoom() < 10) map.setZoom(12);
-    }
-}
-
-// Funções da Tabela
-function filtrarPorOrigem() {
-    const origem = document.getElementById('filtro-origem').value;
-    const linhas = document.querySelectorAll('#corpo-tabela tr');
-    
-    linhas.forEach(linha => {
-        if (linha.id.startsWith('linha-')) {
-            const deveMostrar = !origem || linha.dataset.origem === origem;
-            linha.style.display = deveMostrar ? '' : 'none';
-            
-            // Atualiza visibilidade do marcador correspondente
-            const idx = parseInt(linha.id.split('-')[1]);
-            if (markers[idx]) {
-                markers[idx].setVisible(deveMostrar);
-            }
-        }
-    });
-    
-    if (markerCluster) {
-        markerCluster.repaint();
-    }
-}
-
-function atualizarLinhaTabela(idx, data) {
-    const linha = document.getElementById(`linha-${idx}`);
-    if (!linha) return;
-
-    // Atualiza campos básicos
-    linha.querySelector(`input[name="endereco_${idx}"]`).value = data.address;
-    linha.querySelector(`input[name="cep_${idx}"]`).value = data.cep;
-    linha.querySelector('.cep-encontrado').textContent = data.postal_code_encontrado || '-';
-
-    // Atualiza status
-    const statusCell = linha.querySelector('.status-google');
-    if (statusCell) {
-        if (data.status_google === 'OK') {
-            statusCell.innerHTML = '<span class="text-success">OK</span>' + 
-                (data.rua_bate ? '' : '<span title="Rua diferente do Google!">⚠️</span>');
-        } else {
-            statusCell.innerHTML = `<span class="text-danger">${data.status_google || 'NÃO ENCONTRADO'}</span>`;
-        }
-    }
-
-    // Atualiza origem e cor
-    const origemCell = linha.querySelector('.filter-badge');
-    if (origemCell) {
-        origemCell.textContent = data.importacao_tipo.charAt(0).toUpperCase() + data.importacao_tipo.slice(1);
-        origemCell.style.backgroundColor = data.cor;
-    }
-
-    // Atualiza classe da linha
-    linha.className = data.cep_ok ? 'table-success' : 'table-danger';
-    linha.dataset.origem = data.importacao_tipo;
-
-    // Atualiza dados ocultos
-    linha.querySelector(`input[name="numero_pacote_${idx}"]`).value = data.order_number;
-    linha.querySelector(`input[name="importacao_tipo_${idx}"]`).value = data.importacao_tipo;
-    linha.querySelector(`input[name="cor_${idx}"]`).value = data.cor;
-}
-
-function validarLinha(idx) {
-    const linha = document.getElementById(`linha-${idx}`);
-    if (!linha) return;
-
-    const endereco = linha.querySelector(`input[name="endereco_${idx}"]`).value;
-    const cep = linha.querySelector(`input[name="cep_${idx}"]`).value;
-    const numero_pacote = linha.querySelector(`input[name="numero_pacote_${idx}"]`).value;
-    const importacao_tipo = linha.querySelector(`input[name="importacao_tipo_${idx}"]`).value;
-
-    mostrarCarregamento(true);
-
-    fetch("{{ url_for('main.validar_linha') }}", {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            idx: idx,
-            endereco: endereco,
-            cep: cep,
-            numero_pacote: numero_pacote,
-            importacao_tipo: importacao_tipo
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Atualiza os dados locais
-            if (enderecosData[idx]) {
-                enderecosData[idx] = {
-                    ...enderecosData[idx],
-                    ...data.item
-                };
-            } else {
-                enderecosData.push(data.item);
-            }
-
-            // Atualiza a tabela
-            atualizarLinhaTabela(data.idx, data.item);
-
-            // Atualiza o marcador no mapa
-            if (markers[data.idx]) {
-                markers[data.idx].setMap(null);
-            }
-            criarMarker(data.idx, data.item);
-
-            // Atualiza contador se for nova linha
-            if (idx === -1) {
-                document.getElementById('total-linhas').value = enderecosData.length;
-            }
-        }
-    })
-    .catch(error => {
-        console.error('Erro ao validar linha:', error);
-        alert('Erro ao validar endereço. Verifique o console para detalhes.');
-    })
-    .finally(() => {
-        mostrarCarregamento(false);
-    });
-}
-
-function validarTudo() {
-    const total = enderecosData.length;
-    if (total === 0) return;
-
-    const progresso = document.getElementById('progresso-validacao');
-    const barra = document.getElementById('progresso-barra');
-    progresso.style.display = '';
-    barra.style.width = '0%';
-    barra.textContent = '0%';
-
-    let concluidos = 0;
-    
-    function processarProximo() {
-        if (concluidos >= total) {
-            barra.style.width = '100%';
-            barra.textContent = '100%';
-            setTimeout(() => progresso.style.display = 'none', 1000);
-            return;
-        }
-        
-        validarLinha(concluidos);
-        concluidos++;
-        const percentual = Math.round((concluidos / total) * 100);
-        barra.style.width = `${percentual}%`;
-        barra.textContent = `${percentual}%`;
-        
-        setTimeout(processarProximo, 500);
-    }
-    
-    processarProximo();
-}
-
-function adicionarEnderecoManual() {
-    const novoIdx = enderecosData.length;
-    const novaLinha = `
-        <tr id="linha-${novoIdx}" class="table-warning" data-origem="manual">
-            <td style="font-weight: bold; text-align:center;">${novoIdx + 1}</td>
+function atualizarTabela() {
+    let corpo = document.getElementById('corpo-tabela');
+    corpo.innerHTML = '';
+    enderecosData.forEach((item, idx) => {
+        let cor = item.cor || "#0074D9";
+        corpo.innerHTML += `
+        <tr id="linha-${idx}" class="${item.cep_ok ? 'table-success' : 'table-danger'}" data-origem="${item.importacao_tipo}">
+            <td style="font-weight: bold; text-align:center;">${item.order_number || idx+1}</td>
             <td>
-                <input type="hidden" name="numero_pacote_${novoIdx}" value="${novoIdx + 1}">
-                <input type="hidden" name="importacao_tipo_${novoIdx}" value="manual">
-                <input type="hidden" name="cor_${novoIdx}" value="#0074D9">
-                <input type="text" class="form-control" name="endereco_${novoIdx}" placeholder="Endereço completo" required>
+                <input type="hidden" name="numero_pacote_${idx}" value="${item.order_number || ''}">
+                <input type="hidden" name="importacao_tipo_${idx}" value="${item.importacao_tipo || ''}">
+                <input type="hidden" name="cor_${idx}" value="${cor}">
+                <input type="text" class="form-control" name="endereco_${idx}" value="${item.address || ''}">
             </td>
-            <td>
-                <input type="text" class="form-control" name="cep_${novoIdx}" placeholder="CEP" required>
-            </td>
-            <td class="cep-encontrado">-</td>
+            <td><input type="text" class="form-control" name="cep_${idx}" value="${item.cep || ''}"></td>
+            <td class="cep-encontrado">${item.postal_code_encontrado || '-'}</td>
             <td class="status-google text-center mobile-hidden">
-                <span class="text-secondary">NÃO VALIDADO</span>
+                ${item.status_google === 'OK'
+                    ? `<span class="text-success">OK</span>${!item.rua_bate ? ' <span title="Rua diferente do Google!">⚠️</span>' : ''}`
+                    : `<span class="text-danger">${item.status_google || 'NÃO ENCONTRADO'}</span>`
+                }
             </td>
             <td class="mobile-hidden">
-                <span class="filter-badge" style="background-color:#0074D9;">
-                    Manual
+                <span class="filter-badge" style="background-color:${cor}; color: white;">
+                    ${item.importacao_tipo ? item.importacao_tipo.charAt(0).toUpperCase() + item.importacao_tipo.slice(1) : 'Manual'}
                 </span>
             </td>
             <td class="text-center">
-                <button type="button" onclick="validarLinha(${novoIdx})" class="btn btn-warning btn-sm w-100 mb-1">Validar</button>
+                <button type="button" onclick="validarLinha(${idx})" class="btn btn-warning btn-sm w-100 mb-1">Validar</button>
             </td>
         </tr>
-    `;
-    
-    document.getElementById('corpo-tabela').insertAdjacentHTML('beforeend', novaLinha);
-    document.getElementById('total-linhas').value = novoIdx + 1;
-    
-    // Adiciona aos dados locais
-    enderecosData.push({
-        idx: novoIdx,
-        order_number: String(novoIdx + 1),
-        address: '',
-        cep: '',
-        status_google: '',
-        postal_code_encontrado: '',
-        latitude: null,
-        longitude: null,
-        cep_ok: false,
-        rua_bate: false,
-        importacao_tipo: 'manual',
-        cor: '#0074D9'
+        `;
     });
+    document.getElementById('total-linhas').value = enderecosData.length;
 }
 
-// Event Listeners
-document.getElementById('form-upload').addEventListener('submit', function(e) {
-    e.preventDefault();
-    mostrarCarregamento(true);
+function atualizarFiltroOrigens(origens) {
+    const select = document.getElementById('filtro-origem');
+    select.innerHTML = `<option value="">Todas as origens</option>` +
+        origens.map(o => `<option value="${o}">${o.charAt(0).toUpperCase() + o.slice(1)}</option>`).join('');
+}
 
-    const formData = new FormData(this);
-    
-    fetch("{{ url_for('main.import_planilha') }}", {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.error) {
-            throw new Error(data.error);
+function atualizarMapa() {
+    if (!enderecosData.length) {
+        document.getElementById('map').innerHTML =
+            '<div class="alert alert-warning">Nenhuma coordenada válida para exibir</div>';
+        return;
+    }
+    let coordenadasValidas = enderecosData.filter(e =>
+        e.latitude && e.longitude && !isNaN(e.latitude) && !isNaN(e.longitude)
+    );
+    map = new google.maps.Map(document.getElementById('map'), {
+        zoom: 12,
+        center: coordenadasValidas.length
+            ? {lat: parseFloat(coordenadasValidas[0].latitude), lng: parseFloat(coordenadasValidas[0].longitude)}
+            : {lat: 41.55, lng: -8.42}
+    });
+    markerCluster = new markerClusterer.MarkerClusterer({ map, markers: [] });
+    markers = [];
+    coordenadasValidas.forEach((e, idx) => criarMarker(idx, e));
+    const bounds = new google.maps.LatLngBounds();
+    coordenadasValidas.forEach(e =>
+        bounds.extend({lat: parseFloat(e.latitude), lng: parseFloat(e.longitude)}));
+    if (!bounds.isEmpty()) map.fitBounds(bounds);
+}
+
+function filtrarPorOrigem() {
+    const origem = document.getElementById('filtro-origem').value;
+    document.querySelectorAll('#corpo-tabela tr').forEach(linha => {
+        linha.style.display = (!origem || linha.dataset.origem === origem) ? '' : 'none';
+    });
+    markers.forEach((marker, idx) => {
+        if (marker) {
+            const deveMostrar = !origem || enderecosData[idx].importacao_tipo === origem;
+            marker.setVisible(deveMostrar);
         }
-        
-        // Atualiza os dados locais
-        enderecosData = data.lista.map((item, idx) => ({
-            idx: idx,
-            ...item
-        }));
+    });
+    if (markerCluster) markerCluster.repaint();
+}
 
-        // Atualiza o seletor de origens
-        const filtroOrigem = document.getElementById('filtro-origem');
-        filtroOrigem.innerHTML = '<option value="">Todas as origens</option>' +
-            data.origens.map(origem => 
-                `<option value="${origem}">${origem.charAt(0).toUpperCase() + origem.slice(1)}</option>`
-            ).join('');
+function atualizarTudoInterface(data) {
+    enderecosData = data.lista;
+    atualizarTabela();
+    atualizarFiltroOrigens(data.origens);
+    atualizarMapa();
+}
 
-        // Atualiza a tabela
-        document.getElementById('corpo-tabela').innerHTML = data.lista.map((item, idx) => `
-            <tr id="linha-${idx}" class="${item.cep_ok ? 'table-success' : 'table-danger'}" data-origem="${item.importacao_tipo}">
-                <td style="font-weight: bold; text-align:center;">${item.order_number || idx + 1}</td>
-                <td>
-                    <input type="hidden" name="numero_pacote_${idx}" value="${item.order_number || idx + 1}">
-                    <input type="hidden" name="importacao_tipo_${idx}" value="${item.importacao_tipo}">
-                    <input type="hidden" name="cor_${idx}" value="${item.cor}">
-                    <input type="text" class="form-control" name="endereco_${idx}" value="${item.address}">
-                </td>
-                <td>
-                    <input type="text" class="form-control" name="cep_${idx}" value="${item.cep}">
-                </td>
-                <td class="cep-encontrado">${item.postal_code_encontrado || '-'}</td>
-                <td class="status-google text-center mobile-hidden">
-                    ${item.status_google === 'OK' ? 
-                        `<span class="text-success">OK</span>${item.rua_bate ? '' : '<span title="Rua diferente do Google!">⚠️</span>'}` : 
-                        `<span class="text-danger">${item.status_google || 'NÃO ENCONTRADO'}</span>`}
-                </td>
-                <td class="mobile-hidden">
-                    <span class="filter-badge" style="background-color:${item.cor};">
-                        ${item.importacao_tipo.charAt(0).toUpperCase() + item.importacao_tipo.slice(1)}
-                    </span>
-                </td>
-                <td class="text-center">
-                    <button type="button" onclick="validarLinha(${idx})" class="btn btn-warning btn-sm w-100 mb-1">Validar</button>
-                </td>
-            </tr>
-        `).join('');
+document.addEventListener('DOMContentLoaded', function() {
+    atualizarTabela();
+    atualizarMapa();
 
-        document.getElementById('total-linhas').value = data.total;
-
-        // Recria o mapa com os novos dados
-        initMap();
-    })
-    .catch(error => {
-        console.error('Erro na importação:', error);
-        alert(`Erro ao importar: ${error.message}`);
-    })
-    .finally(() => {
-        mostrarCarregamento(false);
-        this.reset();
+    // Importação AJAX
+    document.getElementById('form-upload').addEventListener('submit', function(e) {
+        e.preventDefault();
+        mostrarCarregamento(true);
+        fetch(this.action, { method: 'POST', body: new FormData(this) })
+            .then(resp => {
+                if (!resp.ok) throw new Error("Erro na rede.");
+                return resp.json();
+            })
+            .then(data => {
+                if (!data.success) throw new Error(data.msg || "Erro ao importar planilha.");
+                atualizarTudoInterface(data);
+            })
+            .catch(err => alert(err.message))
+            .finally(() => mostrarCarregamento(false));
     });
 });
 
-// Inicialização
-document.addEventListener('DOMContentLoaded', function() {
-    // Carrega o mapa
-    if (typeof google !== 'undefined') {
-        initMap();
-    } else {
-        const script = document.createElement('script');
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_API_KEY}&callback=initMap`;
-        script.async = true;
-        script.defer = true;
-        document.head.appendChild(script);
-    }
+function validarLinha(idx) {
+    mostrarCarregamento(true);
+    const tr = document.getElementById(`linha-${idx}`);
+    const endereco = tr.querySelector(`input[name="endereco_${idx}"]`).value;
+    const cep = tr.querySelector(`input[name="cep_${idx}"]`).value;
+    const numero_pacote = tr.querySelector(`input[name="numero_pacote_${idx}"]`).value;
+    const importacao_tipo = tr.querySelector(`input[name="importacao_tipo_${idx}"]`).value;
 
-    // Atualiza periodicamente os dados da sessão
-    setInterval(() => {
-        fetch("{{ url_for('main.get_session_data') }}")
-        .then(response => response.json())
-        .then(data => {
-            if (data.lista.length !== enderecosData.length) {
-                enderecosData = data.lista;
-                initMap();
-            }
-        });
-    }, 5000);
-});
+    fetch('/api/validar-linha', {
+        method: 'POST',
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            idx, endereco, cep, numero_pacote, importacao_tipo
+        })
+    })
+    .then(resp => resp.json())
+    .then(data => {
+        if (data.success && data.item) {
+            enderecosData[idx] = data.item;
+            atualizarTabela();
+            atualizarMapa();
+        } else {
+            alert(data.msg || "Erro ao validar linha.");
+        }
+    })
+    .finally(() => mostrarCarregamento(false));
+}
+
+function validarTudo() {
+    for (let i = 0; i < enderecosData.length; i++) validarLinha(i);
+}
+
+function adicionarEnderecoManual() {
+    // Implemente sua lógica para adicionar um endereço manualmente
+    alert('Função adicionar manual a implementar!');
+}
+
+// Se quiser sincronizar via AJAX sem reload a cada X segundos:
+// setInterval(() => {
+//   fetch('/api/session-data')
+//      .then(r => r.json()).then(data => atualizarTudoInterface(data));
+// }, 20000);
+
 </script>
+<script async defer src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&callback=atualizarMapa"></script>
 {% endblock %}
