@@ -22,6 +22,9 @@
   .filter-badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 12px; margin-right: 5px; }
   .progress-sm { height: 24px; }
   #feedback-msg { min-height: 26px; }
+  .tooltip-inner { max-width: 300px; }
+  .cursor-move { cursor: move; }
+  .btn-actions { white-space: nowrap; }
 </style>
 
 <div id="map-top-sticky">
@@ -37,7 +40,10 @@
                 <option value="{{ origem }}">{{ origem|capitalize }}</option>
             {% endfor %}
         </select>
-        <button type="button" class="btn btn-warning btn-sm" onclick="validarTudo()">Validar Tudo</button>
+        <button type="button" class="btn btn-warning btn-sm" onclick="validarTudo()" id="btn-validar-tudo">
+            <span class="spinner-border spinner-border-sm d-none" id="spinner-validar"></span>
+            Validar Tudo
+        </button>
     </div>
     <form id="form-upload" enctype="multipart/form-data" method="post" action="{{ url_for('main.import_planilha') }}" class="d-flex flex-row gap-2">
         <select name="empresa" class="form-select form-select-sm" style="width:auto;" required>
@@ -46,7 +52,10 @@
             <option value="paack">Paack (Padrão)</option>
         </select>
         <input type="file" name="planilha" accept=".xls,.xlsx,.csv,.txt" required class="form-control form-control-sm">
-        <button type="submit" class="btn btn-secondary btn-sm">Importar</button>
+        <button type="submit" class="btn btn-secondary btn-sm" id="btn-importar">
+            <span class="spinner-border spinner-border-sm d-none" id="spinner-importar"></span>
+            Importar
+        </button>
     </form>
 </div>
 
@@ -73,22 +82,24 @@
         <tbody id="corpo-tabela">
             {% for item in lista %}
             <tr id="linha-{{ loop.index0 }}" class="{% if item.cep_ok %}table-success{% else %}table-danger{% endif %}" data-origem="{{ item.importacao_tipo }}">
-                <td style="font-weight: bold; text-align:center;">{{ item['order_number'] or loop.index }}</td>
+                <td style="font-weight: bold; text-align:center;">{{ item.order_number or loop.index }}</td>
                 <td>
-                    <input type="hidden" name="numero_pacote_{{ loop.index0 }}" value="{{item['order_number']}}">
-                    <input type="hidden" name="importacao_tipo_{{ loop.index0 }}" value="{{item['importacao_tipo']}}">
-                    <input type="hidden" name="cor_{{ loop.index0 }}" value="{{item['cor']}}">
-                    <input type="text" class="form-control" name="endereco_{{ loop.index0 }}" value="{{item['address']}}">
+                    <input type="hidden" name="numero_pacote_{{ loop.index0 }}" value="{{ item.order_number }}">
+                    <input type="hidden" name="importacao_tipo_{{ loop.index0 }}" value="{{ item.importacao_tipo }}">
+                    <input type="hidden" name="cor_{{ loop.index0 }}" value="{{ item.cor }}">
+                    <input type="text" class="form-control" name="endereco_{{ loop.index0 }}" value="{{ item.address }}" 
+                           data-bs-toggle="tooltip" data-bs-placement="top" 
+                           title="{{ item.endereco_formatado or '' }}">
                 </td>
                 <td>
-                    <input type="text" class="form-control" name="cep_{{ loop.index0 }}" value="{{item['cep']}}">
+                    <input type="text" class="form-control" name="cep_{{ loop.index0 }}" value="{{ item.cep }}">
                 </td>
-                <td class="cep-encontrado">{{ item['postal_code_encontrado'] or '-' }}</td>
+                <td class="cep-encontrado">{{ item.postal_code_encontrado or '-' }}</td>
                 <td class="status-google text-center mobile-hidden">
                     {% if item.status_google == 'OK' %}
                         <span class="text-success">OK</span>
                         {% if not item.rua_bate %}
-                            <span title="Rua diferente do Google!">⚠️</span>
+                            <span data-bs-toggle="tooltip" title="Diferença encontrada: {{ item.rua_google }}">⚠️</span>
                         {% endif %}
                     {% else %}
                         <span class="text-danger">{{ item.status_google or 'NÃO ENCONTRADO' }}</span>
@@ -99,18 +110,24 @@
                         {{ item.importacao_tipo|capitalize }}
                     </span>
                 </td>
-                <td class="text-center">
-                    <button type="button" onclick="validarLinha({{ loop.index0 }})" class="btn btn-warning btn-sm w-100 mb-1">Validar</button>
+                <td class="text-center btn-actions">
+                    <button type="button" onclick="validarLinha({{ loop.index0 }})" class="btn btn-warning btn-sm w-100 mb-1">
+                        Validar
+                    </button>
                 </td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
     <div class="d-flex justify-content-between my-2">
-        <button type="button" class="btn btn-primary" onclick="adicionarEnderecoManual()">+ Adicionar endereço</button>
-        <button id="btn-csv" type="submit" name="finalizar" value="1" class="btn btn-success">Gerar CSV para MyWay</button>
+        <button type="button" class="btn btn-primary" onclick="adicionarEnderecoManual()">
+            + Adicionar endereço
+        </button>
+        <button id="btn-csv" type="submit" name="finalizar" value="1" class="btn btn-success">
+            Gerar CSV para MyWay
+        </button>
     </div>
-    <input type="hidden" name="total" id="total-linhas" value="{{lista|length}}">
+    <input type="hidden" name="total" id="total-linhas" value="{{ lista|length }}">
 </form>
 </div>
 {% endblock %}
@@ -118,17 +135,110 @@
 {% block scripts %}
 <script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
 <script>
+// Variáveis globais
 let map;
 let markers = [];
 let markerCluster;
 let enderecosData = {{ lista | tojson | safe }};
+let arrastandoMarker = null;
+
+// Inicialização
+document.addEventListener('DOMContentLoaded', () => {
+    initMap();
+    initTooltips();
+    setupEventListeners();
+});
+
+function initTooltips() {
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(el => new bootstrap.Tooltip(el));
+}
+
+function setupEventListeners() {
+    // Formulário de upload
+    document.getElementById('form-upload').addEventListener('submit', function(e) {
+        e.preventDefault();
+        mostrarCarregamento(true, 'importar');
+        document.getElementById('feedback-msg').textContent = '';
+
+        fetch(this.action, {
+            method: 'POST',
+            body: new FormData(this)
+        })
+        .then(async response => {
+            if (!response.ok) {
+                const data = await response.json().catch(() => ({}));
+                throw new Error(data.msg || "Erro ao importar arquivo");
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                enderecosData = data.lista;
+                window.location.reload();
+            } else {
+                throw new Error(data.msg || "Erro na importação");
+            }
+        })
+        .catch(err => {
+            document.getElementById('feedback-msg').textContent = err.message;
+        })
+        .finally(() => mostrarCarregamento(false, 'importar'));
+    });
+
+    // Formulário de geração de CSV
+    document.getElementById('form-csv').addEventListener('submit', function(e) {
+        mostrarCarregamento(true, 'gerar');
+    });
+}
+
+// Funções do Mapa
+function initMap() {
+    const coordenadasValidas = enderecosData.filter(e => 
+        e.latitude && e.longitude && !isNaN(e.latitude) && !isNaN(e.longitude)
+    );
+
+    if (coordenadasValidas.length === 0) {
+        document.getElementById('map').innerHTML = 
+            '<div class="alert alert-warning m-2">Nenhuma coordenada válida para exibir</div>';
+        return;
+    }
+
+    map = new google.maps.Map(document.getElementById('map'), {
+        zoom: 12,
+        center: {
+            lat: parseFloat(coordenadasValidas[0].latitude),
+            lng: parseFloat(coordenadasValidas[0].longitude)
+        },
+        gestureHandling: "greedy"
+    });
+
+    markerCluster = new markerClusterer.MarkerClusterer({ map, markers: [] });
+    
+    coordenadasValidas.forEach((e, idx) => {
+        criarMarker(idx, e);
+    });
+
+    const bounds = new google.maps.LatLngBounds();
+    coordenadasValidas.forEach(e => {
+        bounds.extend({
+            lat: parseFloat(e.latitude),
+            lng: parseFloat(e.longitude)
+        });
+    });
+    
+    if (!bounds.isEmpty()) {
+        map.fitBounds(bounds);
+    }
+}
 
 function makeSvgPin(numero, corHex) {
-    let n = String(numero).substring(0, 3);
-    let svg = `<svg width="44" height="54" viewBox="0 0 44 54" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <ellipse cx="22" cy="22" rx="21" ry="21" fill="${corHex}"/>
-      <rect x="18" y="37" width="8" height="13" rx="4" fill="${corHex}"/>
-      <text x="22" y="31" text-anchor="middle" font-size="20" fill="#fff" font-family="Arial" font-weight="bold" alignment-baseline="middle" dominant-baseline="middle">${n}</text>
+    const n = String(numero).substring(0, 3);
+    const svg = `<svg width="44" height="54" viewBox="0 0 44 54" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <ellipse cx="22" cy="22" rx="21" ry="21" fill="${corHex}"/>
+        <rect x="18" y="37" width="8" height="13" rx="4" fill="${corHex}"/>
+        <text x="22" y="31" text-anchor="middle" font-size="20" fill="#fff" font-family="Arial" font-weight="bold" 
+              alignment-baseline="middle" dominant-baseline="middle">${n}</text>
     </svg>`;
     return "data:image/svg+xml;base64," + btoa(svg);
 }
@@ -138,135 +248,347 @@ function criarMarker(idx, data) {
         markers[idx].setMap(null);
         if (markerCluster) markerCluster.removeMarker(markers[idx]);
     }
-    if (!data.latitude || !data.longitude || isNaN(data.latitude) || isNaN(data.longitude)) return null;
-    const position = {lat: parseFloat(data.latitude), lng: parseFloat(data.longitude)};
-    const cor = data.cor || (data.cep_ok ? "#44B100" : "#D82B2B");
-    const pinUrl = makeSvgPin(data.order_number || (idx+1), cor);
 
-    let marker = new google.maps.Marker({
-        position: position,
-        map: map,
-        title: `${data.order_number || (idx+1)} - ${data.address}`,
-        icon: { url: pinUrl, scaledSize: new google.maps.Size(22, 27) },
+    if (!data.latitude || !data.longitude || isNaN(data.latitude) || isNaN(data.longitude)) {
+        return null;
+    }
+
+    const position = {
+        lat: parseFloat(data.latitude),
+        lng: parseFloat(data.longitude)
+    };
+
+    const cor = data.cor || (data.cep_ok ? "#44B100" : "#D82B2B");
+    const pinUrl = makeSvgPin(data.order_number || (idx + 1), cor);
+
+    const marker = new google.maps.Marker({
+        position,
+        map,
+        title: `${data.order_number || (idx + 1)} - ${data.address}`,
+        icon: {
+            url: pinUrl,
+            scaledSize: new google.maps.Size(22, 27)
+        },
         draggable: true,
-        visible: !document.getElementById('filtro-origem').value ||
-                 document.getElementById('filtro-origem').value === data.importacao_tipo
+        visible: !document.getElementById('filtro-origem').value || 
+                document.getElementById('filtro-origem').value === data.importacao_tipo
+    });
+
+    // Evento de arrastar marcador
+    marker.addListener('dragstart', () => {
+        arrastandoMarker = idx;
+    });
+
+    marker.addListener('dragend', (e) => {
+        atualizarCoordenadas(idx, e.latLng.lat(), e.latLng.lng());
+        arrastandoMarker = null;
     });
 
     markers[idx] = marker;
     if (markerCluster) markerCluster.addMarker(marker);
+    
     return marker;
 }
 
+async function atualizarCoordenadas(idx, lat, lng) {
+    try {
+        const response = await fetch('/api/reverse-geocode', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                idx: idx,
+                lat: lat,
+                lng: lng
+            })
+        });
+
+        const data = await response.json();
+        
+        if (data.success) {
+            // Atualizar dados locais
+            enderecosData[idx] = {
+                ...enderecosData[idx],
+                latitude: lat,
+                longitude: lng,
+                address: data.address,
+                cep: data.cep,
+                status_google: "OK",
+                postal_code_encontrado: data.cep,
+                cep_ok: true,
+                rua_bate: true
+            };
+
+            // Atualizar interface
+            document.querySelector(`#linha-${idx} input[name="endereco_${idx}"]`).value = data.address;
+            document.querySelector(`#linha-${idx} input[name="cep_${idx}"]`).value = data.cep;
+            document.querySelector(`#linha-${idx} .cep-encontrado`).textContent = data.cep;
+            document.querySelector(`#linha-${idx} .status-google`).innerHTML = 
+                '<span class="text-success">OK</span>';
+
+            // Atualizar classe da linha
+            const linha = document.getElementById(`linha-${idx}`);
+            linha.classList.remove('table-danger');
+            linha.classList.add('table-success');
+            
+            // Recriar marcador para atualizar cor
+            criarMarker(idx, enderecosData[idx]);
+            
+            // Feedback para o usuário
+            mostrarFeedback("Localização atualizada com sucesso", "success");
+        } else {
+            throw new Error(data.msg || "Erro ao atualizar coordenadas");
+        }
+    } catch (error) {
+        console.error("Erro ao atualizar coordenadas:", error);
+        mostrarFeedback(error.message, "danger");
+        // Reverter posição do marcador
+        if (markers[idx] && enderecosData[idx]) {
+            markers[idx].setPosition({
+                lat: parseFloat(enderecosData[idx].latitude),
+                lng: parseFloat(enderecosData[idx].longitude)
+            });
+        }
+    }
+}
+
+// Funções de Filtro
 function filtrarPorOrigem() {
     const origem = document.getElementById('filtro-origem').value;
     const linhas = document.querySelectorAll('#corpo-tabela tr');
+    
     linhas.forEach(linha => {
         if (linha.id === 'linha-nova') return;
         linha.style.display = (!origem || linha.dataset.origem === origem) ? '' : 'none';
     });
+    
     atualizarMarcadoresVisiveis();
 }
 
 function atualizarMarcadoresVisiveis() {
     const origem = document.getElementById('filtro-origem').value;
+    
     markers.forEach((marker, idx) => {
         if (marker) {
-            const linha = document.getElementById('linha-' + idx);
+            const linha = document.getElementById(`linha-${idx}`);
             if (linha) {
                 const deveMostrar = !origem || linha.dataset.origem === origem;
                 marker.setVisible(deveMostrar);
             }
         }
     });
+    
     if (markerCluster) markerCluster.repaint();
 }
 
-function validarLinha(idx) {
-    // AJAX de validação pode ser implementado aqui
-    alert('Função validarLinha a implementar!');
-}
-
-function validarTudo() {
-    alert('Função validarTudo a implementar!');
-}
-
-function adicionarEnderecoManual() {
-    alert('Função adicionarEnderecoManual a implementar!');
-}
-
-function initMap() {
-    const coordenadasValidas = enderecosData.filter(e =>
-        e.latitude !== null && e.longitude !== null && !isNaN(e.latitude) && !isNaN(e.longitude)
-    );
-    if (coordenadasValidas.length === 0) {
-        document.getElementById('map').innerHTML =
-            '<div class="alert alert-warning">Nenhuma coordenada válida para exibir</div>';
-        return;
-    }
-    map = new google.maps.Map(document.getElementById('map'), {
-        zoom: 12,
-        center: {
-            lat: parseFloat(coordenadasValidas[0].latitude),
-            lng: parseFloat(coordenadasValidas[0].longitude)
-        }
-    });
-    markerCluster = new markerClusterer.MarkerClusterer({ map, markers: [] });
-    coordenadasValidas.forEach((e, idx) => {
-        criarMarker(idx, e);
-    });
-    const bounds = new google.maps.LatLngBounds();
-    coordenadasValidas.forEach(e => {
-        bounds.extend({lat: parseFloat(e.latitude), lng: parseFloat(e.longitude)});
-    });
-    if (!bounds.isEmpty()) map.fitBounds(bounds);
-}
-
-document.getElementById('form-upload').addEventListener('submit', function(e) {
-    e.preventDefault();
-    mostrarCarregamento(true);
-    document.getElementById('feedback-msg').textContent = '';
-
-    fetch(this.action, {
-        method: 'POST',
-        body: new FormData(this)
-    })
-    .then(async response => {
-        if (!response.ok) {
-            let data;
-            try { data = await response.json(); } catch { data = {}; }
-            throw new Error(data.msg || "Erro de rede");
-        }
-        return response.json();
-    })
-    .then(data => {
+// Funções de Validação
+async function validarLinha(idx) {
+    const linha = document.getElementById(`linha-${idx}`);
+    const btnValidar = linha.querySelector('button');
+    const originalText = btnValidar.innerHTML;
+    
+    btnValidar.disabled = true;
+    btnValidar.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Validando...';
+    
+    try {
+        const endereco = document.querySelector(`#linha-${idx} input[name="endereco_${idx}"]`).value;
+        const cep = document.querySelector(`#linha-${idx} input[name="cep_${idx}"]`).value;
+        const importacao_tipo = document.querySelector(`#linha-${idx} input[name="importacao_tipo_${idx}"]`).value;
+        const numero_pacote = document.querySelector(`#linha-${idx} input[name="numero_pacote_${idx}"]`).value;
+        
+        const response = await fetch('/api/validar-linha', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                idx: idx,
+                endereco: endereco,
+                cep: cep,
+                importacao_tipo: importacao_tipo,
+                numero_pacote: numero_pacote
+            })
+        });
+        
+        const data = await response.json();
+        
         if (data.success) {
-            enderecosData = data.lista;
-            atualizarInterface(data);
+            enderecosData[idx] = data.item;
+            atualizarLinhaNaTabela(idx, data.item);
+            criarMarker(idx, data.item);
+            mostrarFeedback("Endereço validado com sucesso", "success");
         } else {
-            throw new Error(data.msg || "Erro na importação");
+            throw new Error(data.msg || "Erro na validação");
         }
-    })
-    .catch(err => {
-        document.getElementById('feedback-msg').textContent = err.message;
-    })
-    .finally(() => mostrarCarregamento(false));
-});
-
-function atualizarInterface(data) {
-    // Atualiza tabela, mapa e filtros (exemplo: recarregue a página)
-    window.location.reload();
-    // Ou pode atualizar manualmente todos os componentes, mas reload resolve para já
+    } catch (error) {
+        console.error("Erro ao validar linha:", error);
+        mostrarFeedback(error.message, "danger");
+    } finally {
+        btnValidar.innerHTML = originalText;
+        btnValidar.disabled = false;
+    }
 }
 
-function mostrarCarregamento(exibir) {
-    // Exemplo simples, personalize conforme seu gosto
-    document.getElementById('feedback-msg').textContent = exibir ? "Processando importação..." : "";
+async function validarTudo() {
+    const btnValidar = document.getElementById('btn-validar-tudo');
+    const progressBar = document.getElementById('progresso-barra');
+    const progressContainer = document.getElementById('progresso-validacao');
+    const originalText = btnValidar.innerHTML;
+    
+    btnValidar.disabled = true;
+    btnValidar.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Validando...';
+    progressContainer.style.display = 'block';
+    mostrarFeedback("Validando todos os endereços...", "info");
+    
+    try {
+        for (let i = 0; i < enderecosData.length; i++) {
+            await validarLinha(i);
+            progressBar.style.width = `${((i + 1) / enderecosData.length) * 100}%`;
+            progressBar.textContent = `${Math.round(((i + 1) / enderecosData.length) * 100)}%`;
+        }
+        
+        mostrarFeedback("Todos os endereços foram validados", "success");
+    } catch (error) {
+        console.error("Erro ao validar tudo:", error);
+        mostrarFeedback(error.message, "danger");
+    } finally {
+        btnValidar.innerHTML = originalText;
+        btnValidar.disabled = false;
+    }
 }
 
-window.addEventListener('DOMContentLoaded', () => {
-    initMap();
-});
+function atualizarLinhaNaTabela(idx, data) {
+    const linha = document.getElementById(`linha-${idx}`);
+    
+    // Atualizar inputs
+    document.querySelector(`#linha-${idx} input[name="endereco_${idx}"]`).value = data.address;
+    document.querySelector(`#linha-${idx} input[name="cep_${idx}"]`).value = data.cep;
+    
+    // Atualizar colunas
+    document.querySelector(`#linha-${idx} .cep-encontrado`).textContent = data.postal_code_encontrado || '-';
+    
+    // Atualizar status
+    const statusCell = document.querySelector(`#linha-${idx} .status-google`);
+    if (data.status_google === 'OK') {
+        statusCell.innerHTML = '<span class="text-success">OK</span>';
+        if (!data.rua_bate) {
+            statusCell.innerHTML += 
+                `<span data-bs-toggle="tooltip" title="Diferença encontrada: ${data.rua_google}">⚠️</span>`;
+        }
+    } else {
+        statusCell.innerHTML = `<span class="text-danger">${data.status_google || 'NÃO ENCONTRADO'}</span>`;
+    }
+    
+    // Atualizar classe da linha
+    linha.classList.remove('table-danger', 'table-success');
+    linha.classList.add(data.cep_ok ? 'table-success' : 'table-danger');
+    
+    // Atualizar tooltips
+    const tooltip = bootstrap.Tooltip.getInstance(
+        document.querySelector(`#linha-${idx} input[name="endereco_${idx}"]`)
+    );
+    if (tooltip) {
+        tooltip.setContent({ '.tooltip-inner': data.endereco_formatado || '' });
+    }
+    
+    // Atualizar tooltip de status se existir
+    const tooltipStatus = bootstrap.Tooltip.getInstance(
+        document.querySelector(`#linha-${idx} .status-google span[data-bs-toggle="tooltip"]`)
+    );
+    if (tooltipStatus && data.rua_google) {
+        tooltipStatus.setContent({ '.tooltip-inner': `Diferença encontrada: ${data.rua_google}` });
+    }
+}
+
+// Funções de CRUD
+function adicionarEnderecoManual() {
+    const novoId = enderecosData.length;
+    const novaLinha = {
+        order_number: novoId + 1,
+        address: '',
+        cep: '',
+        importacao_tipo: 'manual',
+        cor: '#0074D9',
+        status_google: '',
+        postal_code_encontrado: '',
+        cep_ok: false,
+        rua_bate: false
+    };
+    
+    enderecosData.push(novaLinha);
+    document.getElementById('total-linhas').value = enderecosData.length;
+    
+    const tbody = document.getElementById('corpo-tabela');
+    tbody.innerHTML += `
+        <tr id="linha-${novoId}" class="table-danger" data-origem="manual">
+            <td style="font-weight: bold; text-align:center;">${novoId + 1}</td>
+            <td>
+                <input type="hidden" name="numero_pacote_${novoId}" value="${novoId + 1}">
+                <input type="hidden" name="importacao_tipo_${novoId}" value="manual">
+                <input type="hidden" name="cor_${novoId}" value="#0074D9">
+                <input type="text" class="form-control" name="endereco_${novoId}" value="" 
+                       data-bs-toggle="tooltip" data-bs-placement="top" title="">
+            </td>
+            <td>
+                <input type="text" class="form-control" name="cep_${novoId}" value="">
+            </td>
+            <td class="cep-encontrado">-</td>
+            <td class="status-google text-center mobile-hidden">
+                <span class="text-danger">NÃO VALIDADO</span>
+            </td>
+            <td class="mobile-hidden">
+                <span class="filter-badge" style="background-color:#0074D9; color: white;">
+                    Manual
+                </span>
+            </td>
+            <td class="text-center btn-actions">
+                <button type="button" onclick="validarLinha(${novoId})" class="btn btn-warning btn-sm w-100 mb-1">
+                    Validar
+                </button>
+            </td>
+        </tr>
+    `;
+    
+    // Inicializar tooltips
+    initTooltips();
+    
+    // Rolagem para a nova linha
+    document.getElementById(`linha-${novoId}`).scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest'
+    });
+}
+
+// Funções Auxiliares
+function mostrarCarregamento(exibir, tipo) {
+    const feedback = document.getElementById('feedback-msg');
+    const spinner = document.getElementById(`spinner-${tipo}`);
+    const btn = document.getElementById(`btn-${tipo}`);
+    
+    if (exibir) {
+        spinner.classList.remove('d-none');
+        btn.disabled = true;
+        feedback.textContent = tipo === 'importar' ? 
+            "Processando importação..." : "Gerando arquivo CSV...";
+    } else {
+        spinner.classList.add('d-none');
+        btn.disabled = false;
+        feedback.textContent = '';
+    }
+}
+
+function mostrarFeedback(mensagem, tipo) {
+    const feedback = document.getElementById('feedback-msg');
+    feedback.textContent = mensagem;
+    feedback.className = `mb-2 fw-bold text-${tipo}`;
+    
+    if (tipo !== 'info') {
+        setTimeout(() => {
+            feedback.textContent = '';
+        }, 5000);
+    }
+}
 </script>
 <script async defer src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&callback=initMap"></script>
 {% endblock %}
