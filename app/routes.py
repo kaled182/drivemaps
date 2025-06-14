@@ -104,7 +104,7 @@ def preview():
                     rua_digitada = linha.split(',')[0] if linha else ''
                     rua_google = res_google.get('route_encontrada', '')
                     rua_bate = (normalizar(rua_digitada) in normalizar(rua_google) or 
-                              normalizar(rua_google) in normalizar(rua_digitada)
+                              normalizar(rua_google) in normalizar(rua_digitada))
                     cep_ok = cep == res_google.get('postal_code_encontrado', '')
                     
                     lista_preview.append({
@@ -147,6 +147,7 @@ def preview():
             GOOGLE_API_KEY=os.environ.get("GOOGLE_API_KEY", ""),
             CORES_IMPORTACAO=CORES_IMPORTACAO,
             origens=list({item.get('importacao_tipo', 'manual') for item in lista_atual})
+        )
     except Exception as e:
         logger.error(f"Erro no preview: {str(e)}", exc_info=True)
         return jsonify({"success": False, "msg": f"Erro: {str(e)}"}), 500
@@ -171,20 +172,56 @@ def import_planilha():
         try:
             if empresa == "delnext":
                 file.seek(0)
-                if file.filename.lower().endswith('.csv'):
-                    df = pd.read_csv(file, header=1)
+                # Processar arquivo Delnext (Excel ou CSV)
+                if file.filename.lower().endswith(('.xlsx', '.xls')):
+                    df = pd.read_excel(file, header=1)  # Pula a primeira linha de metadados
                 else:
-                    df = pd.read_excel(file, header=1)
+                    df = pd.read_csv(file, header=1, sep=None, engine='python')  # Auto-detecta separador
                 
-                col_end = next((c for c in df.columns if 'morada' in c.lower() or 'endereco' in c.lower()), None)
-                col_cep = next((c for c in df.columns if 'codigo postal' in c.lower() or 'cep' in c.lower()), None)
+                # Encontrar colunas relevantes (case insensitive)
+                col_morada = next((c for c in df.columns if 'morada' in str(c).lower()), None)
+                col_cep = next((c for c in df.columns if 'código postal' in str(c).lower() or 'codigo postal' in str(c).lower()), None)
                 
-                if not col_end or not col_cep:
-                    return jsonify({"success": False, "msg": "Colunas 'Morada' e 'Código Postal' não encontradas"}), 400
+                if not col_morada or not col_cep:
+                    return jsonify({
+                        "success": False,
+                        "msg": "Estrutura inválida. A planilha deve conter colunas de 'Morada' e 'Código Postal'"
+                    }), 400
                 
-                enderecos = df[col_end].astype(str).tolist()
-                ceps = df[col_cep].astype(str).tolist()
-                tipo_import = "delnext"
+                # Processar cada linha
+                for _, row in df.iterrows():
+                    endereco = str(row[col_morada]).strip()
+                    cep = str(row[col_cep]).strip()
+                    
+                    # Formatar CEP (remover espaços, garantir formato 1234-567)
+                    cep = re.sub(r'[^\d-]', '', cep)
+                    if len(cep) == 8 and '-' not in cep:
+                        cep = f"{cep[:4]}-{cep[4:]}"
+                    
+                    # Validar com Google Maps
+                    res_google = valida_rua_google_cache(endereco, cep)
+                    rua_digitada = endereco.split(',')[0] if endereco else ''
+                    rua_google = res_google.get('route_encontrada', '')
+                    
+                    novo = {
+                        "order_number": str(len(lista_atual) + 1),
+                        "address": endereco,
+                        "cep": cep,
+                        "status_google": res_google.get('status'),
+                        "postal_code_encontrado": res_google.get('postal_code_encontrado', ''),
+                        "latitude": res_google.get('coordenadas', {}).get('lat', ''),
+                        "longitude": res_google.get('coordenadas', {}).get('lng', ''),
+                        "rua_google": rua_google,
+                        "cep_ok": cep == res_google.get('postal_code_encontrado', ''),
+                        "rua_bate": normalizar(rua_digitada) in normalizar(rua_google) or 
+                                  normalizar(rua_google) in normalizar(rua_digitada),
+                        "freguesia": res_google.get('sublocality', ''),
+                        "importacao_tipo": "delnext",
+                        "cor": cor_por_tipo("delnext")
+                    }
+                    
+                    if registro_unico(lista_atual, novo):
+                        lista_atual.append(novo)
 
             elif empresa == "paack":
                 file.seek(0)
@@ -220,52 +257,24 @@ def import_planilha():
             else:
                 return jsonify({"success": False, "msg": "Empresa não suportada"}), 400
 
-            # Processar endereços com cache
-            for endereco, cep in zip(enderecos, ceps):
-                res_google = valida_rua_google_cache(endereco, cep)
-                
-                rua_digitada = endereco.split(',')[0] if endereco else ''
-                rua_google = res_google.get('route_encontrada', '')
-                rua_bate = (normalizar(rua_digitada) in normalizar(rua_google) or 
-                           normalizar(rua_google) in normalizar(rua_digitada))
-                cep_ok = cep == res_google.get('postal_code_encontrado', '')
-                
-                novo = {
-                    "order_number": str(len(lista_atual) + 1),
-                    "address": endereco,
-                    "cep": cep,
-                    "status_google": res_google.get('status'),
-                    "postal_code_encontrado": res_google.get('postal_code_encontrado', ''),
-                    "latitude": res_google.get('coordenadas', {}).get('lat', ''),
-                    "longitude": res_google.get('coordenadas', {}).get('lng', ''),
-                    "rua_google": rua_google,
-                    "cep_ok": cep_ok,
-                    "rua_bate": rua_bate,
-                    "freguesia": res_google.get('sublocality', ''),
-                    "importacao_tipo": tipo_import,
-                    "cor": cor_por_tipo(tipo_import)
-                }
-                
-                if registro_unico(lista_atual, novo):
-                    lista_atual.append(novo)
-
-            # Atualizar números de ordem
+            # Atualizar números de ordem sequencial
             for i, item in enumerate(lista_atual, 1):
                 item['order_number'] = str(i)
 
+            origens = list({item.get('importacao_tipo', 'manual') for item in lista_atual})
             session['lista'] = lista_atual
             session.modified = True
             
             return jsonify({
                 "success": True,
                 "lista": lista_atual,
-                "origens": list({item.get('importacao_tipo', 'manual') for item in lista_atual}),
+                "origens": origens,
                 "total": len(lista_atual)
             })
 
         except Exception as e:
             logger.error(f"Erro ao processar arquivo: {str(e)}", exc_info=True)
-            return jsonify({"success": False, "msg": "Erro ao processar arquivo"}), 500
+            return jsonify({"success": False, "msg": f"Erro ao processar arquivo: {str(e)}"}), 500
 
     except Exception as e:
         logger.error(f"Erro na importação: {str(e)}", exc_info=True)
@@ -300,7 +309,7 @@ def validar_linha():
         rua_digitada = item["address"].split(',')[0] if item["address"] else ''
         rua_google = res_google.get('route_encontrada', '')
         rua_bate = (normalizar(rua_digitada) in normalizar(rua_google) or 
-                   normalizar(rua_google) in normalizar(rua_digitada)
+                   normalizar(rua_google) in normalizar(rua_digitada))
         cep_ok = item["cep"] == res_google.get('postal_code_encontrado', '')
         
         lista_atual[idx].update({
