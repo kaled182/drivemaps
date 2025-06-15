@@ -18,8 +18,8 @@ main_routes = Blueprint('main', __name__)
 csv_content = None
 
 # Configurações
-ALLOWED_EXTENSIONS = {'csv', 'xls', 'xlsx', 'txt'}
-MAX_CONTENT_LENGTH = 5 * 1024 * 1024  # 5MB
+EXTENSOES_PERMITIDAS = {'csv', 'xls', 'xlsx', 'txt'}
+TAMANHO_MAXIMO = 5 * 1024 * 1024  # 5MB
 
 CORES_IMPORTACAO = [
     "#0074D9",  # Azul - manual
@@ -31,7 +31,7 @@ CORES_IMPORTACAO = [
 
 # --- Funções Auxiliares ---
 def extensao_permitida(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in EXTENSOES_PERMITIDAS
 
 def arquivo_seguro(file):
     if file.filename == '':
@@ -155,7 +155,7 @@ def preview():
 @main_routes.route('/import_planilha', methods=['POST'])
 def import_planilha():
     try:
-        if request.content_length > MAX_CONTENT_LENGTH:
+        if request.content_length > TAMANHO_MAXIMO:
             return jsonify({"success": False, "msg": "Arquivo muito grande (máx. 5MB)"}), 400
 
         file = request.files.get('planilha')
