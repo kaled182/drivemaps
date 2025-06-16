@@ -1,423 +1,165 @@
-{% extends "base.html" %}
+# Em seu arquivo routes.py
 
-{% block content %}
-<style>
-  #map-top-sticky { 
-    position: sticky; 
-    top: 0; 
-    z-index: 100; 
-    background: #f8fafd; 
-    box-shadow: 0 4px 18px #0001; 
-    border-radius: 0 0 14px 14px; 
-  }
-  @media (max-width: 600px) { 
-    #map-top-sticky { height: 240px !important; max-height: 45vh; } 
-    .table-responsive { overflow-x: auto; }
-    .mobile-hidden { display: none; }
-  }
-  @media (min-width: 601px) { 
-    #map-top-sticky { height: 420px !important; max-height: 55vh; }
-  }
-  .table-responsive { margin-top: 6px; }
-  .filter-badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 12px; margin-right: 5px; }
-  .progress-sm { height: 24px; }
-  #feedback-msg { min-height: 26px; }
-  .tooltip-inner { max-width: 300px; }
-  .cursor-move { cursor: move; }
-  .btn-actions { white-space: nowrap; }
-</style>
+@main_routes.route('/import_planilha', methods=['POST'])
+def import_planilha():
+    try:
+        if request.content_length > TAMANHO_MAXIMO:
+            logger.warning(f"Tentativa de upload de arquivo muito grande: {request.content_length} bytes")
+            return jsonify({"success": False, "msg": "Arquivo muito grande (máx. 5MB)"}), 400
 
-<div id="map-top-sticky">
-    <div id="map" style="width:100%;height:100%;min-height:220px;"></div>
-</div>
+        file = request.files.get('planilha')
+        empresa = request.form.get('empresa', '').lower()
 
-<div class="d-flex flex-wrap justify-content-between gap-2 my-3">
-    <div class="d-flex flex-row gap-2">
-        <select id="filtro-origem" class="form-select form-select-sm" onchange="filtrarPorOrigem()">
-            <option value="">Todas as origens</option>
-            {% for origem in origens %}
-                <option value="{{ origem }}">{{ origem|capitalize }}</option>
-            {% endfor %}
-        </select>
-        <button type="button" class="btn btn-warning btn-sm" onclick="validarTudo()" id="btn-validar-tudo">
-            <span class="spinner-border spinner-border-sm d-none" id="spinner-validar"></span>
-            Validar Tudo
-        </button>
-    </div>
-    <form id="form-upload" enctype="multipart/form-data" method="post" action="{{ url_for('main.import_planilha') }}" class="d-flex flex-row gap-2">
-        <select name="empresa" class="form-select form-select-sm" style="width:auto;" required>
-            <option value="">Empresa</option>
-            <option value="delnext">Delnext</option>
-            <option value="paack">Paack (Padrão)</option>
-        </select>
-        <input type="file" name="planilha" accept=".xls,.xlsx,.csv,.txt" required class="form-control form-control-sm">
-        <button type="submit" class="btn btn-secondary btn-sm" id="btn-importar">
-            <span class="spinner-border spinner-border-sm d-none" id="spinner-importar"></span>
-            Importar
-        </button>
-    </form>
-</div>
+        if not file or not empresa:
+            return jsonify({"success": False, "msg": "Arquivo ou empresa não especificados"}), 400
+        if not arquivo_seguro(file):
+            return jsonify({"success": False, "msg": "Tipo de arquivo não permitido ou inválido"}), 400
 
-<div id="feedback-msg" class="mb-2 text-danger fw-bold"></div>
+        # --- PONTO CHAVE DA CORREÇÃO ---
+        # Filtra a lista atual, mantendo apenas os itens que NÃO são do tipo da empresa que estamos importando.
+        # Isso efetivamente "limpa" os dados antigos daquela origem antes de adicionar os novos.
+        lista_atual = [item for item in session.get('lista', []) if item.get('importacao_tipo') != empresa]
+        logger.info(f"Lista após limpar a origem '{empresa}': {len(lista_atual)} itens.")
 
-<div id="progresso-validacao" class="progress progress-sm mb-3" style="display: none;">
-    <div id="progresso-barra" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%">0%</div>
-</div>
+        novos_itens_importados = []
 
-<div class="table-responsive">
-<form id="form-csv" action="{{ url_for('main.generate') }}" method="post" autocomplete="off">
-    <table class="table table-bordered align-middle" id="tabela-enderecos">
-        <thead class="table-light">
-            <tr>
-                <th style="width:40px;">ID</th>
-                <th>Endereço</th>
-                <th style="width:110px;">CODP</th>
-                <th style="width:110px;">CODP Google</th>
-                <th class="mobile-hidden" style="width:110px;">Status</th>
-                <th class="mobile-hidden" style="width:100px;">Origem</th>
-                <th style="width:120px;">Ação</th>
-            </tr>
-        </thead>
-        <tbody id="corpo-tabela">
-            </tbody>
-    </table>
-    <div class="d-flex justify-content-between my-2">
-        <button type="button" class="btn btn-primary" onclick="adicionarEnderecoManual()">
-            + Adicionar endereço
-        </button>
-        <button id="btn-csv" type="submit" name="finalizar" value="1" class="btn btn-success">
-            Gerar CSV para MyWay
-        </button>
-    </div>
-    <input type="hidden" name="total" id="total-linhas" value="{{ lista|length }}">
-</form>
-</div>
-{% endblock %}
+        # O resto do código da função para ler Delnext e Paack continua igual...
+        # ... (código de leitura do pandas para Delnext)
+        if empresa == "delnext":
+            file.seek(0)
+            filename = file.filename.lower()
+            
+            if filename.endswith(('.xlsx', '.xls')):
+                df = pd.read_excel(file, header=1)
+            elif filename.endswith(('.csv', '.txt')):
+                try:
+                    content = file.read().decode('utf-8')
+                    dialect = csv.Sniffer().sniff(content.splitlines()[0], delimiters=[',', ';'])
+                    file.seek(0)
+                    df = pd.read_csv(io.StringIO(content), header=1, sep=dialect.delimiter)
+                except Exception:
+                    file.seek(0)
+                    df = pd.read_csv(file, header=1, sep=';')
+            else:
+                return jsonify({"success": False, "msg": "Formato Delnext não suportado."}), 400
+            
+            if df.empty:
+                return jsonify({"success": False, "msg": "Planilha Delnext vazia ou em formato inválido."}), 400
 
-{% block scripts %}
-<script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
-<script>
-// =============== VARIÁVEIS GLOBAIS ===============
-let map;
-let markers = [];
-let markerCluster;
-let enderecosData = {{ lista | tojson | safe }};
+            df.columns = df.columns.astype(str)
+            col_morada = next((c for c in df.columns if 'morada' in c.lower()), None)
+            col_cep = next((c for c in df.columns if 'código postal' in c.lower() or 'codigo postal' in c.lower()), None)
+            
+            if not col_morada or not col_cep:
+                return jsonify({"success": False, "msg": "Colunas 'Morada' ou 'Código Postal' não encontradas no arquivo Delnext."}), 400
 
-// =============== INICIALIZAÇÃO ===============
-document.addEventListener('DOMContentLoaded', () => {
-    rebuildTableAndMap(); // Constrói a tabela inicial e o mapa
-    initTooltips();
-    setupEventListeners();
-});
+            for index, row in df.iterrows():
+                endereco = str(row[col_morada]).strip()
+                cep = str(row[col_cep]).strip()
+                
+                if not endereco or not cep: continue
+                    
+                cep = re.sub(r'[^\d-]', '', cep)
+                if len(cep) == 7 and '-' not in cep: cep = f"{cep[:4]}-{cep[4:]}"
+                if len(cep) == 8 and '-' not in cep: cep = f"{cep[:4]}-{cep[4:]}"
 
-function setupEventListeners() {
-    // 1. OUVINTE PARA IMPORTAÇÃO DE ARQUIVO
-    const formUpload = document.getElementById('form-upload');
-    formUpload.addEventListener('submit', function(e) {
-        e.preventDefault();
-        mostrarCarregamento(true, 'importar');
+                res_google = valida_rua_google_cache(endereco, cep)
+                rua_digitada = endereco.split(',')[0]
+                rua_google = res_google.get('route_encontrada', '')
+                
+                novo = {
+                    "order_number": "", "address": endereco, "cep": cep,
+                    "status_google": res_google.get('status'),
+                    "postal_code_encontrado": res_google.get('postal_code_encontrado', ''),
+                    "endereco_formatado": res_google.get('endereco_formatado', ''),
+                    "latitude": res_google.get('coordenadas', {}).get('lat', ''),
+                    "longitude": res_google.get('coordenadas', {}).get('lng', ''),
+                    "rua_google": rua_google,
+                    "cep_ok": cep == res_google.get('postal_code_encontrado', ''),
+                    "rua_bate": (normalizar(rua_digitada) in normalizar(rua_google) or normalizar(rua_google) in normalizar(rua_digitada)),
+                    "freguesia": res_google.get('sublocality', ''),
+                    "importacao_tipo": "delnext", "cor": cor_por_tipo("delnext")
+                }
+                if registro_unico(lista_atual + novos_itens_importados, novo):
+                    novos_itens_importados.append(novo)
+
+        # ... (código de leitura do pandas para Paack)
+        elif empresa == "paack":
+            file.seek(0)
+            df = pd.read_excel(file, header=0) # Assumindo header na primeira linha para Paack
+            df.columns = df.columns.astype(str)
+            col_end = next((c for c in df.columns if 'endereco' in c.lower()), None)
+            col_cep = next((c for c in df.columns if 'cep' in c.lower()), None)
+
+            if not col_end or not col_cep:
+                return jsonify({"success": False, "msg": "Colunas 'Endereco' ou 'CEP' não encontradas no arquivo Paack."}), 400
+
+            for index, row in df.iterrows():
+                endereco = str(row[col_end]).strip()
+                cep = str(row[col_cep]).strip()
+                if not endereco or not cep: continue
+
+                cep = re.sub(r'[^\d-]', '', cep)
+                if len(cep) == 7 and '-' not in cep: cep = f"{cep[:4]}-{cep[4:]}"
+
+                res_google = valida_rua_google_cache(endereco, cep)
+                rua_digitada = endereco.split(',')[0]
+                rua_google = res_google.get('route_encontrada', '')
+                
+                novo = {
+                    "order_number": "", "address": endereco, "cep": cep,
+                    "status_google": res_google.get('status'),
+                    "postal_code_encontrado": res_google.get('postal_code_encontrado', ''),
+                    "endereco_formatado": res_google.get('endereco_formatado', ''),
+                    "latitude": res_google.get('coordenadas', {}).get('lat', ''),
+                    "longitude": res_google.get('coordenadas', {}).get('lng', ''),
+                    "rua_google": rua_google,
+                    "cep_ok": cep == res_google.get('postal_code_encontrado', ''),
+                    "rua_bate": (normalizar(rua_digitada) in normalizar(rua_google) or normalizar(rua_google) in normalizar(rua_digitada)),
+                    "freguesia": res_google.get('sublocality', ''),
+                    "importacao_tipo": "paack", "cor": cor_por_tipo("paack")
+                }
+                if registro_unico(lista_atual + novos_itens_importados, novo):
+                    novos_itens_importados.append(novo)
+        else:
+            return jsonify({"success": False, "msg": "Empresa não suportada"}), 400
         
-        fetch(this.action, {
-            method: 'POST',
-            body: new FormData(this)
-        })
-        .then(response => response.ok ? response.json() : Promise.reject(response))
-        .then(data => {
-            if (data.success) {
-                enderecosData = data.lista;
-                rebuildTableAndMap();
-                mostrarFeedback("Planilha importada com sucesso!", "success");
-            } else {
-                throw new Error(data.msg || "Erro na importação");
-            }
-        })
-        .catch(async err => {
-            try {
-                const errorData = await err.json();
-                mostrarFeedback(errorData.msg || "Erro de servidor.", "danger");
-            } catch {
-                mostrarFeedback("Erro de comunicação ao importar.", "danger");
-            }
-        })
-        .finally(() => mostrarCarregamento(false, 'importar'));
-    });
+        # O resto do código para reatribuir order_numbers continua igual...
+        lista_atual.extend(novos_itens_importados)
 
-    // 2. OUVINTE PARA GERAÇÃO DE CSV
-    document.getElementById('form-csv').addEventListener('submit', () => mostrarCarregamento(true, 'gerar'));
+        manual_counter = 0; delnext_counter = 0; paack_counter = 0
+        for item in lista_atual:
+            order_num_str = str(item.get('order_number', ''))
+            try:
+                if item.get('importacao_tipo') == 'manual' and order_num_str.isdigit():
+                    manual_counter = max(manual_counter, int(order_num_str))
+                elif item.get('importacao_tipo') == 'delnext' and order_num_str.startswith('D') and order_num_str[1:].isdigit():
+                    delnext_counter = max(delnext_counter, int(order_num_str[1:]))
+                elif item.get('importacao_tipo') == 'paack' and order_num_str.startswith('P') and order_num_str[1:].isdigit():
+                    paack_counter = max(paack_counter, int(order_num_str[1:]))
+            except (ValueError, TypeError): pass
+        
+        for item in lista_atual:
+            needs_reindex = not item.get('order_number')
+            if not needs_reindex:
+                if item.get('importacao_tipo') == 'manual' and not str(item.get('order_number')).isdigit(): needs_reindex = True
+                elif item.get('importacao_tipo') == 'delnext' and not str(item.get('order_number')).startswith('D'): needs_reindex = True
+                elif item.get('importacao_tipo') == 'paack' and not str(item.get('order_number')).startswith('P'): needs_reindex = True
+            
+            if needs_reindex:
+                if item.get('importacao_tipo') == 'manual':
+                    manual_counter += 1; item['order_number'] = str(manual_counter)
+                elif item.get('importacao_tipo') == 'delnext':
+                    delnext_counter += 1; item['order_number'] = f"D{delnext_counter}"
+                elif item.get('importacao_tipo') == 'paack':
+                    paack_counter += 1; item['order_number'] = f"P{paack_counter}"
+        
+        session['lista'] = lista_atual
+        session.modified = True
+        logger.info(f"Importação concluída. Total de itens na sessão: {len(lista_atual)}.")
+        
+        return jsonify({ "success": True, "lista": lista_atual })
 
-    // 3. DELEGAÇÃO DE EVENTOS PARA BOTÕES "VALIDAR"
-    const tableBody = document.getElementById('corpo-tabela');
-    tableBody.addEventListener('click', function(e) {
-        const targetButton = e.target.closest('.btn-validar');
-        if (targetButton) {
-            e.preventDefault();
-            const idx = targetButton.dataset.idx;
-            validarLinha(parseInt(idx, 10));
-        }
-    });
-}
-
-// =============== FUNÇÕES DE MANIPULAÇÃO DA TABELA E MAPA ===============
-
-function rebuildTableAndMap() {
-    rebuildTable();
-    rebuildMap();
-    initTooltips();
-}
-
-function rebuildTable() {
-    const tbody = document.getElementById('corpo-tabela');
-    tbody.innerHTML = '';
-    enderecosData.forEach((item, idx) => appendRowToTable(item, idx));
-    document.getElementById('total-linhas').value = enderecosData.length;
-}
-
-function appendRowToTable(item, idx) {
-    const tbody = document.getElementById('corpo-tabela');
-    const statusClass = item.status_google === 'NÃO VALIDADO' ? 'table-warning' : (item.cep_ok ? 'table-success' : 'table-danger');
-    const statusGoogleHtml = item.status_google === 'OK' ?
-        `<span class="text-success">OK</span>${!item.rua_bate ? ` <span data-bs-toggle="tooltip" title="Diferença: ${item.rua_google || ''}">⚠️</span>` : ''}` :
-        `<span class="text-danger">${item.status_google || 'NÃO ENCONTRADO'}</span>`;
-
-    const newRow = document.createElement('tr');
-    newRow.id = `linha-${idx}`;
-    newRow.className = statusClass;
-    newRow.dataset.origem = item.importacao_tipo;
-
-    newRow.innerHTML = `
-        <td style="font-weight: bold; text-align:center;">${item.order_number}</td>
-        <td>
-            <input type="text" class="form-control" name="endereco_${idx}" value="${item.address}"
-                   data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="${item.endereco_formatado || 'N/A'}">
-        </td>
-        <td><input type="text" class="form-control" name="cep_${idx}" value="${item.cep}"></td>
-        <td class="cep-encontrado">${item.postal_code_encontrado || '-'}</td>
-        <td class="status-google text-center mobile-hidden">${statusGoogleHtml}</td>
-        <td class="mobile-hidden">
-            <span class="filter-badge" style="background-color:${item.cor}; color: white;">${item.importacao_tipo}</span>
-        </td>
-        <td class="text-center btn-actions">
-            <button type="button" class="btn btn-warning btn-sm w-100 mb-1 btn-validar" data-idx="${idx}">Validar</button>
-        </td>
-    `;
-    tbody.appendChild(newRow);
-}
-
-function atualizarLinhaNaTabela(idx, data) {
-    const linha = document.getElementById(`linha-${idx}`);
-    if (!linha) return;
-    
-    const parent = linha.parentNode;
-    const nextSibling = linha.nextSibling;
-    
-    appendRowToTable(data, idx);
-    const novaLinha = document.getElementById(`linha-${idx}`);
-    
-    parent.removeChild(linha);
-    if (nextSibling) {
-        parent.insertBefore(novaLinha, nextSibling);
-    } else {
-        parent.appendChild(novaLinha);
-    }
-    
-    initTooltips();
-}
-
-function rebuildMap() {
-    if (markerCluster) markerCluster.clearMarkers();
-    markers = [];
-    initMap();
-}
-
-function initMap() {
-    const mapDiv = document.getElementById('map');
-    const coordenadasValidas = enderecosData.filter(e => e.latitude && e.longitude);
-
-    if (coordenadasValidas.length === 0) {
-        mapDiv.innerHTML = '<div class="alert alert-info m-2">Nenhuma coordenada para exibir.</div>';
-        return;
-    }
-
-    if (!map) {
-        map = new google.maps.Map(mapDiv, { zoom: 12, center: { lat: 0, lng: 0 }, gestureHandling: "greedy" });
-        markerCluster = new markerClusterer.MarkerClusterer({ map, markers: [] });
-    }
-
-    enderecosData.forEach((e, idx) => criarMarker(idx, e));
-
-    const bounds = new google.maps.LatLngBounds();
-    coordenadasValidas.forEach(e => bounds.extend({ lat: parseFloat(e.latitude), lng: parseFloat(e.longitude) }));
-    if (!bounds.isEmpty()) map.fitBounds(bounds);
-}
-
-function criarMarker(idx, data) {
-    if (markers[idx]) markers[idx].setMap(null);
-    if (!data.latitude || !data.longitude) return;
-
-    const marker = new google.maps.Marker({
-        position: { lat: parseFloat(data.latitude), lng: parseFloat(data.longitude) },
-        map,
-        title: `${data.order_number} - ${data.address}`,
-        icon: { url: makeSvgPin(data.order_number, data.cor), scaledSize: new google.maps.Size(22, 27) },
-        draggable: true
-    });
-    marker.addListener('dragend', (e) => atualizarCoordenadas(idx, e.latLng.lat(), e.latLng.lng()));
-    markers[idx] = marker;
-    markerCluster.addMarker(marker);
-}
-
-function makeSvgPin(numero, corHex) {
-    const n = String(numero || 'N').substring(0, 3);
-    const cor = corHex || '#808080';
-    const svg = `<svg width="44" height="54" viewBox="0 0 44 54" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M22 54C22 54 41 36.5 41 21C41 10.5066 32.4934 2 22 2C11.5066 2 3 10.5066 3 21C3 36.5 22 54 22 54Z" fill="${cor}"/><text x="22" y="24" text-anchor="middle" font-size="20" fill="#fff" font-family="Arial" font-weight="bold" dy=".3em">${n}</text></svg>`;
-    return "data:image/svg+xml;base64," + btoa(svg);
-}
-
-// =============== FUNÇÕES DE AÇÕES DO USUÁRIO ===============
-
-async function adicionarEnderecoManual() {
-    try {
-        const response = await fetch('/api/add-address', { method: 'POST' });
-        const data = await response.json();
-        if (data.success && data.item) {
-            enderecosData.push(data.item);
-            appendRowToTable(data.item, data.idx);
-            const novaLinha = document.getElementById(`linha-${data.idx}`);
-            if (novaLinha) {
-                initTooltips();
-                novaLinha.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                novaLinha.querySelector('input[type="text"]').focus();
-            }
-        } else {
-            throw new Error(data.msg || "Não foi possível adicionar endereço.");
-        }
-    } catch (error) {
-        mostrarFeedback(error.message, "danger");
-    }
-}
-
-async function validarLinha(idx) {
-    const linha = document.getElementById(`linha-${idx}`);
-    if (!linha) return;
-    const btnValidar = linha.querySelector('.btn-validar');
-    const originalHtml = btnValidar.innerHTML;
-    btnValidar.disabled = true;
-    btnValidar.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-
-    try {
-        const endereco = linha.querySelector(`input[name="endereco_${idx}"]`).value;
-        const cep = linha.querySelector(`input[name="cep_${idx}"]`).value;
-
-        const response = await fetch('/api/validar-linha', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ idx, endereco, cep })
-        });
-        const data = await response.json();
-        if (data.success) {
-            enderecosData[idx] = data.item;
-            atualizarLinhaNaTabela(idx, data.item);
-            criarMarker(idx, data.item);
-        } else {
-            throw new Error(data.msg || "Erro na validação");
-        }
-    } catch (error) {
-        mostrarFeedback(error.message, "danger");
-    } finally {
-        if(btnValidar) {
-            btnValidar.innerHTML = originalHtml;
-            btnValidar.disabled = false;
-        }
-    }
-}
-
-async function atualizarCoordenadas(idx, lat, lng) {
-    try {
-        const response = await fetch('/api/reverse-geocode', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ idx, lat, lng })
-        });
-        const data = await response.json();
-        if (data.success && data.item) {
-            enderecosData[idx] = data.item;
-            atualizarLinhaNaTabela(idx, data.item);
-            criarMarker(idx, data.item);
-            mostrarFeedback("Localização atualizada com sucesso.", "success");
-        } else {
-            throw new Error(data.msg || "Erro no geocode reverso.");
-        }
-    } catch (error) {
-        mostrarFeedback(error.message, "danger");
-    }
-}
-
-async function validarTudo() {
-    const btnValidar = document.getElementById('btn-validar-tudo');
-    const progressBar = document.getElementById('progresso-barra');
-    const progressContainer = document.getElementById('progresso-validacao');
-    const originalText = btnValidar.innerHTML;
-    
-    btnValidar.disabled = true;
-    btnValidar.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Validando...';
-    progressContainer.style.display = 'block';
-    mostrarFeedback("Validando todos os endereços...", "info");
-    
-    let erros = 0;
-    for (let i = 0; i < enderecosData.length; i++) {
-        try {
-            await validarLinha(i);
-        } catch (e) {
-            erros++;
-        }
-        progressBar.style.width = `${((i + 1) / enderecosData.length) * 100}%`;
-        progressBar.textContent = `${Math.round(((i + 1) / enderecosData.length) * 100)}%`;
-    }
-
-    mostrarFeedback(erros === 0 ? "Todos os endereços validados." : `Validação concluída com ${erros} erros.`, erros === 0 ? "success" : "warning");
-
-    btnValidar.innerHTML = originalText;
-    btnValidar.disabled = false;
-    progressContainer.style.display = 'none';
-}
-
-
-// =============== FUNÇÕES AUXILIARES ===============
-function initTooltips() {
-    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
-        if (bootstrap.Tooltip.getInstance(el)) {
-            bootstrap.Tooltip.getInstance(el).dispose();
-        }
-        new bootstrap.Tooltip(el);
-    });
-}
-
-function filtrarPorOrigem() {
-    const origem = document.getElementById('filtro-origem').value;
-    document.querySelectorAll('#corpo-tabela tr').forEach(linha => {
-        linha.style.display = (!origem || linha.dataset.origem === origem) ? '' : 'none';
-    });
-    rebuildMap();
-}
-
-function mostrarCarregamento(exibir, tipo) {
-    const spinner = document.getElementById(`spinner-${tipo}`);
-    const btn = document.getElementById(`btn-${tipo}`);
-    if (spinner && btn) {
-        spinner.classList.toggle('d-none', !exibir);
-        btn.disabled = exibir;
-    }
-}
-
-function mostrarFeedback(mensagem, tipo) {
-    const feedback = document.getElementById('feedback-msg');
-    feedback.textContent = mensagem;
-    feedback.className = `mb-2 fw-bold text-${tipo}`;
-    if (tipo !== 'info') {
-        setTimeout(() => { if(feedback.textContent === mensagem) feedback.textContent = ''; }, 5000);
-    }
-}
-</script>
-<script async defer src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&callback=initMap"></script>
-{% endblock %}
+    except Exception as e:
+        logger.error(f"Erro geral na importação: {str(e)}", exc_info=True)
+        return jsonify({"success": False, "msg": f"Erro na importação: {str(e)}"}), 500
