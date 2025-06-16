@@ -45,7 +45,7 @@ def normalizar(texto):
     if not texto:
         return ''
     return ''.join(
-        c for c in unicodedata.normalize('NFKD', texto.lower()) 
+        c for c in unicodedata.normalize('NFKD', texto.lower())
         if not unicodedata.combining(c)
     ).strip()
 
@@ -100,17 +100,17 @@ def preview():
                 if i + 2 < len(linhas) and linhas[i+2] == linha:
                     numero_pacote_str = linhas[i+3] if (i+3) < len(linhas) else ""
                     # Se o numero_pacote_str for um número válido, use-o, senão será vazio e o re-indexador no final irá atribuir.
-                    numero_pacote = numero_pacote_str if numero_pacote_str.isdigit() else "" 
+                    numero_pacote = numero_pacote_str if numero_pacote_str.isdigit() else ""
 
                     cep = cep_match.group(1)
                     res_google = valida_rua_google_cache(linha, cep)
-                    
+
                     rua_digitada = linha.split(',')[0] if linha else ''
                     rua_google = res_google.get('route_encontrada', '')
-                    rua_bate = (normalizar(rua_digitada) in normalizar(rua_google) or 
+                    rua_bate = (normalizar(rua_digitada) in normalizar(rua_google) or
                               normalizar(rua_google) in normalizar(rua_digitada))
                     cep_ok = cep == res_google.get('postal_code_encontrado', '')
-                    
+
                     novo = {
                         "order_number": numero_pacote, # Pode ser o número digitado ou vazio para re-indexar
                         "address": linha,
@@ -127,7 +127,7 @@ def preview():
                         "importacao_tipo": "manual",
                         "cor": cor_por_tipo("manual")
                     }
-                    
+
                     if registro_unico(session.get('lista', []) + lista_preview_novos, novo): # Verifica duplicidade na lista atual + novos do preview
                         lista_preview_novos.append(novo)
                     i += 4
@@ -135,7 +135,7 @@ def preview():
                     i += 1
             else:
                 i += 1
-        
+
         lista_atual = session.get('lista', [])
         lista_atual.extend(lista_preview_novos) # Adiciona os novos itens do preview
 
@@ -160,9 +160,6 @@ def preview():
 
         # Atribui novos order_numbers
         for item in lista_atual:
-            # Se o item não tem order_number (ex: recém-adicionado manual, ou importado com order_number vazio)
-            # OU se o order_number não corresponde ao padrão do tipo (ex: 'D1' em manual),
-            # re-atribui.
             needs_reindex = False
             if item.get('importacao_tipo') == 'manual':
                 if not str(item.get('order_number', '')).isdigit(): # Se não é um número simples
@@ -184,11 +181,10 @@ def preview():
                 elif item.get('importacao_tipo') == 'paack':
                     paack_counter += 1
                     item['order_number'] = f"P{paack_counter}"
-            # Se o order_number já está no formato correto para o tipo, ele é mantido.
 
         session['lista'] = lista_atual
         session.modified = True
-        
+
         return render_template(
             "preview.html",
             lista=lista_atual,
@@ -209,11 +205,11 @@ def import_planilha():
 
         file = request.files.get('planilha')
         empresa = request.form.get('empresa', '').lower()
-        
+
         if not file or not empresa:
             logger.warning("Arquivo ou empresa não especificados na importação.")
             return jsonify({"success": False, "msg": "Arquivo ou empresa não especificados"}), 400
-            
+
         if not arquivo_seguro(file):
             logger.warning(f"Tipo de arquivo não permitido ou inválido: {file.filename}")
             return jsonify({"success": False, "msg": "Tipo de arquivo não permitido ou inválido"}), 400
@@ -227,7 +223,7 @@ def import_planilha():
             if empresa == "delnext":
                 file.seek(0)
                 filename = file.filename.lower()
-                
+
                 if filename.endswith(('.xlsx', '.xls')):
                     logger.info("Processando arquivo Delnext como Excel.")
                     df = pd.read_excel(file, header=1)
@@ -251,7 +247,7 @@ def import_planilha():
                         "success": False,
                         "msg": "Formato de arquivo Delnext não suportado. Use .xlsx, .xls, .csv ou .txt"
                     }), 400
-                
+
                 if df.empty:
                     return jsonify({
                         "success": False,
@@ -259,19 +255,17 @@ def import_planilha():
                     }), 400
 
                 df.columns = df.columns.astype(str)
-                
+
                 col_morada = next((c for c in df.columns if 'morada' in c.lower()), None)
                 col_cep = next((c for c in df.columns if 'código postal' in c.lower() or 'codigo postal' in c.lower()), None)
-                
+
                 if not col_morada or not col_cep:
                     logger.error(f"Colunas 'Morada' ou 'Código Postal' não encontradas no arquivo Delnext. Colunas disponíveis: {df.columns.tolist()}")
                     return jsonify({
                         "success": False,
                         "msg": "Estrutura inválida. A planilha Delnext deve conter colunas de 'Morada' e 'Código Postal' (ignorando maiúsculas/minúsculas)."
                     }), 400
-                
-                # Encontrar o último order_number para Delnext para continuar a sequência
-                # Filtrar os order_numbers que começam com 'D' e converter para int para encontrar o máximo
+
                 last_delnext_order_num = 0
                 for item in lista_atual:
                     if item.get('importacao_tipo') == 'delnext' and item.get('order_number', '').startswith('D'):
@@ -280,17 +274,17 @@ def import_planilha():
                             if num > last_delnext_order_num:
                                 last_delnext_order_num = num
                         except ValueError:
-                            continue # Ignora se não for um número válido após 'D'
+                            continue
 
 
                 for index, row in df.iterrows():
                     endereco = str(row[col_morada]).strip()
                     cep = str(row[col_cep]).strip()
-                    
+
                     if not endereco or not cep:
                         logger.warning(f"Linha {index+2} (após cabeçalho) ignorada por conter endereço ou CEP vazio: Endereço='{endereco}', CEP='{cep}'")
-                        continue 
-                        
+                        continue
+
                     cep = re.sub(r'[^\d-]', '', cep)
                     if len(cep) == 8 and '-' not in cep: # Ex: "12345678" vira "1234-567"
                         cep = f"{cep[:4]}-{cep[4:]}"
@@ -298,17 +292,17 @@ def import_planilha():
                         cep = f"{cep[:4]}-{cep[4:]}"
                     elif len(cep) == 9 and cep.count('-') == 1: # Ex: "1234-5678" Delnext pode vir com 8 digitos
                         cep = cep[:8] # Corta para 1234-567
-                    
+
                     logger.info(f"Processando linha {index+2}: Endereço='{endereco}', CEP formatado='{cep}'")
-                    
+
                     res_google = valida_rua_google_cache(endereco, cep)
                     rua_digitada = endereco.split(',')[0] if endereco else ''
                     rua_google = res_google.get('route_encontrada', '')
-                    
-                    rua_bate = (normalizar(rua_digitada) in normalizar(rua_google) or 
+
+                    rua_bate = (normalizar(rua_digitada) in normalizar(rua_google) or
                                   normalizar(rua_google) in normalizar(rua_digitada))
                     cep_ok = (cep == res_google.get('postal_code_encontrado', ''))
-                    
+
                     novo = {
                         "order_number": "", # Será preenchido após a verificação de duplicidade
                         "address": endereco,
@@ -325,7 +319,7 @@ def import_planilha():
                         "importacao_tipo": "delnext",
                         "cor": cor_por_tipo("delnext")
                     }
-                    
+
                     if registro_unico(lista_atual, novo):
                         novos_itens_importados.append(novo) # Adiciona à lista temporária
                     else:
@@ -334,8 +328,7 @@ def import_planilha():
             elif empresa == "paack":
                 file.seek(0)
                 filename = file.filename.lower()
-                
-                # Adaptação para Paack (assumindo CSV ou Excel com colunas Endereço e CEP)
+
                 if filename.endswith(('.xlsx', '.xls')):
                     logger.info("Processando arquivo Paack como Excel.")
                     df = pd.read_excel(file, header=0) # Paack pode ter header=0 ou outro
@@ -365,16 +358,15 @@ def import_planilha():
                         "success": False,
                         "msg": "A planilha Paack está vazia ou o formato é inválido."
                     }), 400
-                
+
                 df.columns = df.columns.astype(str)
                 col_end = next((c for c in df.columns if 'endereco' in c.lower()), None)
                 col_cep = next((c for c in df.columns if 'cep' in c.lower()), None)
-                
+
                 if not col_end or not col_cep:
                     logger.error(f"Colunas 'Endereço' ou 'CEP' não encontradas no arquivo Paack. Colunas disponíveis: {df.columns.tolist()}")
                     return jsonify({"success": False, "msg": "Colunas 'Endereço' e 'CEP' não encontradas na planilha Paack"}), 400
 
-                # Encontrar o último order_number para Paack para continuar a sequência
                 last_paack_order_num = 0
                 for item in lista_atual:
                     if item.get('importacao_tipo') == 'paack' and item.get('order_number', '').startswith('P'):
@@ -406,8 +398,8 @@ def import_planilha():
                     res_google = valida_rua_google_cache(endereco, cep)
                     rua_digitada = endereco.split(',')[0] if endereco else ''
                     rua_google = res_google.get('route_encontrada', '')
-                    
-                    rua_bate = (normalizar(rua_digitada) in normalizar(rua_google) or 
+
+                    rua_bate = (normalizar(rua_digitada) in normalizar(rua_google) or
                                   normalizar(rua_google) in normalizar(rua_digitada))
                     cep_ok = (cep == res_google.get('postal_code_encontrado', ''))
 
@@ -427,7 +419,7 @@ def import_planilha():
                         "importacao_tipo": "paack",
                         "cor": cor_por_tipo("paack")
                     }
-                    
+
                     if registro_unico(lista_atual, novo):
                         novos_itens_importados.append(novo)
                     else:
@@ -437,11 +429,8 @@ def import_planilha():
                 return jsonify({"success": False, "msg": "Empresa não suportada"}), 400
 
             # --- Lógica de atribuição de order_number e adição à lista principal ---
-            # Primeiro, adiciona todos os novos itens válidos à lista atual
             lista_atual.extend(novos_itens_importados)
 
-            # Depois, re-atribui os order_numbers para cada tipo, mantendo a sequência
-            # Resetar contadores
             manual_counter = 0
             delnext_counter = 0
             paack_counter = 0
@@ -461,9 +450,6 @@ def import_planilha():
 
             # Atribui novos order_numbers
             for item in lista_atual:
-                # Se o item não tem order_number (ex: recém-adicionado manual, ou importado com order_number vazio)
-                # OU se o order_number não corresponde ao padrão do tipo (ex: 'D1' em manual),
-                # re-atribui.
                 needs_reindex = False
                 if item.get('importacao_tipo') == 'manual':
                     if not str(item.get('order_number', '')).isdigit() or item.get('order_number', '') == "": # Se não é um número simples ou está vazio
@@ -485,13 +471,12 @@ def import_planilha():
                     elif item.get('importacao_tipo') == 'paack':
                         paack_counter += 1
                         item['order_number'] = f"P{paack_counter}"
-                # Se o order_number já está no formato correto para o tipo, ele é mantido.
 
             origens = list({item.get('importacao_tipo', 'manual') for item in lista_atual})
             session['lista'] = lista_atual
             session.modified = True
             logger.info(f"Importação concluída. Total de itens na sessão: {len(lista_atual)}. Origens: {origens}")
-            
+
             return jsonify({
                 "success": True,
                 "lista": lista_atual,
@@ -525,23 +510,32 @@ def validar_linha():
     try:
         data = request.get_json()
         idx = int(data.get('idx', -1))
-        
+        # Obter o endereço e cep enviados pelo navegador
+        endereco = data.get('endereco', '')
+        cep = data.get('cep', '')
+
         lista_atual = session.get('lista', [])
         if idx < 0 or idx >= len(lista_atual):
             return jsonify({"success": False, "msg": "Índice inválido"}), 400
 
-        item = lista_atual[idx]
-        res_google = valida_rua_google_cache(item["address"], item["cep"])
-        
-        rua_digitada = item["address"].split(',')[0] if item["address"] else ''
+        # Atualizar o item na lista da sessão com os novos dados ANTES de validar
+        lista_atual[idx]['address'] = endereco
+        lista_atual[idx]['cep'] = cep
+
+        # Validar o novo endereço com o Google
+        res_google = valida_rua_google_cache(endereco, cep)
+
+        rua_digitada = endereco.split(',')[0] if endereco else ''
         rua_google = res_google.get('route_encontrada', '')
-        rua_bate = (normalizar(rua_digitada) in normalizar(rua_google) or 
+        rua_bate = (normalizar(rua_digitada) in normalizar(rua_google) or
                    normalizar(rua_google) in normalizar(rua_digitada))
-        cep_ok = item["cep"] == res_google.get('postal_code_encontrado', '')
-        
+        cep_ok = cep == res_google.get('postal_code_encontrado', '')
+
+        # Atualizar o resto das informações do item
         lista_atual[idx].update({
             "status_google": res_google.get('status'),
             "postal_code_encontrado": res_google.get('postal_code_encontrado', ''),
+            "endereco_formatado": res_google.get('endereco_formatado', ''),
             "latitude": res_google.get('coordenadas', {}).get('lat', ''),
             "longitude": res_google.get('coordenadas', {}).get('lng', ''),
             "rua_google": rua_google,
@@ -549,16 +543,16 @@ def validar_linha():
             "rua_bate": rua_bate,
             "freguesia": res_google.get('sublocality', '')
         })
-        
+
         session['lista'] = lista_atual
         session.modified = True
-        
+
         return jsonify({
             "success": True,
             "item": lista_atual[idx],
             "idx": idx
         })
-        
+
     except Exception as e:
         logger.error(f"Erro na validação de linha: {str(e)}", exc_info=True)
         return jsonify({"success": False, "msg": f"Erro: {str(e)}"}), 500
@@ -567,43 +561,38 @@ def validar_linha():
 def generate():
     try:
         global csv_content
-        # Pegar a lista diretamente da sessão para garantir que as validações mais recentes
-        # e os order_numbers formatados estejam presentes.
         lista_para_csv = session.get('lista', [])
-        
-        # Gerar CSV
+
         output = io.StringIO()
         writer = csv.writer(output)
-        
-        # Cabeçalho
+
         writer.writerow([
-            "order number", "name", "address", "latitude", "longitude", 
-            "duration", "start time", "end time", "phone", "contact", 
+            "order number", "name", "address", "latitude", "longitude",
+            "duration", "start time", "end time", "phone", "contact",
             "notes", "color", "Group", "rua_google", "freguesia_google", "status"
         ])
-        
-        # Dados
-        for row in lista_para_csv: # Iterar sobre a lista da sessão
+
+        for row in lista_para_csv:
             status = "Validado"
             if not row["cep_ok"]:
                 status = "CEP divergente"
             elif not row["rua_bate"]:
                 status = "Rua divergente"
-                
+
             writer.writerow([
-                row["order_number"], "", row["address"], 
-                row["latitude"], row["longitude"], 
+                row["order_number"], "", row["address"],
+                row["latitude"], row["longitude"],
                 "", "", "", "", "",
-                row["postal_code_encontrado"] or row["cep"], 
-                row["cor"], "", 
+                row["postal_code_encontrado"] or row["cep"],
+                row["cor"], "",
                 row["rua_google"],
-                row.get("freguesia", ""), 
+                row.get("freguesia", ""),
                 status
             ])
-        
+
         csv_content = output.getvalue()
         return redirect(url_for('main.download'))
-        
+
     except Exception as e:
         logger.error(f"Erro ao gerar CSV: {str(e)}", exc_info=True)
         return jsonify({"success": False, "msg": f"Erro ao gerar CSV: {str(e)}"}), 500
@@ -612,13 +601,66 @@ def generate():
 def download():
     if not csv_content:
         return redirect(url_for('main.home'))
-        
+
     return send_file(
         io.BytesIO(csv_content.encode("utf-8")),
         mimetype='text/csv',
         as_attachment=True,
         download_name="enderecos_myway.csv"
     )
+
+def get_next_order_number(lista, tipo):
+    """Calcula o próximo número de pedido para um determinado tipo."""
+    counter = 0
+    prefix = ""
+    if tipo == 'manual':
+        for item in lista:
+            if item.get('importacao_tipo') == 'manual' and str(item.get('order_number', '')).isdigit():
+                counter = max(counter, int(item.get('order_number')))
+        return str(counter + 1)
+    elif tipo == 'delnext':
+        prefix = 'D'
+        for item in lista:
+            if item.get('importacao_tipo') == 'delnext' and item.get('order_number', '').startswith(prefix):
+                try: counter = max(counter, int(item['order_number'][1:]))
+                except ValueError: pass
+        return f"{prefix}{counter + 1}"
+    elif tipo == 'paack':
+        prefix = 'P'
+        for item in lista:
+            if item.get('importacao_tipo') == 'paack' and item.get('order_number', '').startswith(prefix):
+                try: counter = max(counter, int(item['order_number'][1:]))
+                except ValueError: pass
+        return f"{prefix}{counter + 1}"
+    return str(len(lista) + 1)
+
+
+@main_routes.route('/api/add-address', methods=['POST'])
+def add_address():
+    try:
+        lista_atual = session.get('lista', [])
+
+        novo_item = {
+            "order_number": get_next_order_number(lista_atual, 'manual'),
+            "address": "", "cep": "", "status_google": "NÃO VALIDADO",
+            "postal_code_encontrado": "", "endereco_formatado": "",
+            "latitude": "", "longitude": "", "rua_google": "",
+            "cep_ok": False, "rua_bate": False, "freguesia": "",
+            "importacao_tipo": "manual", "cor": cor_por_tipo("manual")
+        }
+
+        lista_atual.append(novo_item)
+        session['lista'] = lista_atual
+        session.modified = True
+
+        return jsonify({
+            "success": True,
+            "item": novo_item,
+            "idx": len(lista_atual) - 1 # Retorna o índice do novo item
+        })
+    except Exception as e:
+        logger.error(f"Erro ao adicionar endereço: {str(e)}", exc_info=True)
+        return jsonify({"success": False, "msg": str(e)}), 500
 
 @main_routes.route('/api/reverse-geocode', methods=['POST'])
 def reverse_geocode():
@@ -634,23 +676,23 @@ def reverse_geocode():
         api_key = os.environ.get('GOOGLE_API_KEY', '')
         url = "https://maps.googleapis.com/maps/api/geocode/json"
         params = {
-            'latlng': f"{lat},{lng}", 
-            'key': api_key, 
+            'latlng': f"{lat},{lng}",
+            'key': api_key,
             'region': 'pt',
             'language': 'pt-PT'
         }
-        
+
         response = requests.get(url, params=params, timeout=5)
         response.raise_for_status()
         data = response.json()
-        
+
         if not data.get('results'):
             return jsonify({'success': False, 'msg': 'Endereço não encontrado'})
-            
+
         result = data['results'][0]
         address = result['formatted_address']
         postal_code = next(
-            (c['long_name'] for c in result['address_components'] 
+            (c['long_name'] for c in result['address_components']
              if 'postal_code' in c['types']),
             ''
         )
@@ -678,7 +720,7 @@ def reverse_geocode():
             'cep': postal_code,
             'item': lista_atual[idx] if 0 <= idx < len(lista_atual) else None
         })
-        
+
     except requests.Timeout:
         return jsonify({'success': False, 'msg': 'Timeout ao conectar com o Google Maps'}), 504
     except Exception as e:
