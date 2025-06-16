@@ -2,20 +2,20 @@
 
 {% block content %}
 <style>
-  #map-top-sticky { 
-    position: sticky; 
-    top: 0; 
-    z-index: 100; 
-    background: #f8fafd; 
-    box-shadow: 0 4px 18px #0001; 
-    border-radius: 0 0 14px 14px; 
+  #map-top-sticky {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: #f8fafd;
+    box-shadow: 0 4px 18px #0001;
+    border-radius: 0 0 14px 14px;
   }
-  @media (max-width: 600px) { 
-    #map-top-sticky { height: 240px !important; max-height: 45vh; } 
+  @media (max-width: 600px) {
+    #map-top-sticky { height: 240px !important; max-height: 45vh; }
     .table-responsive { overflow-x: auto; }
     .mobile-hidden { display: none; }
   }
-  @media (min-width: 601px) { 
+  @media (min-width: 601px) {
     #map-top-sticky { height: 420px !important; max-height: 55vh; }
   }
   .table-responsive { margin-top: 6px; }
@@ -31,7 +31,6 @@
     <div id="map" style="width:100%;height:100%;min-height:220px;"></div>
 </div>
 
-<!-- Filtros e Controles -->
 <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
     <div class="d-flex flex-row gap-2">
         <select id="filtro-origem" class="form-select form-select-sm" onchange="filtrarPorOrigem()">
@@ -87,8 +86,8 @@
                     <input type="hidden" name="numero_pacote_{{ loop.index0 }}" value="{{ item.order_number }}">
                     <input type="hidden" name="importacao_tipo_{{ loop.index0 }}" value="{{ item.importacao_tipo }}">
                     <input type="hidden" name="cor_{{ loop.index0 }}" value="{{ item.cor }}">
-                    <input type="text" class="form-control" name="endereco_{{ loop.index0 }}" value="{{ item.address }}" 
-                           data-bs-toggle="tooltip" data-bs-placement="top" 
+                    <input type="text" class="form-control" name="endereco_{{ loop.index0 }}" value="{{ item.address }}"
+                           data-bs-toggle="tooltip" data-bs-placement="top"
                            title="{{ item.endereco_formatado or '' }}">
                 </td>
                 <td>
@@ -155,7 +154,7 @@ function initTooltips() {
 }
 
 function setupEventListeners() {
-    // Formulário de upload
+    // Formulário de upload (MODIFICADO)
     document.getElementById('form-upload').addEventListener('submit', function(e) {
         e.preventDefault();
         mostrarCarregamento(true, 'importar');
@@ -174,8 +173,10 @@ function setupEventListeners() {
         })
         .then(data => {
             if (data.success) {
-                enderecosData = data.lista;
-                window.location.reload();
+                // EM VEZ DE RELOAD(), ATUALIZAMOS DINAMICAMENTE
+                enderecosData = data.lista; // Atualiza a fonte de dados principal
+                rebuildTableAndMap(); // Nova função para redesenhar tudo
+                mostrarFeedback("Planilha importada e endereços atualizados!", "success");
             } else {
                 throw new Error(data.msg || "Erro na importação");
             }
@@ -194,12 +195,12 @@ function setupEventListeners() {
 
 // Funções do Mapa
 function initMap() {
-    const coordenadasValidas = enderecosData.filter(e => 
+    const coordenadasValidas = enderecosData.filter(e =>
         e.latitude && e.longitude && !isNaN(e.latitude) && !isNaN(e.longitude)
     );
 
     if (coordenadasValidas.length === 0) {
-        document.getElementById('map').innerHTML = 
+        document.getElementById('map').innerHTML =
             '<div class="alert alert-warning m-2">Nenhuma coordenada válida para exibir</div>';
         return;
     }
@@ -214,10 +215,12 @@ function initMap() {
     });
 
     markerCluster = new markerClusterer.MarkerClusterer({ map, markers: [] });
-    
+
     coordenadasValidas.forEach((e, idx) => {
-        criarMarker(idx, e);
+        // Usa o índice do forEach que corresponde ao índice em enderecosData
+        criarMarker(enderecosData.indexOf(e), e);
     });
+
 
     const bounds = new google.maps.LatLngBounds();
     coordenadasValidas.forEach(e => {
@@ -226,7 +229,7 @@ function initMap() {
             lng: parseFloat(e.longitude)
         });
     });
-    
+
     if (!bounds.isEmpty()) {
         map.fitBounds(bounds);
     }
@@ -237,7 +240,7 @@ function makeSvgPin(numero, corHex) {
     const svg = `<svg width="44" height="54" viewBox="0 0 44 54" fill="none" xmlns="http://www.w3.org/2000/svg">
         <ellipse cx="22" cy="22" rx="21" ry="21" fill="${corHex}"/>
         <rect x="18" y="37" width="8" height="13" rx="4" fill="${corHex}"/>
-        <text x="22" y="31" text-anchor="middle" font-size="20" fill="#fff" font-family="Arial" font-weight="bold" 
+        <text x="22" y="31" text-anchor="middle" font-size="20" fill="#fff" font-family="Arial" font-weight="bold"
               alignment-baseline="middle" dominant-baseline="middle">${n}</text>
     </svg>`;
     return "data:image/svg+xml;base64," + btoa(svg);
@@ -270,11 +273,10 @@ function criarMarker(idx, data) {
             scaledSize: new google.maps.Size(22, 27)
         },
         draggable: true,
-        visible: !document.getElementById('filtro-origem').value || 
+        visible: !document.getElementById('filtro-origem').value ||
                 document.getElementById('filtro-origem').value === data.importacao_tipo
     });
 
-    // Evento de arrastar marcador
     marker.addListener('dragstart', () => {
         arrastandoMarker = idx;
     });
@@ -286,7 +288,7 @@ function criarMarker(idx, data) {
 
     markers[idx] = marker;
     if (markerCluster) markerCluster.addMarker(marker);
-    
+
     return marker;
 }
 
@@ -305,37 +307,11 @@ async function atualizarCoordenadas(idx, lat, lng) {
         });
 
         const data = await response.json();
-        
+
         if (data.success) {
-            // Atualizar dados locais
-            enderecosData[idx] = {
-                ...enderecosData[idx],
-                latitude: lat,
-                longitude: lng,
-                address: data.address,
-                cep: data.cep,
-                status_google: "OK",
-                postal_code_encontrado: data.cep,
-                cep_ok: true,
-                rua_bate: true
-            };
-
-            // Atualizar interface
-            document.querySelector(`#linha-${idx} input[name="endereco_${idx}"]`).value = data.address;
-            document.querySelector(`#linha-${idx} input[name="cep_${idx}"]`).value = data.cep;
-            document.querySelector(`#linha-${idx} .cep-encontrado`).textContent = data.cep;
-            document.querySelector(`#linha-${idx} .status-google`).innerHTML = 
-                '<span class="text-success">OK</span>';
-
-            // Atualizar classe da linha
-            const linha = document.getElementById(`linha-${idx}`);
-            linha.classList.remove('table-danger');
-            linha.classList.add('table-success');
-            
-            // Recriar marcador para atualizar cor
+            enderecosData[idx] = data.item;
+            atualizarLinhaNaTabela(idx, data.item);
             criarMarker(idx, enderecosData[idx]);
-            
-            // Feedback para o usuário
             mostrarFeedback("Localização atualizada com sucesso", "success");
         } else {
             throw new Error(data.msg || "Erro ao atualizar coordenadas");
@@ -343,7 +319,6 @@ async function atualizarCoordenadas(idx, lat, lng) {
     } catch (error) {
         console.error("Erro ao atualizar coordenadas:", error);
         mostrarFeedback(error.message, "danger");
-        // Reverter posição do marcador
         if (markers[idx] && enderecosData[idx]) {
             markers[idx].setPosition({
                 lat: parseFloat(enderecosData[idx].latitude),
@@ -357,18 +332,18 @@ async function atualizarCoordenadas(idx, lat, lng) {
 function filtrarPorOrigem() {
     const origem = document.getElementById('filtro-origem').value;
     const linhas = document.querySelectorAll('#corpo-tabela tr');
-    
+
     linhas.forEach(linha => {
         if (linha.id === 'linha-nova') return;
         linha.style.display = (!origem || linha.dataset.origem === origem) ? '' : 'none';
     });
-    
+
     atualizarMarcadoresVisiveis();
 }
 
 function atualizarMarcadoresVisiveis() {
     const origem = document.getElementById('filtro-origem').value;
-    
+
     markers.forEach((marker, idx) => {
         if (marker) {
             const linha = document.getElementById(`linha-${idx}`);
@@ -378,7 +353,7 @@ function atualizarMarcadoresVisiveis() {
             }
         }
     });
-    
+
     if (markerCluster) markerCluster.repaint();
 }
 
@@ -387,16 +362,14 @@ async function validarLinha(idx) {
     const linha = document.getElementById(`linha-${idx}`);
     const btnValidar = linha.querySelector('button');
     const originalText = btnValidar.innerHTML;
-    
+
     btnValidar.disabled = true;
     btnValidar.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Validando...';
-    
+
     try {
         const endereco = document.querySelector(`#linha-${idx} input[name="endereco_${idx}"]`).value;
         const cep = document.querySelector(`#linha-${idx} input[name="cep_${idx}"]`).value;
-        const importacao_tipo = document.querySelector(`#linha-${idx} input[name="importacao_tipo_${idx}"]`).value;
-        const numero_pacote = document.querySelector(`#linha-${idx} input[name="numero_pacote_${idx}"]`).value;
-        
+
         const response = await fetch('/api/validar-linha', {
             method: 'POST',
             headers: {
@@ -406,13 +379,11 @@ async function validarLinha(idx) {
                 idx: idx,
                 endereco: endereco,
                 cep: cep,
-                importacao_tipo: importacao_tipo,
-                numero_pacote: numero_pacote
             })
         });
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
             enderecosData[idx] = data.item;
             atualizarLinhaNaTabela(idx, data.item);
@@ -435,19 +406,19 @@ async function validarTudo() {
     const progressBar = document.getElementById('progresso-barra');
     const progressContainer = document.getElementById('progresso-validacao');
     const originalText = btnValidar.innerHTML;
-    
+
     btnValidar.disabled = true;
     btnValidar.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Validando...';
     progressContainer.style.display = 'block';
     mostrarFeedback("Validando todos os endereços...", "info");
-    
+
     try {
         for (let i = 0; i < enderecosData.length; i++) {
             await validarLinha(i);
             progressBar.style.width = `${((i + 1) / enderecosData.length) * 100}%`;
             progressBar.textContent = `${Math.round(((i + 1) / enderecosData.length) * 100)}%`;
         }
-        
+
         mostrarFeedback("Todos os endereços foram validados", "success");
     } catch (error) {
         console.error("Erro ao validar tudo:", error);
@@ -460,116 +431,159 @@ async function validarTudo() {
 
 function atualizarLinhaNaTabela(idx, data) {
     const linha = document.getElementById(`linha-${idx}`);
-    
-    // Atualizar inputs
+
     document.querySelector(`#linha-${idx} input[name="endereco_${idx}"]`).value = data.address;
     document.querySelector(`#linha-${idx} input[name="cep_${idx}"]`).value = data.cep;
-    
-    // Atualizar colunas
     document.querySelector(`#linha-${idx} .cep-encontrado`).textContent = data.postal_code_encontrado || '-';
-    
-    // Atualizar status
+
     const statusCell = document.querySelector(`#linha-${idx} .status-google`);
     if (data.status_google === 'OK') {
         statusCell.innerHTML = '<span class="text-success">OK</span>';
         if (!data.rua_bate) {
-            statusCell.innerHTML += 
+            statusCell.innerHTML +=
                 `<span data-bs-toggle="tooltip" title="Diferença encontrada: ${data.rua_google}">⚠️</span>`;
         }
     } else {
         statusCell.innerHTML = `<span class="text-danger">${data.status_google || 'NÃO ENCONTRADO'}</span>`;
     }
-    
-    // Atualizar classe da linha
-    linha.classList.remove('table-danger', 'table-success');
+
+    linha.classList.remove('table-danger', 'table-success', 'table-warning');
     linha.classList.add(data.cep_ok ? 'table-success' : 'table-danger');
-    
-    // Atualizar tooltips
+
     const tooltip = bootstrap.Tooltip.getInstance(
         document.querySelector(`#linha-${idx} input[name="endereco_${idx}"]`)
     );
     if (tooltip) {
         tooltip.setContent({ '.tooltip-inner': data.endereco_formatado || '' });
     }
-    
-    // Atualizar tooltip de status se existir
-    const tooltipStatus = bootstrap.Tooltip.getInstance(
-        document.querySelector(`#linha-${idx} .status-google span[data-bs-toggle="tooltip"]`)
-    );
-    if (tooltipStatus && data.rua_google) {
-        tooltipStatus.setContent({ '.tooltip-inner': `Diferença encontrada: ${data.rua_google}` });
+}
+
+// Funções de CRUD (MODIFICADA)
+async function adicionarEnderecoManual() {
+    try {
+        const response = await fetch('/api/add-address', { method: 'POST' });
+        const data = await response.json();
+
+        if (data.success) {
+            const novoItem = data.item;
+            const novoId = data.idx;
+
+            enderecosData.push(novoItem);
+            document.getElementById('total-linhas').value = enderecosData.length;
+
+            const tbody = document.getElementById('corpo-tabela');
+            const newRowHtml = `
+                <tr id="linha-${novoId}" class="table-warning" data-origem="manual">
+                    <td style="font-weight: bold; text-align:center;">${novoItem.order_number}</td>
+                    <td>
+                        <input type="hidden" name="numero_pacote_${novoId}" value="${novoItem.order_number}">
+                        <input type="hidden" name="importacao_tipo_${novoId}" value="manual">
+                        <input type="hidden" name="cor_${novoId}" value="${novoItem.cor}">
+                        <input type="text" class="form-control" name="endereco_${novoId}" value=""
+                               data-bs-toggle="tooltip" data-bs-placement="top" title="Digite um endereço">
+                    </td>
+                    <td>
+                        <input type="text" class="form-control" name="cep_${novoId}" value="">
+                    </td>
+                    <td class="cep-encontrado">-</td>
+                    <td class="status-google text-center mobile-hidden">
+                        <span class="text-secondary">NÃO VALIDADO</span>
+                    </td>
+                    <td class="mobile-hidden">
+                        <span class="filter-badge" style="background-color:${novoItem.cor}; color: white;">
+                            Manual
+                        </span>
+                    </td>
+                    <td class="text-center btn-actions">
+                        <button type="button" onclick="validarLinha(${novoId})" class="btn btn-warning btn-sm w-100 mb-1">
+                            Validar
+                        </button>
+                    </td>
+                </tr>
+            `;
+            tbody.insertAdjacentHTML('beforeend', newRowHtml);
+
+            initTooltips();
+            document.getElementById(`linha-${novoId}`).scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            document.querySelector(`#linha-${novoId} input[name="endereco_${novoId}"]`).focus();
+
+        } else {
+            throw new Error(data.msg || "Não foi possível adicionar o endereço.");
+        }
+    } catch (error) {
+        mostrarFeedback(error.message, "danger");
     }
 }
 
-// Funções de CRUD
-function adicionarEnderecoManual() {
-    const novoId = enderecosData.length;
-    const novaLinha = {
-        order_number: novoId + 1,
-        address: '',
-        cep: '',
-        importacao_tipo: 'manual',
-        cor: '#0074D9',
-        status_google: '',
-        postal_code_encontrado: '',
-        cep_ok: false,
-        rua_bate: false
-    };
-    
-    enderecosData.push(novaLinha);
-    document.getElementById('total-linhas').value = enderecosData.length;
-    
-    const tbody = document.getElementById('corpo-tabela');
-    tbody.innerHTML += `
-        <tr id="linha-${novoId}" class="table-danger" data-origem="manual">
-            <td style="font-weight: bold; text-align:center;">${novoId + 1}</td>
-            <td>
-                <input type="hidden" name="numero_pacote_${novoId}" value="${novoId + 1}">
-                <input type="hidden" name="importacao_tipo_${novoId}" value="manual">
-                <input type="hidden" name="cor_${novoId}" value="#0074D9">
-                <input type="text" class="form-control" name="endereco_${novoId}" value="" 
-                       data-bs-toggle="tooltip" data-bs-placement="top" title="">
-            </td>
-            <td>
-                <input type="text" class="form-control" name="cep_${novoId}" value="">
-            </td>
-            <td class="cep-encontrado">-</td>
-            <td class="status-google text-center mobile-hidden">
-                <span class="text-danger">NÃO VALIDADO</span>
-            </td>
-            <td class="mobile-hidden">
-                <span class="filter-badge" style="background-color:#0074D9; color: white;">
-                    Manual
-                </span>
-            </td>
-            <td class="text-center btn-actions">
-                <button type="button" onclick="validarLinha(${novoId})" class="btn btn-warning btn-sm w-100 mb-1">
-                    Validar
-                </button>
-            </td>
-        </tr>
-    `;
-    
-    // Inicializar tooltips
+// Funções Auxiliares (NOVAS)
+function rebuildTableAndMap() {
+    rebuildTable();
+    if (markerCluster) {
+        markerCluster.clearMarkers();
+    }
+    markers.forEach(marker => marker.setMap(null));
+    markers = [];
+
+    initMap();
     initTooltips();
-    
-    // Rolagem para a nova linha
-    document.getElementById(`linha-${novoId}`).scrollIntoView({
-        behavior: 'smooth',
-        block: 'nearest'
-    });
 }
 
-// Funções Auxiliares
+function rebuildTable() {
+    const tbody = document.getElementById('corpo-tabela');
+    tbody.innerHTML = ''; // Limpa a tabela existente
+
+    enderecosData.forEach((item, idx) => {
+        const statusClass = item.cep_ok ? 'table-success' : 'table-danger';
+        const statusGoogleHtml = item.status_google === 'OK' ?
+            `<span class="text-success">OK</span>${!item.rua_bate ? ` <span data-bs-toggle="tooltip" title="Diferença encontrada: ${item.rua_google}">⚠️</span>` : ''}` :
+            `<span class="text-danger">${item.status_google || 'NÃO ENCONTRADO'}</span>`;
+
+        const rowHtml = `
+            <tr id="linha-${idx}" class="${statusClass}" data-origem="${item.importacao_tipo}">
+                <td style="font-weight: bold; text-align:center;">${item.order_number}</td>
+                <td>
+                    <input type="hidden" name="numero_pacote_${idx}" value="${item.order_number}">
+                    <input type="hidden" name="importacao_tipo_${idx}" value="${item.importacao_tipo}">
+                    <input type="hidden" name="cor_${idx}" value="${item.cor}">
+                    <input type="text" class="form-control" name="endereco_${idx}" value="${item.address}"
+                           data-bs-toggle="tooltip" data-bs-placement="top"
+                           title="${item.endereco_formatado || ''}">
+                </td>
+                <td>
+                    <input type="text" class="form-control" name="cep_${idx}" value="${item.cep}">
+                </td>
+                <td class="cep-encontrado">${item.postal_code_encontrado || '-'}</td>
+                <td class="status-google text-center mobile-hidden">
+                    ${statusGoogleHtml}
+                </td>
+                <td class="mobile-hidden">
+                    <span class="filter-badge" style="background-color:${item.cor}; color: white;">
+                        ${item.importacao_tipo}
+                    </span>
+                </td>
+                <td class="text-center btn-actions">
+                    <button type="button" onclick="validarLinha(${idx})" class="btn btn-warning btn-sm w-100 mb-1">
+                        Validar
+                    </button>
+                </td>
+            </tr>`;
+        tbody.innerHTML += rowHtml;
+    });
+
+    document.getElementById('total-linhas').value = enderecosData.length;
+}
+
+
+// Funções Auxiliares (Existentes)
 function mostrarCarregamento(exibir, tipo) {
     const feedback = document.getElementById('feedback-msg');
     const spinner = document.getElementById(`spinner-${tipo}`);
     const btn = document.getElementById(`btn-${tipo}`);
-    
+
     if (exibir) {
         spinner.classList.remove('d-none');
         btn.disabled = true;
-        feedback.textContent = tipo === 'importar' ? 
+        feedback.textContent = tipo === 'importar' ?
             "Processando importação..." : "Gerando arquivo CSV...";
     } else {
         spinner.classList.add('d-none');
@@ -582,7 +596,7 @@ function mostrarFeedback(mensagem, tipo) {
     const feedback = document.getElementById('feedback-msg');
     feedback.textContent = mensagem;
     feedback.className = `mb-2 fw-bold text-${tipo}`;
-    
+
     if (tipo !== 'info') {
         setTimeout(() => {
             feedback.textContent = '';
