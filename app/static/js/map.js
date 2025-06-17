@@ -1,4 +1,4 @@
-// Exemplo de integração do mapa com múltiplos pins vindos do backend, agora com InfoWindow (tooltip)
+// Integração do mapa com múltiplos pins vindos do backend, agora com InfoWindow (tooltip ao clicar)
 
 function initMap() {
     // Usa o primeiro endereço como centro, se houver, senão um padrão
@@ -9,6 +9,8 @@ function initMap() {
         center: center,
     });
 
+    const infoWindow = new google.maps.InfoWindow();
+
     // Adiciona marcadores para cada endereço válido e tooltip ao clicar
     const markers = locations.map(loc => {
         const marker = new google.maps.Marker({
@@ -18,14 +20,11 @@ function initMap() {
         });
 
         // InfoWindow (tooltip) ao clicar
-        if (loc.title) {
-            const infowindow = new google.maps.InfoWindow({
-                content: `<div style="font-size:16px;">${loc.title}</div>`
-            });
-            marker.addListener("click", () => {
-                infowindow.open(map, marker);
-            });
-        }
+        marker.addListener("click", () => {
+            infoWindow.setContent(`<div style="font-size:16px;">${marker.getTitle()}</div>`);
+            infoWindow.open(map, marker);
+        });
+
         return marker;
     });
 
