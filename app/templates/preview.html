@@ -138,7 +138,9 @@
 let map;
 let markers = [];
 let markerCluster;
-let enderecosData = {{ lista | tojson | safe }}; // Esta variável agora deve ser sempre atualizada via AJAX ou reload
+// Ao carregar a página, os dados são inicializados com a lista do Flask.
+// Após AJAX, esta variável será atualizada pelo JS.
+let enderecosData = {{ lista | tojson | safe }}; 
 let arrastandoMarker = null;
 
 // Inicialização
@@ -149,6 +151,15 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function initTooltips() {
+    // Destrói os tooltips existentes para evitar duplicatas antes de criar novos
+    const existingTooltips = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+    existingTooltips.forEach(el => {
+        const tooltipInstance = bootstrap.Tooltip.getInstance(el);
+        if (tooltipInstance) {
+            tooltipInstance.dispose();
+        }
+    });
+
     const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
     tooltipTriggerList.map(el => new bootstrap.Tooltip(el));
 }
@@ -184,7 +195,10 @@ function setupEventListeners() {
 
                 // Atualiza as opções do filtro de origem
                 const filtroOrigem = document.getElementById('filtro-origem');
-                filtroOrigem.innerHTML = '<option value="">Todas as origens</option>';
+                // Limpa as opções existentes, exceto a primeira "Todas as origens"
+                while (filtroOrigem.options.length > 1) {
+                    filtroOrigem.remove(1);
+                }
                 data.origens.forEach(origem => {
                     const option = document.createElement('option');
                     option.value = origem;
@@ -257,8 +271,10 @@ function makeSvgPin(numero, corHex) {
     // Ajusta o tamanho da fonte com base no comprimento do número
     let fontSize = 20;
     if (n.length === 3) fontSize = 16;
-    if (n.length === 4) fontSize = 14; // Se quiser suportar 4 caracteres, ajustar o svg também.
-    
+    if (n.length > 3) fontSize = 14; // Para strings como D100, P100 etc.
+
+    // A largura e altura do SVG podem precisar de ajuste fino se os números forem muito longos
+    // para evitar cortar o texto. Ex: width="50" height="60"
     const svg = `<svg width="44" height="54" viewBox="0 0 44 54" fill="none" xmlns="http://www.w3.org/2000/svg">
         <ellipse cx="22" cy="22" rx="21" ry="21" fill="${corHex}"/>
         <rect x="18" y="37" width="8" height="13" rx="4" fill="${corHex}"/>
@@ -295,7 +311,7 @@ function criarMarker(idx, data) {
         title: `${data.order_number || (idx + 1)} - ${data.address}`,
         icon: {
             url: pinUrl,
-            scaledSize: new google.maps.Size(22, 27)
+            scaledSize: new google.maps.Size(22, 27) // Tamanho do ícone
         },
         draggable: true,
         visible: !document.getElementById('filtro-origem').value || 
@@ -323,7 +339,8 @@ function atualizarMapaComNovosDados(novaLista) {
     if (markerCluster) {
         markerCluster.clearMarkers();
     }
-    markers = []; // Limpa o array de marcadores
+    // Re-instancia o array de marcadores para garantir que não há referências antigas
+    markers = new Array(novaLista.length).fill(null); 
 
     // Cria novos marcadores para a nova lista
     novaLista.forEach((e, idx) => {
@@ -332,15 +349,17 @@ function atualizarMapaComNovosDados(novaLista) {
 
     // Ajusta o zoom do mapa para os novos marcadores (opcional)
     const bounds = new google.maps.LatLngBounds();
+    let hasValidCoords = false;
     novaLista.forEach(e => {
         if (e.latitude && e.longitude && !isNaN(e.latitude) && !isNaN(e.longitude)) {
             bounds.extend({
                 lat: parseFloat(e.latitude),
                 lng: parseFloat(e.longitude)
             });
+            hasValidCoords = true;
         }
     });
-    if (!bounds.isEmpty() && map) {
+    if (hasValidCoords && map) {
         map.fitBounds(bounds);
     }
 }
@@ -362,9 +381,9 @@ async function atualizarCoordenadas(idx, lat, lng) {
         const data = await response.json();
         
         if (data.success) {
-            // Atualizar dados locais e UI
-            enderecosData[idx] = data.item; // Usa o item atualizado do backend
-            atualizarLinhaNaTabela(idx, data.item);
+            // PROBLEMA 2: AQUI FOI ALTERADO PARA USAR DIRETAMENTE data.item
+            enderecosData[idx] = data.item; // Usa o item COMPLETAMENTE atualizado do backend
+            atualizarLinhaNaTabela(idx, data.item); // Atualiza a linha na tabela
             criarMarker(idx, data.item); // Recria o marcador para refletir novas coordenadas/status
             
             mostrarFeedback("Localização atualizada com sucesso", "success");
@@ -375,7 +394,7 @@ async function atualizarCoordenadas(idx, lat, lng) {
         console.error("Erro ao atualizar coordenadas:", error);
         mostrarFeedback(error.message, "danger");
         // Reverter posição do marcador se houver erro (opcional, mas bom UX)
-        if (markers[idx] && enderecosData[idx]) {
+        if (markers[idx] && enderecosData[idx] && enderecosData[idx].latitude && enderecosData[idx].longitude) {
             markers[idx].setPosition({
                 lat: parseFloat(enderecosData[idx].latitude),
                 lng: parseFloat(enderecosData[idx].longitude)
@@ -390,7 +409,8 @@ function filtrarPorOrigem() {
     const linhas = document.querySelectorAll('#corpo-tabela tr');
     
     linhas.forEach(linha => {
-        if (linha.id === 'linha-nova') return; // Ignora a linha de adicionar manual, se existir
+        // A linha manual adicionada dinamicamente não terá data-origem.
+        // O check `linha.dataset.origem === 'manual'` é suficiente.
         linha.style.display = (!origem || linha.dataset.origem === origem) ? '' : 'none';
     });
     
@@ -401,7 +421,8 @@ function atualizarMarcadoresVisiveis() {
     const origem = document.getElementById('filtro-origem').value;
     
     markers.forEach((marker, idx) => {
-        if (marker && enderecosData[idx]) { // Certifica-se de que o marcador e os dados existem
+        // Verifica se o marcador existe E se os dados para aquele índice existem
+        if (marker && enderecosData[idx]) { 
             const deveMostrar = !origem || enderecosData[idx].importacao_tipo === origem;
             marker.setVisible(deveMostrar);
         }
@@ -420,16 +441,11 @@ async function validarLinha(idx) {
     btnValidar.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Validando...';
     
     try {
-        // Obter os valores atuais dos inputs da linha
-        const enderecoInput = document.querySelector(`#linha-${idx} input[name="endereco_${idx}"]`);
-        const cepInput = document.querySelector(`#linha-${idx} input[name="cep_${idx}"]`);
-        const importacaoTipoInput = document.querySelector(`#linha-${idx} input[name="importacao_tipo_${idx}"]`);
-        const numeroPacoteInput = document.querySelector(`#linha-${idx} input[name="numero_pacote_${idx}"]`);
-        
-        const endereco = enderecoInput ? enderecoInput.value : '';
-        const cep = cepInput ? cepInput.value : '';
-        const importacao_tipo = importacaoTipoInput ? importacaoTipoInput.value : '';
-        const numero_pacote = numeroPacoteInput ? numeroPacoteInput.value : '';
+        // PROBLEMA 3: OBTÉM OS VALORES ATUAIS DOS INPUTS DA LINHA
+        const endereco = document.querySelector(`#linha-${idx} input[name="endereco_${idx}"]`).value;
+        const cep = document.querySelector(`#linha-${idx} input[name="cep_${idx}"]`).value;
+        const importacao_tipo = document.querySelector(`#linha-${idx} input[name="importacao_tipo_${idx}"]`).value;
+        const numero_pacote = document.querySelector(`#linha-${idx} input[name="numero_pacote_${idx}"]`).value;
         
         const response = await fetch('/api/validar-linha', {
             method: 'POST',
@@ -438,18 +454,18 @@ async function validarLinha(idx) {
             },
             body: JSON.stringify({
                 idx: idx,
-                endereco: endereco,
-                cep: cep,
-                importacao_tipo: importacao_tipo, // Passa para o backend se precisar
-                numero_pacote: numero_pacote // Passa para o backend se precisar
+                endereco: endereco, // Envia o endereço DIGITADO
+                cep: cep,           // Envia o CEP DIGITADO
+                importacao_tipo: importacao_tipo, 
+                numero_pacote: numero_pacote 
             })
         });
         
         const data = await response.json();
         
         if (data.success) {
-            enderecosData[idx] = data.item;
-            atualizarLinhaNaTabela(idx, data.item);
+            enderecosData[idx] = data.item; // Atualiza com o item validado do backend
+            atualizarLinhaNaTabela(idx, data.item); // Atualiza a linha na tabela
             criarMarker(idx, data.item); // Recria o marcador para atualizar cor/posição
             mostrarFeedback("Endereço validado com sucesso", "success");
         } else {
@@ -473,17 +489,39 @@ async function validarTudo() {
     btnValidar.disabled = true;
     btnValidar.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Validando...';
     progressContainer.style.display = 'block';
+    progressBar.style.width = `0%`; // Reseta barra de progresso
+    progressBar.textContent = `0%`;
     mostrarFeedback("Validando todos os endereços...", "info");
     
     try {
-        // Fazer uma única requisição para validar todos os itens, para melhor performance
-        const response = await fetch('/api/validar-tudo', { // NOVA ROTA NO BACKEND
+        // Percorre cada linha da tabela para pegar os valores atuais dos inputs
+        const currentData = [];
+        const linhasTabela = document.querySelectorAll('#corpo-tabela tr');
+        linhasTabela.forEach((linha, index) => {
+            const endereco = linha.querySelector(`input[name="endereco_${index}"]`).value;
+            const cep = linha.querySelector(`input[name="cep_${index}"]`).value;
+            const importacao_tipo = linha.querySelector(`input[name="importacao_tipo_${index}"]`).value;
+            const numero_pacote = linha.querySelector(`input[name="numero_pacote_${index}"]`).value;
+
+            // Cria um objeto temporário com os dados ATUAIS da UI
+            currentData.push({
+                idx: index, // O índice é importante para o backend saber qual item atualizar
+                address: endereco,
+                cep: cep,
+                importacao_tipo: importacao_tipo,
+                order_number: numero_pacote
+                // Pode incluir outros campos se forem necessários para a validação no backend
+            });
+        });
+
+        // Envia a lista de dados atuais para o backend para validação em massa
+        const response = await fetch('/api/validar-tudo', { 
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                lista: enderecosData // Envia a lista completa para o backend
+                lista: currentData // Envia os dados ATUAIS da tabela
             })
         });
 
@@ -491,8 +529,8 @@ async function validarTudo() {
 
         if (data.success) {
             enderecosData = data.lista; // Atualiza com a lista validada do backend
-            atualizarTabelaComNovosDados(data.lista);
-            atualizarMapaComNovosDados(data.lista);
+            atualizarTabelaComNovosDados(data.lista); // Re-renderiza a tabela
+            atualizarMapaComNovosDados(data.lista); // Re-renderiza o mapa
 
             progressBar.style.width = `100%`;
             progressBar.textContent = `100%`;
@@ -516,8 +554,12 @@ function atualizarTabelaComNovosDados(novaLista) {
     const tbody = document.getElementById('corpo-tabela');
     tbody.innerHTML = ''; // Limpa a tabela existente
 
+    // Atualiza o hidden input 'total-linhas' do formulário
+    document.getElementById('total-linhas').value = novaLista.length;
+
     novaLista.forEach((item, index) => {
         const linhaClass = item.cep_ok ? 'table-success' : 'table-danger';
+        // HTML do status com tooltip condicional
         const statusHtml = item.status_google === 'OK' ? 
             `<span class="text-success">OK</span>${!item.rua_bate ? `<span data-bs-toggle="tooltip" title="Diferença encontrada: ${item.rua_google || ''}">⚠️</span>` : ''}` : 
             `<span class="text-danger">${item.status_google || 'NÃO ENCONTRADO'}</span>`;
@@ -604,75 +646,41 @@ function atualizarLinhaNaTabela(idx, data) {
         tooltipEndereco.setContent({ '.tooltip-inner': data.endereco_formatado || '' });
     }
     
-    // Atualizar tooltip de status se existir
-    const tooltipStatus = bootstrap.Tooltip.getInstance(
-        document.querySelector(`#linha-${idx} .status-google span[data-bs-toggle="tooltip"]`)
-    );
-    if (tooltipStatus && data.rua_google) {
-        tooltipStatus.setContent({ '.tooltip-inner': `Diferença encontrada: ${data.rua_google}` });
-    } else if (tooltipStatus) { // Se não tiver rua_google para o tooltip, pode ser necessário destruí-lo
-        tooltipStatus.dispose();
-    }
+    // Para o tooltip de status, pode ser necessário recriá-lo se a condição mudar
+    // ou se o elemento do tooltip for recriado no DOM.
+    // A melhor prática é reinicializar todos os tooltips após qualquer atualização DOM que envolva novos elementos.
     initTooltips(); // Re-inicializa todos os tooltips para garantir que os novos sejam ativados
 }
 
 // Funções de CRUD
 async function adicionarEnderecoManual() {
-    // Solicita o próximo ID manual do backend
+    // Solicita ao backend para adicionar um novo item manual e obter seus dados iniciais e order_number
     try {
         const response = await fetch('/api/add-manual-address', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({}) // Sem dados adicionais, apenas para obter o ID
+            body: JSON.stringify({}) // Envia corpo vazio pois os dados serão gerados no backend
         });
 
         const data = await response.json();
 
         if (data.success) {
             const novoItem = data.item;
-            const novoId = data.idx; // O índice na lista_atual
-            
-            enderecosData.push(novoItem); // Adiciona ao array local
+            const novoIdx = data.idx; // O índice na lista_atual do backend
 
-            const tbody = document.getElementById('corpo-tabela');
-            const newRow = `
-                <tr id="linha-${novoId}" class="table-danger" data-origem="manual">
-                    <td style="font-weight: bold; text-align:center;">${novoItem.order_number}</td>
-                    <td>
-                        <input type="hidden" name="numero_pacote_${novoId}" value="${novoItem.order_number}">
-                        <input type="hidden" name="importacao_tipo_${novoId}" value="manual">
-                        <input type="hidden" name="cor_${novoId}" value="#0074D9">
-                        <input type="text" class="form-control" name="endereco_${novoId}" value="" 
-                            data-bs-toggle="tooltip" data-bs-placement="top" title="">
-                    </td>
-                    <td>
-                        <input type="text" class="form-control" name="cep_${novoId}" value="">
-                    </td>
-                    <td class="cep-encontrado">-</td>
-                    <td class="status-google text-center mobile-hidden">
-                        <span class="text-danger">NÃO VALIDADO</span>
-                    </td>
-                    <td class="mobile-hidden">
-                        <span class="filter-badge" style="background-color:#0074D9; color: white;">
-                            Manual
-                        </span>
-                    </td>
-                    <td class="text-center btn-actions">
-                        <button type="button" onclick="validarLinha(${novoId})" class="btn btn-warning btn-sm w-100 mb-1">
-                            Validar
-                        </button>
-                    </td>
-                </tr>
-            `;
-            tbody.insertAdjacentHTML('beforeend', newRow);
-            document.getElementById('total-linhas').value = enderecosData.length;
+            // Adiciona o novo item ao array global no frontend
+            enderecosData.push(novoItem);
             
-            initTooltips();
-            
+            // Re-renderiza a tabela para incluir a nova linha
+            atualizarTabelaComNovosDados(enderecosData);
+
+            // Ajusta o mapa (opcional, pode ser feito apenas ao final de múltiplas adições)
+            // atualizarMapaComNovosDados(enderecosData);
+
             // Rolagem para a nova linha
-            document.getElementById(`linha-${novoId}`).scrollIntoView({
+            document.getElementById(`linha-${novoIdx}`).scrollIntoView({
                 behavior: 'smooth',
                 block: 'nearest'
             });
