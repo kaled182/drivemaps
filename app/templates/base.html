@@ -2,7 +2,7 @@
 <html lang="pt">
 <head>
     <meta charset="utf-8">
-    <title>DriveMaps – Gerador de Rotas Leguas</title>
+    <title>DriveMaps – Validador de Endereços</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <!-- Bootstrap 5 CDN -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -21,13 +21,6 @@
         }
         h2, h4 {
             color: #1976d2;
-        }
-        textarea.form-control {
-            font-size: 1.07em;
-            font-family: "Fira Mono", monospace, Arial, sans-serif;
-        }
-        table th, table td {
-            vertical-align: middle !important;
         }
         /* Responsividade extra para mobile */
         @media (max-width: 768px) {
@@ -49,7 +42,6 @@
         <h2 class="mb-4" style="font-weight:600;">DriveMaps</h2>
         {% block content %}{% endblock %}
     </div>
-    <!-- Bootstrap JS (opcional, só para modais/popovers) -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     {% block scripts %}{% endblock %}
 </body>
