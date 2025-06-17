@@ -1,30 +1,28 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h2>DriveMaps – Leguas</h2>
+<h2>DriveMaps – Portugal</h2>
 <form action="{{ url_for('main.preview') }}" method="POST">
     <div class="mb-3">
         <label for="enderecos" class="form-label">
-            Cole abaixo a lista de endereços da PAACK (um por linha):
+            Cole a lista de endereços (um por linha):
         </label>
-        <textarea class="form-control" id="enderecos" name="enderecos" rows="16"
+        <textarea class="form-control" id="enderecos" name="enderecos" rows="12"
                   placeholder="Exemplo:&#10;urbanização do ribeiro 135, 4905-129, palme&#10;#U3BGMQkZZ_1&#10;urbanização do ribeiro 135, 4905-129, palme&#10;1"></textarea>
     </div>
     <button type="submit" class="btn btn-primary">Pré-visualizar Endereços</button>
 </form>
-
 <div class="mt-4">
     <h4>Como usar:</h4>
     <ol>
-        <li>Cole a lista completa da PAACK no campo acima (copiada do sistema/app).</li>
+        <li>Cole a lista no campo acima (pode ser copiada do sistema da empresa).</li>
         <li>Clique em “Pré-visualizar Endereços”.</li>
-        <li>Na tela seguinte, confira a cor de cada linha (verde = CEP válido, vermelho = CEP ou rua divergente).</li>
-        <li>Caso seja necessário selecione o PIN e mude de localização, assim o endereço será atualizado automaticamente.</li>
-        <li>Se necessário, corrija e clique em "Validar" em qualquer linha alterada.</li>
-        <li>Seleciona o App de sua preferência e mande gerar o arquivo CSV!</li>
+        <li>Na próxima tela, confira e valide os endereços.</li>
+        <li>Caso necessário, corrija e valide individualmente.</li>
+        <li>Exporte para MyWay ou outros aplicativos.</li>
     </ol>
     <div class="alert alert-info mt-3">
-        <strong>Dica:</strong> De acordo com a quantidade de endereços é o tempo espera.
+        <strong>Dica:</strong> Dados são armazenados temporariamente e validados via Google Maps API.
     </div>
 </div>
 {% endblock %}
