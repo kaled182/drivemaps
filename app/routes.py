@@ -235,25 +235,34 @@ def import_planilha():
                 elif filename.endswith(('.csv', '.txt')):
                     logger.info("Processando arquivo Delnext como CSV/TXT.")
                     try:
-                        content = file.read().decode('utf-8')
+                        # LEITURA MAIS SEGURA PARA CSV/TXT
+                        content = file.read().decode('utf-8', errors='ignore') # Adicionado errors='ignore'
                         # Pega a primeira linha não vazia para sniffer
                         first_line_for_sniffer = ""
-                        for line in content.splitlines():
-                            if line.strip():
-                                first_line_for_sniffer = line
-                                break
+                        lines = content.splitlines()
+                        if len(lines) > 1: # Pula o cabeçalho (header=1)
+                            for line in lines[1:]: # Começa da segunda linha para detectar o separador
+                                if line.strip():
+                                    first_line_for_sniffer = line
+                                    break
                         if not first_line_for_sniffer:
-                            raise ValueError("Conteúdo CSV/TXT vazio ou sem linhas válidas para detecção de separador.")
+                            # Se não encontrou linha para sniffer após o header, tenta com a primeira linha
+                            if lines and lines[0].strip():
+                                first_line_for_sniffer = lines[0].strip()
+                            else:
+                                raise ValueError("Conteúdo CSV/TXT vazio ou sem linhas válidas para detecção de separador.")
 
                         dialect = csv.Sniffer().sniff(first_line_for_sniffer, delimiters=[',', ';'])
                         file.seek(0)
-                        df = pd.read_csv(io.StringIO(content), header=1, sep=dialect.delimiter)
+                        # Usar io.BytesIO para compatibilidade com pd.read_csv quando o 'file' já foi lido
+                        df = pd.read_csv(io.BytesIO(content.encode('utf-8')), header=1, sep=dialect.delimiter)
                     except Exception as csv_err:
-                        logger.warning(f"Erro ao tentar detectar separador CSV, tentando padrão: {csv_err}")
+                        logger.warning(f"Erro ao tentar detectar separador CSV para Delnext, tentando padrão: {csv_err}")
                         file.seek(0)
-                        df = pd.read_csv(file, header=1, sep=',')
-                        if df.empty or ('morada' not in df.columns.str.lower() and 'código postal' not in df.columns.str.lower() and 'codigo postal' not in df.columns.str.lower()):
-                            logger.warning("Leitura CSV com vírgula falhou ou colunas não encontradas, tentando ponto e vírgula.")
+                        try:
+                            df = pd.read_csv(file, header=1, sep=',')
+                        except Exception as e_comma:
+                            logger.warning(f"Leitura CSV Delnext com vírgula falhou, tentando ponto e vírgula: {e_comma}")
                             file.seek(0)
                             df = pd.read_csv(file, header=1, sep=';')
                 else:
@@ -263,9 +272,10 @@ def import_planilha():
                     }), 400
                 
                 if df.empty:
+                    logger.error("DataFrame Delnext vazio após a leitura. Verifique o formato ou o header.")
                     return jsonify({
                         "success": False,
-                        "msg": "A planilha está vazia ou o formato é inválido após ignorar a primeira linha."
+                        "msg": "A planilha Delnext está vazia ou o formato é inválido após ignorar a primeira linha."
                     }), 400
 
                 df.columns = df.columns.astype(str) # Garante que nomes de colunas são strings
@@ -288,6 +298,7 @@ def import_planilha():
                         logger.warning(f"Linha {index+2} (após cabeçalho) ignorada por conter endereço ou CEP vazio: Endereço='{endereco}', CEP='{cep}'")
                         continue 
                         
+                    # Lógica de formatação de CEP (mantida do código anterior)
                     cep = re.sub(r'[^\d-]', '', cep)
                     if len(cep) == 8 and '-' not in cep: # Ex: "12345678" vira "1234-5678" -> "1234-567"
                         cep = f"{cep[:4]}-{cep[4:]}"
@@ -303,7 +314,7 @@ def import_planilha():
                         else: # Se não tiver 7 dígitos, usa como está e a validação do google vai falhar
                             pass
 
-                    logger.info(f"Processando linha {index+2}: Endereço='{endereco}', CEP formatado='{cep}'")
+                    logger.info(f"Processando linha Delnext {index+2}: Endereço='{endereco}', CEP formatado='{cep}'")
                     
                     res_google = valida_rua_google_cache(endereco, cep)
                     rua_digitada = endereco.split(',')[0] if endereco else ''
@@ -314,7 +325,7 @@ def import_planilha():
                     cep_ok = (cep == res_google.get('postal_code_encontrado', ''))
                     
                     novo = {
-                        "order_number": "", # Será preenchido após a verificação de duplicidade e adição à lista principal
+                        "order_number": "", 
                         "address": endereco,
                         "cep": cep,
                         "status_google": res_google.get('status'),
@@ -330,8 +341,8 @@ def import_planilha():
                         "cor": cor_por_tipo("delnext")
                     }
                     
-                    if registro_unico(lista_atual, novo):
-                        novos_itens_importados.append(novo) # Adiciona à lista temporária
+                    if registro_unico(lista_atual, novo): # Verifica duplicidade com a lista atual
+                        novos_itens_importados.append(novo) 
                     else:
                         logger.info(f"Registro duplicado Delnext ignorado: {endereco}, {cep}")
 
@@ -345,24 +356,25 @@ def import_planilha():
                 elif filename.endswith(('.csv', '.txt')):
                     logger.info("Processando arquivo Paack como CSV/TXT.")
                     try:
-                        content = file.read().decode('utf-8')
+                        # LEITURA MAIS SEGURA PARA CSV/TXT
+                        content = file.read().decode('utf-8', errors='ignore') # Adicionado errors='ignore'
                         first_line_for_sniffer = ""
-                        for line in content.splitlines():
-                            if line.strip():
-                                first_line_for_sniffer = line
-                                break
+                        lines = content.splitlines()
+                        if lines: # Pega a primeira linha para sniffer (header=0)
+                            first_line_for_sniffer = lines[0].strip()
                         if not first_line_for_sniffer:
                             raise ValueError("Conteúdo CSV/TXT vazio ou sem linhas válidas para detecção de separador.")
 
                         dialect = csv.Sniffer().sniff(first_line_for_sniffer, delimiters=[',', ';'])
                         file.seek(0)
-                        df = pd.read_csv(io.StringIO(content), header=0, sep=dialect.delimiter)
+                        df = pd.read_csv(io.BytesIO(content.encode('utf-8')), header=0, sep=dialect.delimiter)
                     except Exception as csv_err:
-                        logger.warning(f"Erro ao tentar detectar separador CSV, tentando padrão para Paack: {csv_err}")
+                        logger.warning(f"Erro ao tentar detectar separador CSV para Paack, tentando padrão: {csv_err}")
                         file.seek(0)
-                        df = pd.read_csv(file, header=0, sep=',')
-                        if df.empty or ('endereco' not in df.columns.str.lower() and 'cep' not in df.columns.str.lower()):
-                            logger.warning("Leitura CSV Paack com vírgula falhou ou colunas não encontradas, tentando ponto e vírgula.")
+                        try:
+                            df = pd.read_csv(file, header=0, sep=',')
+                        except Exception as e_comma:
+                            logger.warning(f"Leitura CSV Paack com vírgula falhou, tentando ponto e vírgula: {e_comma}")
                             file.seek(0)
                             df = pd.read_csv(file, header=0, sep=';')
                 else:
@@ -372,6 +384,7 @@ def import_planilha():
                     }), 400
 
                 if df.empty:
+                    logger.error("DataFrame Paack vazio após a leitura. Verifique o formato ou o header.")
                     return jsonify({
                         "success": False,
                         "msg": "A planilha Paack está vazia ou o formato é inválido."
@@ -393,6 +406,7 @@ def import_planilha():
                         logger.warning(f"Linha {index+1} (Paack) ignorada por conter endereço ou CEP vazio: Endereço='{endereco}', CEP='{cep}'")
                         continue
 
+                    # Lógica de formatação de CEP (mantida do código anterior)
                     cep = re.sub(r'[^\d-]', '', cep)
                     if len(cep) == 8 and '-' not in cep:
                         cep = f"{cep[:4]}-{cep[4:]}"
@@ -407,7 +421,7 @@ def import_planilha():
                         else:
                             pass
 
-                    logger.info(f"Processando linha {index+1} (Paack): Endereço='{endereco}', CEP formatado='{cep}'")
+                    logger.info(f"Processando linha Paack {index+1}: Endereço='{endereco}', CEP formatado='{cep}'")
 
                     res_google = valida_rua_google_cache(endereco, cep)
                     rua_digitada = endereco.split(',')[0] if endereco else ''
@@ -418,7 +432,7 @@ def import_planilha():
                     cep_ok = (cep == res_google.get('postal_code_encontrado', ''))
 
                     novo = {
-                        "order_number": "", # Será preenchido após a verificação de duplicidade e adição à lista principal
+                        "order_number": "", 
                         "address": endereco,
                         "cep": cep,
                         "status_google": res_google.get('status'),
@@ -434,7 +448,7 @@ def import_planilha():
                         "cor": cor_por_tipo("paack")
                     }
                     
-                    if registro_unico(lista_atual, novo):
+                    if registro_unico(lista_atual, novo): # Verifica duplicidade com a lista atual
                         novos_itens_importados.append(novo)
                     else:
                         logger.info(f"Registro duplicado Paack ignorado: {endereco}, {cep}")
@@ -471,15 +485,12 @@ def import_planilha():
             for item in lista_atual:
                 needs_reindex = False
                 if item.get('importacao_tipo') == 'manual':
-                    # Se não é um número puro ou está vazio, precisa de re-index
                     if not str(item.get('order_number', '')).isdigit() or item.get('order_number', '') == "":
                         needs_reindex = True
                 elif item.get('importacao_tipo') == 'delnext':
-                    # Se não começa com 'D' ou está vazio, precisa de re-index
                     if not str(item.get('order_number', '')).startswith('D') or item.get('order_number', '') == "":
                         needs_reindex = True
                 elif item.get('importacao_tipo') == 'paack':
-                    # Se não começa com 'P' ou está vazio, precisa de re-index
                     if not str(item.get('order_number', '')).startswith('P') or item.get('order_number', '') == "":
                         needs_reindex = True
 
@@ -567,7 +578,7 @@ def validar_linha():
                 pass
 
 
-        res_google = valida_rua_google_cache(item["address"], item["cep"])
+        res_google = valida_rua_google_cache(item["address"], item["cep"]) 
         
         rua_digitada = item["address"].split(',')[0] if item["address"] else ''
         rua_google = res_google.get('route_encontrada', '')
@@ -607,45 +618,32 @@ def validar_tudo():
     """Valida todos os endereços na sessão ou na lista fornecida."""
     try:
         data = request.get_json()
-        # O frontend envia `currentData` que reflete o estado atual dos inputs na tabela.
-        # Vamos usar isso para atualizar a sessão e depois validar.
-        lista_from_frontend = data.get('lista', []) # Lista de itens como estão no frontend
+        lista_from_frontend = data.get('lista', []) 
 
-        lista_atual = session.get('lista', []) # Pega a lista da sessão
+        lista_atual = session.get('lista', []) 
         
         if not lista_atual and not lista_from_frontend:
             return jsonify({"success": True, "msg": "Nenhum endereço para validar."})
 
         # Sincroniza a lista da sessão com os valores mais recentes do frontend
-        # (se o frontend passou uma lista completa, use-a para a validação)
-        # Se você quer que a validação em massa sempre use a lista da sessão,
-        # ignore lista_from_frontend e trabalhe apenas com lista_atual.
-        # No entanto, se o usuário pode ter editado vários campos e depois clicou em "Validar Tudo",
-        # você precisa usar os dados editados.
-
-        # Para simplificar e garantir que os dados mais recentes sejam usados,
-        # vamos reconstruir a lista da sessão com base nos dados enviados pelo frontend.
-        # OU, alternativamente, iterar sobre lista_from_frontend e atualizar lista_atual[idx]
-        # com address, cep antes de validar.
-
-        # Vamos iterar sobre lista_from_frontend e atualizar os itens correspondentes em lista_atual
-        # para garantir que as edições não salvas sejam validadas.
-        temp_lista_para_validar = []
+        # Isso é crucial se o usuário editou vários campos antes de clicar em "Validar Tudo"
+        # Usamos os índices para garantir que estamos atualizando o item correto na lista da sessão
         for i, item_from_fe in enumerate(lista_from_frontend):
             if i < len(lista_atual):
-                # Atualiza os campos editáveis no item da sessão com os valores do frontend
                 lista_atual[i]["address"] = item_from_fe.get("address", "")
                 lista_atual[i]["cep"] = item_from_fe.get("cep", "")
-                # Adiciona à lista temporária para validação
-                temp_lista_para_validar.append(lista_atual[i])
+                # Outros campos que podem ser editados na UI também deveriam ser sincronizados aqui se aplicável
             else:
-                # Caso haja um item novo que não estava na sessão (ex: um bug que adicionou no FE mas não no BE)
-                # ou se a lógica for diferente, trate aqui. Por enquanto, assumimos sincronia.
-                temp_lista_para_validar.append(item_from_fe) # Adiciona se for um item novo no FE
+                # Caso um item novo que foi adicionado no FE e não foi salvo no BE ainda,
+                # ele não estará em lista_atual. Pode ser adicionado aqui para validação,
+                # mas o fluxo ideal seria adicioná-lo via /api/add-manual-address primeiro.
+                logger.warning(f"Item {i} do frontend não encontrado na sessão durante validar-tudo. Pode ser um novo item não salvo previamente.")
+                # Por agora, vamos apenas trabalhar com itens já existentes na sessão
+                # se você precisar validar novos itens em massa, adicione-os à sessão ANTES desta chamada.
 
 
-        # Loop para validar cada item
-        for idx, item in enumerate(temp_lista_para_validar):
+        # Loop para validar cada item AGORA na lista_atual (que está sincronizada com o frontend)
+        for idx, item in enumerate(lista_atual): # Itera sobre a lista_atual sincronizada
             # Formatar CEP antes da validação
             item["cep"] = re.sub(r'[^\d-]', '', item["cep"])
             if len(item["cep"]) == 8 and '-' not in item["cep"]:
@@ -661,7 +659,7 @@ def validar_tudo():
                 else:
                     pass
 
-            res_google = valida_rua_google_cache(item["address"], item["get('cep')"]) # Corrigido: 'get('cep')' para 'cep'
+            res_google = valida_rua_google_cache(item["address"], item["cep"])
             
             rua_digitada = item["address"].split(',')[0] if item["address"] else ''
             rua_google = res_google.get('route_encontrada', '')
@@ -669,7 +667,7 @@ def validar_tudo():
                        normalizar(rua_google) in normalizar(rua_digitada))
             cep_ok = item["cep"] == res_google.get('postal_code_encontrado', '')
             
-            item.update({
+            lista_atual[idx].update({ # Atualiza o item diretamente na lista_atual
                 "status_google": res_google.get('status'),
                 "postal_code_encontrado": res_google.get('postal_code_encontrado', ''),
                 "latitude": res_google.get('coordenadas', {}).get('lat', ''),
@@ -681,10 +679,6 @@ def validar_tudo():
                 "endereco_formatado": res_google.get('endereco_formatado', item["address"])
             })
             
-            # Atualiza o item na lista_atual (que está ligada à sessão)
-            if idx < len(lista_atual):
-                lista_atual[idx] = item # Substitui o item completo na sessão
-
         session['lista'] = lista_atual
         session.modified = True
         
