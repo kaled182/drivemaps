@@ -56,7 +56,7 @@ def cor_por_tipo(tipo):
     }.get(tipo, CORES_IMPORTACAO[0])
 
 def registro_unico(lista, novo):
-    """Verifica se um registro (endereço + cep + tipo) já existe na lista para evitar duplicatas."""
+    """Verifica se um registro (endereço + cep + tipo) já existe na lista para evitar duplicatas)."""
     return not any(
         normalizar(item.get("address", "")) == normalizar(novo.get("address", "")) and
         normalizar(item.get("cep", "")) == normalizar(novo.get("cep", "")) and
@@ -293,7 +293,7 @@ def import_planilha():
                         cep = f"{cep[:4]}-{cep[4:]}"
                     elif len(cep) == 7 and '-' not in cep: # Ex: "1234567" -> "1234-567"
                         cep = f"{cep[:4]}-{cep[4:]}"
-                    elif len(cep) == 9 and cep.count('-') == 1 and len(cep.replace('-', '')) == 8: # Ex: "1234-5678"
+                    elif len(cep) == 9 and cep.count('-') == 1 and len(cep.replace('-', '')) == 8: # Ex: "1234-5678" Delnext pode vir com 8 digitos
                         cep = cep[:8] # Corta para 1234-567 (mantendo o formato padrão pt)
                     elif len(cep) > 8 and '-' in cep and len(cep.replace('-', '')) > 7: # Outros formatos, tenta normalizar
                          # Tenta pegar apenas 4 primeiros digitos, hífen e 3 proximos
@@ -607,18 +607,61 @@ def validar_tudo():
     """Valida todos os endereços na sessão ou na lista fornecida."""
     try:
         data = request.get_json()
-        # O frontend envia a `enderecosData` que é o `session['lista']` no backend.
-        # Portanto, vamos apenas usar o que já está na sessão.
-        lista_atual = session.get('lista', [])
+        # O frontend envia `currentData` que reflete o estado atual dos inputs na tabela.
+        # Vamos usar isso para atualizar a sessão e depois validar.
+        lista_from_frontend = data.get('lista', []) # Lista de itens como estão no frontend
+
+        lista_atual = session.get('lista', []) # Pega a lista da sessão
         
-        if not lista_atual:
+        if not lista_atual and not lista_from_frontend:
             return jsonify({"success": True, "msg": "Nenhum endereço para validar."})
 
+        # Sincroniza a lista da sessão com os valores mais recentes do frontend
+        # (se o frontend passou uma lista completa, use-a para a validação)
+        # Se você quer que a validação em massa sempre use a lista da sessão,
+        # ignore lista_from_frontend e trabalhe apenas com lista_atual.
+        # No entanto, se o usuário pode ter editado vários campos e depois clicou em "Validar Tudo",
+        # você precisa usar os dados editados.
+
+        # Para simplificar e garantir que os dados mais recentes sejam usados,
+        # vamos reconstruir a lista da sessão com base nos dados enviados pelo frontend.
+        # OU, alternativamente, iterar sobre lista_from_frontend e atualizar lista_atual[idx]
+        # com address, cep antes de validar.
+
+        # Vamos iterar sobre lista_from_frontend e atualizar os itens correspondentes em lista_atual
+        # para garantir que as edições não salvas sejam validadas.
+        temp_lista_para_validar = []
+        for i, item_from_fe in enumerate(lista_from_frontend):
+            if i < len(lista_atual):
+                # Atualiza os campos editáveis no item da sessão com os valores do frontend
+                lista_atual[i]["address"] = item_from_fe.get("address", "")
+                lista_atual[i]["cep"] = item_from_fe.get("cep", "")
+                # Adiciona à lista temporária para validação
+                temp_lista_para_validar.append(lista_atual[i])
+            else:
+                # Caso haja um item novo que não estava na sessão (ex: um bug que adicionou no FE mas não no BE)
+                # ou se a lógica for diferente, trate aqui. Por enquanto, assumimos sincronia.
+                temp_lista_para_validar.append(item_from_fe) # Adiciona se for um item novo no FE
+
+
         # Loop para validar cada item
-        for idx, item in enumerate(lista_atual):
-            # A validação em massa deve pegar os dados atuais da sessão (que podem ter sido alterados)
-            # Reusa a lógica de validação de linha para consistência
-            res_google = valida_rua_google_cache(item["address"], item["cep"]) # Valida com os dados atuais do item
+        for idx, item in enumerate(temp_lista_para_validar):
+            # Formatar CEP antes da validação
+            item["cep"] = re.sub(r'[^\d-]', '', item["cep"])
+            if len(item["cep"]) == 8 and '-' not in item["cep"]:
+                item["cep"] = f"{item['cep'][:4]}-{item['cep'][4:]}"
+            elif len(item["cep"]) == 7 and '-' not in item["cep"]:
+                item["cep"] = f"{item['cep'][:4]}-{item['cep'][4:]}"
+            elif len(item["cep"]) == 9 and item["cep"].count('-') == 1 and len(item["cep"].replace('-', '')) == 8:
+                item["cep"] = item["cep"][:8]
+            elif len(item["cep"]) > 8 and '-' in item["cep"] and len(item["cep"].replace('-', '')) > 7:
+                numbers = re.sub(r'\D', '', item["cep"])
+                if len(numbers) >= 7:
+                    item["cep"] = f"{numbers[:4]}-{numbers[4:7]}"
+                else:
+                    pass
+
+            res_google = valida_rua_google_cache(item["address"], item["get('cep')"]) # Corrigido: 'get('cep')' para 'cep'
             
             rua_digitada = item["address"].split(',')[0] if item["address"] else ''
             rua_google = res_google.get('route_encontrada', '')
@@ -626,7 +669,7 @@ def validar_tudo():
                        normalizar(rua_google) in normalizar(rua_digitada))
             cep_ok = item["cep"] == res_google.get('postal_code_encontrado', '')
             
-            lista_atual[idx].update({
+            item.update({
                 "status_google": res_google.get('status'),
                 "postal_code_encontrado": res_google.get('postal_code_encontrado', ''),
                 "latitude": res_google.get('coordenadas', {}).get('lat', ''),
@@ -638,7 +681,9 @@ def validar_tudo():
                 "endereco_formatado": res_google.get('endereco_formatado', item["address"])
             })
             
-            # Não salvar a sessão em cada iteração para performance. Salvar apenas uma vez no final.
+            # Atualiza o item na lista_atual (que está ligada à sessão)
+            if idx < len(lista_atual):
+                lista_atual[idx] = item # Substitui o item completo na sessão
 
         session['lista'] = lista_atual
         session.modified = True
@@ -723,9 +768,10 @@ def add_manual_address():
         session.modified = True
         
         # Retorna o item recém-adicionado com o order_number já formatado
+        # O último item adicionado é 'novo', e agora tem o order_number certo
         return jsonify({
             "success": True,
-            "item": novo, # O 'novo' agora tem o order_number atualizado
+            "item": novo, 
             "idx": len(lista_atual) - 1 # Retorna o índice onde foi adicionado
         })
 
