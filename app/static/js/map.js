@@ -23,6 +23,7 @@
                 <th>Endereço Original</th>
                 <th>Endereço Atual</th>
                 <th>Status</th>
+                <th>Ação</th>
             </tr>
         </thead>
         <tbody>
@@ -32,6 +33,9 @@
                 <td>{{ loc.address_original }}</td>
                 <td>{{ loc.address_atual }}</td>
                 <td>{{ loc.status }}</td>
+                <td>
+                  <button onclick="validarEndereco({{ loc.address_atual|tojson }})">Validar</button>
+                </td>
             </tr>
             {% endfor %}
         </tbody>
