@@ -71,8 +71,14 @@ def get_endereco(eid):
         "status": endereco.status
     })
 
-# Utilitário para criar o banco (roda uma vez)
+# Utilitário para criar o banco (roda uma vez pelo terminal)
 @main_routes.cli.command("criar-db")
 def criar_db():
     db.create_all()
     print("Banco de dados criado.")
+
+# ROTA TEMPORÁRIA PARA CRIAR BANCO VIA HTTP (REMOVA DEPOIS DE USAR!)
+@main_routes.route("/criar-banco-uma-vez")
+def criar_banco_uma_vez():
+    db.create_all()
+    return "Banco de dados criado! (Pode remover esta rota agora)"
