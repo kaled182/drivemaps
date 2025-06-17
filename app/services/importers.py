@@ -1,13 +1,13 @@
 import re
 from app.services.validators import validate_address_cep
 from app.utils.normalize import normalize_cep
+import csv
+from io import StringIO
 
 class PaackTextImporter:
     """
-    Parser para listas coladas em texto do Paack, pegando apenas endereço e ID de pacote.
-    O ID de pacote é o número sequencial (ex: 1, 2, 3...).
+    Parser para listas coladas em texto do Paack.
     """
-
     def parse(self, text):
         lines = [l.strip() for l in text.splitlines() if l.strip()]
         blocks = []
@@ -44,11 +44,45 @@ class PaackTextImporter:
             i += 7
         return blocks
 
-# Exemplo básico para Delnext (ajuste conforme sua lógica real)
 class DelnextImporter:
+    """
+    Importador de planilhas Delnext.
+    """
     def parse(self, file):
-        # implemente conforme sua demanda
-        return []
+        lista = []
+
+        raw = file.read()
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8-sig")
+        content = raw
+
+        f = StringIO(content)
+        reader = csv.DictReader(f)
+
+        for row in reader:
+            order_number = row.get("Order Number") or row.get("order_number") or row.get("ID") or ""
+            address = row.get("Address") or row.get("address") or row.get("Endereço") or ""
+            lat = row.get("Latitude") or row.get("lat") or ""
+            lng = row.get("Longitude") or row.get("lng") or ""
+
+            try:
+                lat = float(lat)
+            except Exception:
+                lat = None
+            try:
+                lng = float(lng)
+            except Exception:
+                lng = None
+
+            item = {
+                "order_number": order_number,
+                "address": address,
+                "lat": lat,
+                "lng": lng,
+                "importacao_tipo": "delnext"
+            }
+            lista.append(item)
+        return lista
 
 def get_importer(empresa, input_type='file'):
     if empresa == "paack":
