@@ -2,12 +2,28 @@
 
 {% block content %}
 <style>
-  #map-top-sticky { position: sticky; top: 0; z-index: 100; background: #f8fafd; box-shadow: 0 4px 18px #0001; border-radius: 0 0 14px 14px; }
-  @media (max-width: 600px) { #map-top-sticky { height: 240px !important; max-height: 45vh; } .table-responsive { overflow-x: auto; } .mobile-hidden { display: none; } }
-  @media (min-width: 601px) { #map-top-sticky { height: 420px !important; max-height: 55vh; } }
+  #map-top-sticky { 
+    position: sticky; 
+    top: 0; 
+    z-index: 100; 
+    background: #f8fafd; 
+    box-shadow: 0 4px 18px #0001; 
+    border-radius: 0 0 14px 14px; 
+  }
+  @media (max-width: 600px) { 
+    #map-top-sticky { height: 240px !important; max-height: 45vh; } 
+    .table-responsive { overflow-x: auto; }
+    .mobile-hidden { display: none; }
+  }
+  @media (min-width: 601px) { 
+    #map-top-sticky { height: 420px !important; max-height: 55vh; }
+  }
   .table-responsive { margin-top: 6px; }
-  .filter-badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 12px; margin-right: 5px; color: white; }
+  .filter-badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 12px; margin-right: 5px; }
+  .progress-sm { height: 24px; }
   #feedback-msg { min-height: 26px; }
+  .tooltip-inner { max-width: 300px; }
+  .cursor-move { cursor: move; }
   .btn-actions { white-space: nowrap; }
 </style>
 
@@ -15,43 +31,102 @@
     <div id="map" style="width:100%;height:100%;min-height:220px;"></div>
 </div>
 
-<div class="d-flex flex-wrap justify-content-between gap-2 my-3">
+<div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
     <div class="d-flex flex-row gap-2">
-        <select id="filtro-origem" class="form-select form-select-sm" onchange="filtrarPorOrigem()"></select>
+        <select id="filtro-origem" class="form-select form-select-sm" onchange="filtrarPorOrigem()">
+            <option value="">Todas as origens</option>
+            {% for origem in origens %}
+                <option value="{{ origem }}">{{ origem|capitalize }}</option>
+            {% endfor %}
+        </select>
         <button type="button" class="btn btn-warning btn-sm" onclick="validarTudo()" id="btn-validar-tudo">
-            <span class="spinner-border spinner-border-sm d-none" id="spinner-validar"></span> Validar Tudo
+            <span class="spinner-border spinner-border-sm d-none" id="spinner-validar"></span>
+            Validar Tudo
         </button>
     </div>
-    <form id="form-upload" class="d-flex flex-row gap-2">
+    <form id="form-upload" enctype="multipart/form-data" method="post" action="{{ url_for('main.import_planilha') }}" class="d-flex flex-row gap-2">
         <select name="empresa" class="form-select form-select-sm" style="width:auto;" required>
             <option value="">Empresa</option>
             <option value="delnext">Delnext</option>
-            <option value="paack">Paack</option>
+            <option value="paack">Paack (Padrão)</option>
         </select>
         <input type="file" name="planilha" accept=".xls,.xlsx,.csv,.txt" required class="form-control form-control-sm">
         <button type="submit" class="btn btn-secondary btn-sm" id="btn-importar">
-            <span class="spinner-border spinner-border-sm d-none" id="spinner-importar"></span> Importar
+            <span class="spinner-border spinner-border-sm d-none" id="spinner-importar"></span>
+            Importar
         </button>
     </form>
 </div>
-<div id="feedback-msg" class="mb-2 fw-bold"></div>
-<div id="progresso-validacao" class="progress" style="height: 5px; display: none;"><div id="progresso-barra" class="progress-bar"></div></div>
+
+<div id="feedback-msg" class="mb-2 text-danger fw-bold"></div>
+
+<div id="progresso-validacao" class="progress progress-sm mb-3" style="display: none;">
+    <div id="progresso-barra" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%">0%</div>
+</div>
 
 <div class="table-responsive">
 <form id="form-csv" action="{{ url_for('main.generate') }}" method="post" autocomplete="off">
     <table class="table table-bordered align-middle" id="tabela-enderecos">
         <thead class="table-light">
             <tr>
-                <th style="width:40px;">ID</th><th>Endereço</th><th style="width:110px;">CODP</th><th style="width:110px;">CODP Google</th>
-                <th class="mobile-hidden" style="width:110px;">Status</th><th class="mobile-hidden" style="width:100px;">Origem</th><th style="width:120px;">Ação</th>
+                <th style="width:40px;">ID</th>
+                <th>Endereço</th>
+                <th style="width:110px;">CODP</th>
+                <th style="width:110px;">CODP Google</th>
+                <th class="mobile-hidden" style="width:110px;">Status</th>
+                <th class="mobile-hidden" style="width:100px;">Origem</th>
+                <th style="width:120px;">Ação</th>
             </tr>
         </thead>
-        <tbody id="corpo-tabela"></tbody>
+        <tbody id="corpo-tabela">
+            {% for item in lista %}
+            <tr id="linha-{{ loop.index0 }}" class="{% if item.cep_ok %}table-success{% else %}table-danger{% endif %}" data-origem="{{ item.importacao_tipo }}">
+                <td style="font-weight: bold; text-align:center;">{{ item.order_number or loop.index }}</td>
+                <td>
+                    <input type="hidden" name="numero_pacote_{{ loop.index0 }}" value="{{ item.order_number }}">
+                    <input type="hidden" name="importacao_tipo_{{ loop.index0 }}" value="{{ item.importacao_tipo }}">
+                    <input type="hidden" name="cor_{{ loop.index0 }}" value="{{ item.cor }}">
+                    <input type="text" class="form-control" name="endereco_{{ loop.index0 }}" value="{{ item.address }}" 
+                           data-bs-toggle="tooltip" data-bs-placement="top" 
+                           title="{{ item.endereco_formatado or '' }}">
+                </td>
+                <td>
+                    <input type="text" class="form-control" name="cep_{{ loop.index0 }}" value="{{ item.cep }}">
+                </td>
+                <td class="cep-encontrado">{{ item.postal_code_encontrado or '-' }}</td>
+                <td class="status-google text-center mobile-hidden">
+                    {% if item.status_google == 'OK' %}
+                        <span class="text-success">OK</span>
+                        {% if not item.rua_bate %}
+                            <span data-bs-toggle="tooltip" title="Diferença encontrada: {{ item.rua_google }}">⚠️</span>
+                        {% endif %}
+                    {% else %}
+                        <span class="text-danger">{{ item.status_google or 'NÃO ENCONTRADO' }}</span>
+                    {% endif %}
+                </td>
+                <td class="mobile-hidden">
+                    <span class="filter-badge" style="background-color:{{ item.cor|default('#0074D9') }}; color: white;">
+                        {{ item.importacao_tipo|capitalize }}
+                    </span>
+                </td>
+                <td class="text-center btn-actions">
+                    <button type="button" onclick="validarLinha({{ loop.index0 }})" class="btn btn-warning btn-sm w-100 mb-1">
+                        Validar
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
     </table>
     <div class="d-flex justify-content-between my-2">
-        <button type="button" class="btn btn-primary" onclick="adicionarEnderecoManual()">+ Adicionar endereço</button>
-        <button id="btn-csv" type="submit" class="btn btn-success">Gerar CSV para MyWay</button>
+        <button type="button" class="btn btn-primary" onclick="adicionarEnderecoManual()">
+            + Adicionar endereço
+        </button>
+        <button id="btn-csv" type="submit" name="finalizar" value="1" class="btn btn-success">
+            Gerar CSV para MyWay
+        </button>
     </div>
+    <input type="hidden" name="total" id="total-linhas" value="{{ lista|length }}">
 </form>
 </div>
 {% endblock %}
@@ -59,187 +134,588 @@
 {% block scripts %}
 <script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
 <script>
-let map, markerCluster;
+// Variáveis globais
+let map;
 let markers = [];
-let enderecosData = {{ lista | tojson | safe }};
+let markerCluster;
+let enderecosData = {{ lista | tojson | safe }}; // Esta variável agora deve ser sempre atualizada via AJAX ou reload
+let arrastandoMarker = null;
 
+// Inicialização
 document.addEventListener('DOMContentLoaded', () => {
-    rebuildTableAndMap();
+    initTooltips();
     setupEventListeners();
+    // A inicialização do mapa agora é feita pelo callback da API do Google Maps
 });
 
+function initTooltips() {
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(el => new bootstrap.Tooltip(el));
+}
+
 function setupEventListeners() {
+    // Formulário de upload
     document.getElementById('form-upload').addEventListener('submit', function(e) {
         e.preventDefault();
         mostrarCarregamento(true, 'importar');
-        fetch("{{ url_for('main.import_planilha') }}", { method: 'POST', body: new FormData(this) })
-            .then(res => res.json())
-            .then(data => {
-                if (data.success) {
-                    enderecosData = data.lista;
-                    rebuildTableAndMap();
-                    mostrarFeedback("Planilha importada com sucesso!", "success");
-                } else { throw new Error(data.msg); }
-            }).catch(err => mostrarFeedback(err.message, "danger"))
-            .finally(() => mostrarCarregamento(false, 'importar'));
+        document.getElementById('feedback-msg').textContent = '';
+
+        fetch(this.action, {
+            method: 'POST',
+            body: new FormData(this)
+        })
+        .then(async response => {
+            if (!response.ok) {
+                const data = await response.json().catch(() => ({}));
+                throw new Error(data.msg || "Erro ao importar arquivo");
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                // Atualiza a variável global enderecosData com os novos dados
+                enderecosData = data.lista;
+                // Atualiza a tabela na interface do usuário
+                atualizarTabelaComNovosDados(data.lista);
+                // Re-inicializa/atualiza o mapa com os novos dados
+                atualizarMapaComNovosDados(data.lista);
+                // Atualiza o total de linhas do formulário
+                document.getElementById('total-linhas').value = data.lista.length;
+
+                // Atualiza as opções do filtro de origem
+                const filtroOrigem = document.getElementById('filtro-origem');
+                filtroOrigem.innerHTML = '<option value="">Todas as origens</option>';
+                data.origens.forEach(origem => {
+                    const option = document.createElement('option');
+                    option.value = origem;
+                    option.textContent = origem.charAt(0).toUpperCase() + origem.slice(1);
+                    filtroOrigem.appendChild(option);
+                });
+
+                mostrarFeedback("Importação realizada com sucesso!", "success");
+            } else {
+                throw new Error(data.msg || "Erro na importação");
+            }
+        })
+        .catch(err => {
+            console.error("Erro na importação:", err);
+            document.getElementById('feedback-msg').textContent = err.message;
+            mostrarFeedback(err.message, "danger");
+        })
+        .finally(() => mostrarCarregamento(false, 'importar'));
     });
 
-    document.getElementById('corpo-tabela').addEventListener('click', e => {
-        const btn = e.target.closest('.btn-validar');
-        if (btn) validarLinha(parseInt(btn.dataset.idx, 10));
+    // Formulário de geração de CSV
+    document.getElementById('form-csv').addEventListener('submit', function(e) {
+        mostrarCarregamento(true, 'gerar');
+        // A geração de CSV não precisa de preventDefault aqui
+        // pois ela redireciona para o download, que é o comportamento padrão.
     });
 }
 
-function rebuildTableAndMap() {
-    const tbody = document.getElementById('corpo-tabela');
-    tbody.innerHTML = '';
-    enderecosData.forEach((item, idx) => appendRowToTable(item, idx));
-    updateFilters();
-    rebuildMap();
-}
-
-function appendRowToTable(item, idx) {
-    const tbody = document.getElementById('corpo-tabela');
-    const newRow = document.createElement('tr');
-    newRow.id = `linha-${idx}`;
-    tbody.appendChild(newRow);
-    atualizarLinhaNaTabela(idx, item);
-}
-
-function atualizarLinhaNaTabela(idx, data) {
-    const linha = document.getElementById(`linha-${idx}`);
-    if (!linha) return;
-
-    enderecosData[idx] = data;
-
-    const statusClass = data.status_google === 'NÃO VALIDADO' ? 'table-warning' : (data.cep_ok ? 'table-success' : 'table-danger');
-    const statusGoogleHtml = data.status_google === 'OK' ?
-        `<span class="text-success">OK</span>${!data.rua_bate ? ` <span data-bs-toggle="tooltip" title="Diferença: ${data.rua_google || ''}">⚠️</span>` : ''}` :
-        `<span class="text-danger">${data.status_google || 'INVÁLIDO'}</span>`;
-
-    linha.className = statusClass;
-    linha.dataset.origem = data.importacao_tipo;
-    linha.innerHTML = `
-        <td style="font-weight: bold; text-align:center;">${data.order_number}</td>
-        <td><input type="text" class="form-control form-control-sm" name="endereco_${idx}" value="${data.address}"></td>
-        <td><input type="text" class="form-control form-control-sm" name="cep_${idx}" value="${data.cep}"></td>
-        <td class="cep-encontrado">${data.postal_code_encontrado || '-'}</td>
-        <td class="status-google text-center mobile-hidden">${statusGoogleHtml}</td>
-        <td class="mobile-hidden"><span class="filter-badge" style="background-color:${data.cor};">${data.importacao_tipo}</span></td>
-        <td class="text-center btn-actions">
-            <button type="button" class="btn btn-warning btn-sm w-100 mb-1 btn-validar" data-idx="${idx}">Validar</button>
-        </td>
-    `;
-    initTooltips(linha);
-}
-
-function rebuildMap() {
-    if (markerCluster) markerCluster.clearMarkers();
-    markers.forEach(marker => marker.setMap(null));
-    markers = [];
-    initMap();
-}
-
+// Funções do Mapa
 function initMap() {
-    const mapDiv = document.getElementById('map');
-    const coords = enderecosData.map(e => (e.latitude && e.longitude) ? {lat: parseFloat(e.latitude), lng: parseFloat(e.longitude)} : null).filter(Boolean);
+    const coordenadasValidas = enderecosData.filter(e => 
+        e.latitude && e.longitude && !isNaN(e.latitude) && !isNaN(e.longitude)
+    );
 
-    if (coords.length === 0) {
-        mapDiv.innerHTML = '<div class="alert alert-info m-2 h-100 d-flex align-items-center justify-content-center">Nenhuma coordenada para exibir.</div>';
+    if (coordenadasValidas.length === 0) {
+        document.getElementById('map').innerHTML = 
+            '<div class="alert alert-warning m-2">Nenhuma coordenada válida para exibir</div>';
         return;
     }
 
-    if (!map) {
-        map = new google.maps.Map(mapDiv, { zoom: 12, center: coords[0], gestureHandling: "greedy" });
-        markerCluster = new markerClusterer.MarkerClusterer({ map });
-    }
+    map = new google.maps.Map(document.getElementById('map'), {
+        zoom: 12,
+        center: {
+            lat: parseFloat(coordenadasValidas[0].latitude),
+            lng: parseFloat(coordenadasValidas[0].longitude)
+        },
+        gestureHandling: "greedy"
+    });
+
+    markerCluster = new markerClusterer.MarkerClusterer({ map, markers: [] });
     
-    enderecosData.forEach((item, idx) => criarMarker(idx, item));
-    markerCluster.addMarkers(markers);
-    
+    // Cria todos os marcadores iniciais
+    atualizarMapaComNovosDados(enderecosData);
+
     const bounds = new google.maps.LatLngBounds();
-    coords.forEach(c => bounds.extend(c));
-    if (!bounds.isEmpty()) map.fitBounds(bounds);
+    coordenadasValidas.forEach(e => {
+        bounds.extend({
+            lat: parseFloat(e.latitude),
+            lng: parseFloat(e.longitude)
+        });
+    });
+    
+    if (!bounds.isEmpty()) {
+        map.fitBounds(bounds);
+    }
 }
+
+function makeSvgPin(numero, corHex) {
+    const n = String(numero).substring(0, 3); // Limita a 3 caracteres para caber no pino
+    // Ajusta o tamanho da fonte com base no comprimento do número
+    let fontSize = 20;
+    if (n.length === 3) fontSize = 16;
+    if (n.length === 4) fontSize = 14; // Se quiser suportar 4 caracteres, ajustar o svg também.
+    
+    const svg = `<svg width="44" height="54" viewBox="0 0 44 54" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <ellipse cx="22" cy="22" rx="21" ry="21" fill="${corHex}"/>
+        <rect x="18" y="37" width="8" height="13" rx="4" fill="${corHex}"/>
+        <text x="22" y="31" text-anchor="middle" font-size="${fontSize}" fill="#fff" font-family="Arial" font-weight="bold" 
+              alignment-baseline="middle" dominant-baseline="middle">${n}</text>
+    </svg>`;
+    return "data:image/svg+xml;base64," + btoa(svg);
+}
+
 
 function criarMarker(idx, data) {
-    if (markers[idx]) markers[idx].setMap(null);
-    if (!data.latitude || !data.longitude) {
-        markers[idx] = null;
-        return;
+    // Remove o marcador antigo se ele já existe
+    if (markers[idx]) {
+        if (markerCluster) markerCluster.removeMarker(markers[idx]);
+        markers[idx].setMap(null); // Remove do mapa
+        markers[idx] = null; // Limpa a referência
     }
+
+    if (!data.latitude || !data.longitude || isNaN(data.latitude) || isNaN(data.longitude)) {
+        return null; // Não cria marcador se as coordenadas forem inválidas
+    }
+
+    const position = {
+        lat: parseFloat(data.latitude),
+        lng: parseFloat(data.longitude)
+    };
+
+    const cor = data.cor || (data.cep_ok ? "#44B100" : "#D82B2B");
+    const pinUrl = makeSvgPin(data.order_number || (idx + 1), cor);
+
     const marker = new google.maps.Marker({
-        position: { lat: parseFloat(data.latitude), lng: parseFloat(data.longitude) },
-        title: `${data.order_number} - ${data.address}`,
-        icon: { url: makeSvgPin(data.order_number, data.cor), scaledSize: new google.maps.Size(28, 34) },
-        draggable: true
+        position,
+        map,
+        title: `${data.order_number || (idx + 1)} - ${data.address}`,
+        icon: {
+            url: pinUrl,
+            scaledSize: new google.maps.Size(22, 27)
+        },
+        draggable: true,
+        visible: !document.getElementById('filtro-origem').value || 
+                document.getElementById('filtro-origem').value === data.importacao_tipo
     });
-    marker.addListener('dragend', e => atualizarCoordenadas(idx, e.latLng.lat(), e.latLng.lng()));
+
+    // Evento de arrastar marcador
+    marker.addListener('dragstart', () => {
+        arrastandoMarker = idx;
+    });
+
+    marker.addListener('dragend', (e) => {
+        atualizarCoordenadas(idx, e.latLng.lat(), e.latLng.lng());
+        arrastandoMarker = null;
+    });
+
     markers[idx] = marker;
-}
-
-function makeSvgPin(num, cor) {
-    const n = String(num || '?').substring(0, 3);
-    const color = cor || '#808080';
-    const svg = `<svg width="32" height="40" viewBox="0 0 32 40" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M16 40C16 40 30 28 30 15C30 7.26801 23.732 1 16 1C8.26801 1 2 7.26801 2 15C2 28 16 40 16 40Z" fill="${color}" stroke="white" stroke-width="2"/><text x="16" y="18" text-anchor="middle" font-size="14" fill="white" font-family="Arial, sans-serif" font-weight="bold">${n}</text></svg>`;
-    return `data:image/svg+xml;base64,${btoa(svg)}`;
-}
-
-async function adicionarEnderecoManual() {
-    try {
-        const res = await fetch("{{ url_for('main.add_address') }}", { method: 'POST' });
-        const data = await res.json();
-        if (data.success) {
-            enderecosData.push(data.item);
-            appendRowToTable(data.item, data.idx);
-            document.getElementById(`linha-${data.idx}`).scrollIntoView({ behavior: 'smooth', block: 'center' });
-        } else { throw new Error(data.msg); }
-    } catch (err) { mostrarFeedback(err.message, "danger"); }
-}
-
-async function validarLinha(idx) {
-    const linha = document.getElementById(`linha-${idx}`);
-    const btn = linha.querySelector('.btn-validar');
-    btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    if (markerCluster) markerCluster.addMarker(marker);
     
-    try {
-        const endereco = linha.querySelector(`input[name="endereco_${idx}"]`).value;
-        const cep = linha.querySelector(`input[name="cep_${idx}"]`).value;
-        const res = await fetch("{{ url_for('main.validar_linha') }}", {
-            method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ idx, endereco, cep })
-        });
-        const data = await res.json();
-        if (data.success) {
-            atualizarLinhaNaTabela(idx, data.item);
-            rebuildMap(); // Força a recriação do marcador que talvez não existisse
-            mostrarFeedback("Endereço validado!", "success");
-        } else { throw new Error(data.msg); }
-    } catch (err) { mostrarFeedback(err.message, "danger");
-    } finally { btn.disabled = false; btn.innerHTML = 'Validar'; }
+    return marker;
+}
+
+function atualizarMapaComNovosDados(novaLista) {
+    // Limpa todos os marcadores existentes
+    if (markerCluster) {
+        markerCluster.clearMarkers();
+    }
+    markers = []; // Limpa o array de marcadores
+
+    // Cria novos marcadores para a nova lista
+    novaLista.forEach((e, idx) => {
+        criarMarker(idx, e);
+    });
+
+    // Ajusta o zoom do mapa para os novos marcadores (opcional)
+    const bounds = new google.maps.LatLngBounds();
+    novaLista.forEach(e => {
+        if (e.latitude && e.longitude && !isNaN(e.latitude) && !isNaN(e.longitude)) {
+            bounds.extend({
+                lat: parseFloat(e.latitude),
+                lng: parseFloat(e.longitude)
+            });
+        }
+    });
+    if (!bounds.isEmpty() && map) {
+        map.fitBounds(bounds);
+    }
 }
 
 async function atualizarCoordenadas(idx, lat, lng) {
     try {
-        const res = await fetch("{{ url_for('main.reverse_geocode') }}", {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ idx, lat, lng })
+        const response = await fetch('/api/reverse-geocode', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                idx: idx,
+                lat: lat,
+                lng: lng
+            })
         });
-        const data = await res.json();
+
+        const data = await response.json();
+        
         if (data.success) {
+            // Atualizar dados locais e UI
+            enderecosData[idx] = data.item; // Usa o item atualizado do backend
             atualizarLinhaNaTabela(idx, data.item);
-            rebuildMap(); // Força a atualização do mapa com a nova posição
-            mostrarFeedback("PIN atualizado com sucesso!", "success");
-        } else { throw new Error(data.msg); }
-    } catch (err) { mostrarFeedback(err.message, "danger"); }
+            criarMarker(idx, data.item); // Recria o marcador para refletir novas coordenadas/status
+            
+            mostrarFeedback("Localização atualizada com sucesso", "success");
+        } else {
+            throw new Error(data.msg || "Erro ao atualizar coordenadas");
+        }
+    } catch (error) {
+        console.error("Erro ao atualizar coordenadas:", error);
+        mostrarFeedback(error.message, "danger");
+        // Reverter posição do marcador se houver erro (opcional, mas bom UX)
+        if (markers[idx] && enderecosData[idx]) {
+            markers[idx].setPosition({
+                lat: parseFloat(enderecosData[idx].latitude),
+                lng: parseFloat(enderecosData[idx].longitude)
+            });
+        }
+    }
 }
 
-function validarTudo() { /* ... */ }
-function initTooltips(scope = document) { /* ... */ }
-function updateFilters() { /* ... */ }
-function filtrarPorOrigem() { /* ... */ }
-function mostrarCarregamento(exibir, tipo) { /* ... */ }
-function mostrarFeedback(msg, tipo="info") { /* ... */ }
+// Funções de Filtro
+function filtrarPorOrigem() {
+    const origem = document.getElementById('filtro-origem').value;
+    const linhas = document.querySelectorAll('#corpo-tabela tr');
+    
+    linhas.forEach(linha => {
+        if (linha.id === 'linha-nova') return; // Ignora a linha de adicionar manual, se existir
+        linha.style.display = (!origem || linha.dataset.origem === origem) ? '' : 'none';
+    });
+    
+    atualizarMarcadoresVisiveis();
+}
+
+function atualizarMarcadoresVisiveis() {
+    const origem = document.getElementById('filtro-origem').value;
+    
+    markers.forEach((marker, idx) => {
+        if (marker && enderecosData[idx]) { // Certifica-se de que o marcador e os dados existem
+            const deveMostrar = !origem || enderecosData[idx].importacao_tipo === origem;
+            marker.setVisible(deveMostrar);
+        }
+    });
+    
+    if (markerCluster) markerCluster.repaint();
+}
+
+// Funções de Validação
+async function validarLinha(idx) {
+    const linha = document.getElementById(`linha-${idx}`);
+    const btnValidar = linha.querySelector('button');
+    const originalText = btnValidar.innerHTML;
+    
+    btnValidar.disabled = true;
+    btnValidar.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Validando...';
+    
+    try {
+        // Obter os valores atuais dos inputs da linha
+        const enderecoInput = document.querySelector(`#linha-${idx} input[name="endereco_${idx}"]`);
+        const cepInput = document.querySelector(`#linha-${idx} input[name="cep_${idx}"]`);
+        const importacaoTipoInput = document.querySelector(`#linha-${idx} input[name="importacao_tipo_${idx}"]`);
+        const numeroPacoteInput = document.querySelector(`#linha-${idx} input[name="numero_pacote_${idx}"]`);
+        
+        const endereco = enderecoInput ? enderecoInput.value : '';
+        const cep = cepInput ? cepInput.value : '';
+        const importacao_tipo = importacaoTipoInput ? importacaoTipoInput.value : '';
+        const numero_pacote = numeroPacoteInput ? numeroPacoteInput.value : '';
+        
+        const response = await fetch('/api/validar-linha', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                idx: idx,
+                endereco: endereco,
+                cep: cep,
+                importacao_tipo: importacao_tipo, // Passa para o backend se precisar
+                numero_pacote: numero_pacote // Passa para o backend se precisar
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            enderecosData[idx] = data.item;
+            atualizarLinhaNaTabela(idx, data.item);
+            criarMarker(idx, data.item); // Recria o marcador para atualizar cor/posição
+            mostrarFeedback("Endereço validado com sucesso", "success");
+        } else {
+            throw new Error(data.msg || "Erro na validação");
+        }
+    } catch (error) {
+        console.error("Erro ao validar linha:", error);
+        mostrarFeedback(error.message, "danger");
+    } finally {
+        btnValidar.innerHTML = originalText;
+        btnValidar.disabled = false;
+    }
+}
+
+async function validarTudo() {
+    const btnValidar = document.getElementById('btn-validar-tudo');
+    const progressBar = document.getElementById('progresso-barra');
+    const progressContainer = document.getElementById('progresso-validacao');
+    const originalText = btnValidar.innerHTML;
+    
+    btnValidar.disabled = true;
+    btnValidar.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Validando...';
+    progressContainer.style.display = 'block';
+    mostrarFeedback("Validando todos os endereços...", "info");
+    
+    try {
+        // Fazer uma única requisição para validar todos os itens, para melhor performance
+        const response = await fetch('/api/validar-tudo', { // NOVA ROTA NO BACKEND
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                lista: enderecosData // Envia a lista completa para o backend
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            enderecosData = data.lista; // Atualiza com a lista validada do backend
+            atualizarTabelaComNovosDados(data.lista);
+            atualizarMapaComNovosDados(data.lista);
+
+            progressBar.style.width = `100%`;
+            progressBar.textContent = `100%`;
+            mostrarFeedback("Todos os endereços foram validados!", "success");
+        } else {
+            throw new Error(data.msg || "Erro na validação em massa");
+        }
+
+    } catch (error) {
+        console.error("Erro ao validar tudo:", error);
+        mostrarFeedback(error.message, "danger");
+    } finally {
+        btnValidar.innerHTML = originalText;
+        btnValidar.disabled = false;
+        progressContainer.style.display = 'none'; // Esconde a barra no final
+    }
+}
+
+
+function atualizarTabelaComNovosDados(novaLista) {
+    const tbody = document.getElementById('corpo-tabela');
+    tbody.innerHTML = ''; // Limpa a tabela existente
+
+    novaLista.forEach((item, index) => {
+        const linhaClass = item.cep_ok ? 'table-success' : 'table-danger';
+        const statusHtml = item.status_google === 'OK' ? 
+            `<span class="text-success">OK</span>${!item.rua_bate ? `<span data-bs-toggle="tooltip" title="Diferença encontrada: ${item.rua_google || ''}">⚠️</span>` : ''}` : 
+            `<span class="text-danger">${item.status_google || 'NÃO ENCONTRADO'}</span>`;
+
+        const newRow = `
+            <tr id="linha-${index}" class="${linhaClass}" data-origem="${item.importacao_tipo}">
+                <td style="font-weight: bold; text-align:center;">${item.order_number || (index + 1)}</td>
+                <td>
+                    <input type="hidden" name="numero_pacote_${index}" value="${item.order_number || ''}">
+                    <input type="hidden" name="importacao_tipo_${index}" value="${item.importacao_tipo || 'manual'}">
+                    <input type="hidden" name="cor_${index}" value="${item.cor || '#0074D9'}">
+                    <input type="text" class="form-control" name="endereco_${index}" value="${item.address || ''}" 
+                           data-bs-toggle="tooltip" data-bs-placement="top" 
+                           title="${item.endereco_formatado || ''}">
+                </td>
+                <td>
+                    <input type="text" class="form-control" name="cep_${index}" value="${item.cep || ''}">
+                </td>
+                <td class="cep-encontrado">${item.postal_code_encontrado || '-'}</td>
+                <td class="status-google text-center mobile-hidden">${statusHtml}</td>
+                <td class="mobile-hidden">
+                    <span class="filter-badge" style="background-color:${item.cor || '#0074D9'}; color: white;">
+                        ${(item.importacao_tipo || 'manual').charAt(0).toUpperCase() + (item.importacao_tipo || 'manual').slice(1)}
+                    </span>
+                </td>
+                <td class="text-center btn-actions">
+                    <button type="button" onclick="validarLinha(${index})" class="btn btn-warning btn-sm w-100 mb-1">
+                        Validar
+                    </button>
+                </td>
+            </tr>
+        `;
+        tbody.insertAdjacentHTML('beforeend', newRow);
+    });
+    initTooltips(); // Re-inicializa tooltips para as novas linhas
+}
+
+
+function atualizarLinhaNaTabela(idx, data) {
+    const linha = document.getElementById(`linha-${idx}`);
+    if (!linha) {
+        console.warn(`Linha com ID linha-${idx} não encontrada para atualização.`);
+        return;
+    }
+    
+    // Atualizar inputs
+    const enderecoInput = document.querySelector(`#linha-${idx} input[name="endereco_${idx}"]`);
+    const cepInput = document.querySelector(`#linha-${idx} input[name="cep_${idx}"]`);
+    const numeroPacoteInput = document.querySelector(`#linha-${idx} input[name="numero_pacote_${idx}"]`);
+
+    if (enderecoInput) enderecoInput.value = data.address;
+    if (cepInput) cepInput.value = data.cep;
+    if (numeroPacoteInput) numeroPacoteInput.value = data.order_number; // Atualiza o hidden field do order_number
+
+    // Atualizar o ID exibido na primeira coluna
+    const idCell = linha.querySelector('td:first-child');
+    if (idCell) idCell.textContent = data.order_number || (idx + 1);
+
+    // Atualizar colunas
+    const cepEncontradoCell = document.querySelector(`#linha-${idx} .cep-encontrado`);
+    if (cepEncontradoCell) cepEncontradoCell.textContent = data.postal_code_encontrado || '-';
+    
+    // Atualizar status
+    const statusCell = document.querySelector(`#linha-${idx} .status-google`);
+    if (statusCell) {
+        if (data.status_google === 'OK') {
+            statusCell.innerHTML = '<span class="text-success">OK</span>';
+            if (!data.rua_bate) {
+                statusCell.innerHTML += 
+                    `<span data-bs-toggle="tooltip" title="Diferença encontrada: ${data.rua_google || ''}">⚠️</span>`;
+            }
+        } else {
+            statusCell.innerHTML = `<span class="text-danger">${data.status_google || 'NÃO ENCONTRADO'}</span>`;
+        }
+    }
+    
+    // Atualizar classe da linha
+    linha.classList.remove('table-danger', 'table-success');
+    linha.classList.add(data.cep_ok ? 'table-success' : 'table-danger');
+    
+    // Atualizar tooltips
+    const tooltipEndereco = bootstrap.Tooltip.getInstance(enderecoInput);
+    if (tooltipEndereco) {
+        tooltipEndereco.setContent({ '.tooltip-inner': data.endereco_formatado || '' });
+    }
+    
+    // Atualizar tooltip de status se existir
+    const tooltipStatus = bootstrap.Tooltip.getInstance(
+        document.querySelector(`#linha-${idx} .status-google span[data-bs-toggle="tooltip"]`)
+    );
+    if (tooltipStatus && data.rua_google) {
+        tooltipStatus.setContent({ '.tooltip-inner': `Diferença encontrada: ${data.rua_google}` });
+    } else if (tooltipStatus) { // Se não tiver rua_google para o tooltip, pode ser necessário destruí-lo
+        tooltipStatus.dispose();
+    }
+    initTooltips(); // Re-inicializa todos os tooltips para garantir que os novos sejam ativados
+}
+
+// Funções de CRUD
+async function adicionarEnderecoManual() {
+    // Solicita o próximo ID manual do backend
+    try {
+        const response = await fetch('/api/add-manual-address', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({}) // Sem dados adicionais, apenas para obter o ID
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            const novoItem = data.item;
+            const novoId = data.idx; // O índice na lista_atual
+            
+            enderecosData.push(novoItem); // Adiciona ao array local
+
+            const tbody = document.getElementById('corpo-tabela');
+            const newRow = `
+                <tr id="linha-${novoId}" class="table-danger" data-origem="manual">
+                    <td style="font-weight: bold; text-align:center;">${novoItem.order_number}</td>
+                    <td>
+                        <input type="hidden" name="numero_pacote_${novoId}" value="${novoItem.order_number}">
+                        <input type="hidden" name="importacao_tipo_${novoId}" value="manual">
+                        <input type="hidden" name="cor_${novoId}" value="#0074D9">
+                        <input type="text" class="form-control" name="endereco_${novoId}" value="" 
+                            data-bs-toggle="tooltip" data-bs-placement="top" title="">
+                    </td>
+                    <td>
+                        <input type="text" class="form-control" name="cep_${novoId}" value="">
+                    </td>
+                    <td class="cep-encontrado">-</td>
+                    <td class="status-google text-center mobile-hidden">
+                        <span class="text-danger">NÃO VALIDADO</span>
+                    </td>
+                    <td class="mobile-hidden">
+                        <span class="filter-badge" style="background-color:#0074D9; color: white;">
+                            Manual
+                        </span>
+                    </td>
+                    <td class="text-center btn-actions">
+                        <button type="button" onclick="validarLinha(${novoId})" class="btn btn-warning btn-sm w-100 mb-1">
+                            Validar
+                        </button>
+                    </td>
+                </tr>
+            `;
+            tbody.insertAdjacentHTML('beforeend', newRow);
+            document.getElementById('total-linhas').value = enderecosData.length;
+            
+            initTooltips();
+            
+            // Rolagem para a nova linha
+            document.getElementById(`linha-${novoId}`).scrollIntoView({
+                behavior: 'smooth',
+                block: 'nearest'
+            });
+        } else {
+            throw new Error(data.msg || "Erro ao adicionar endereço manual");
+        }
+    } catch (error) {
+        console.error("Erro ao adicionar endereço manual:", error);
+        mostrarFeedback(error.message, "danger");
+    }
+}
+
+
+// Funções Auxiliares
+function mostrarCarregamento(exibir, tipo) {
+    const feedback = document.getElementById('feedback-msg');
+    const spinner = document.getElementById(`spinner-${tipo}`);
+    const btn = document.getElementById(`btn-${tipo}`);
+    
+    if (exibir) {
+        spinner.classList.remove('d-none');
+        btn.disabled = true;
+        feedback.textContent = tipo === 'importar' ? 
+            "Processando importação..." : "Gerando arquivo CSV...";
+    } else {
+        spinner.classList.add('d-none');
+        btn.disabled = false;
+        feedback.textContent = '';
+    }
+}
+
+function mostrarFeedback(mensagem, tipo) {
+    const feedback = document.getElementById('feedback-msg');
+    feedback.textContent = mensagem;
+    feedback.className = `mb-2 fw-bold text-${tipo}`;
+    
+    // Mostra o feedback por 5 segundos, a menos que seja uma mensagem "info"
+    if (tipo !== 'info') {
+        setTimeout(() => {
+            feedback.textContent = '';
+        }, 5000);
+    }
+}
 </script>
 <script async defer src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&callback=initMap"></script>
 {% endblock %}
