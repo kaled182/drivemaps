@@ -2,7 +2,7 @@
 
 function initMap() {
     // Usa o primeiro endereço como centro, se houver, senão um padrão
-    const center = locations.length > 0 ? { lat: locations[0].lat, lng: locations[0].lng } : { lat: -23.55052, lng: -46.633308 };
+    const center = locations.length > 0 ? { lat: locations[0].lat, lng: locations[0].lng } : { lat: -41.504073, lng: -8.761827 }; ,
 
     const map = new google.maps.Map(document.getElementById("map"), {
         zoom: 12,
