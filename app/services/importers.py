@@ -3,10 +3,14 @@ from app.services.validators import validate_address_cep
 from app.utils.normalize import normalize_cep
 import csv
 from io import StringIO
+from app.services.geocode import get_lat_lng  # <-- Adicionado para geocodificação
+
+GOOGLE_MAPS_API_KEY = "SUA_CHAVE_AQUI"  # Substitua pela sua chave real ou importe de config/env
 
 class PaackTextImporter:
     """
     Parser para listas coladas em texto do Paack.
+    Faz geocodificação do endereço para preencher lat/lng.
     """
     def parse(self, text):
         lines = [l.strip() for l in text.splitlines() if l.strip()]
@@ -32,15 +36,21 @@ class PaackTextImporter:
             # 3. Validação e normalização
             cep = normalize_cep(cep)
             res = validate_address_cep(endereco, cep)
+
+            # 4. Geocodificação do endereço para obter lat/lng
+            lat, lng = get_lat_lng(endereco, GOOGLE_MAPS_API_KEY)
+
             blocks.append({
                 "address": endereco,
                 "order_number": order_number,
                 "cep": cep,
+                "lat": lat,
+                "lng": lng,
                 **res,
                 "importacao_tipo": "paack"
             })
 
-            # 4. Pula bloco típico (7 linhas)
+            # 5. Pula bloco típico (7 linhas)
             i += 7
         return blocks
 
