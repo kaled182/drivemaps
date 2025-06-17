@@ -98,6 +98,7 @@
     {% for item in lista %}
       {% if item.lat and item.lng %}
         {
+          id: {{ item.order_number or loop.index }},
           lat: {{ item.lat|float }},
           lng: {{ item.lng|float }},
           title: `{{ item.address|e }}`
