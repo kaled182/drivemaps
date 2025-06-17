@@ -1,77 +1,46 @@
-function initMap() {
-    // Centraliza o mapa em Portugal continental
-    const center = { lat: 39.630, lng: -8.620 };
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <title>DriveMaps</title>
+    <style>
+        #map { width: 100%; height: 400px; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ccc; padding: 6px 10px; font-size: 15px; }
+        th { background: #f4f4f4; }
+    </style>
+    <!-- Google Maps API (a chave é passada do backend) -->
+    <script src="https://maps.googleapis.com/maps/api/js?key={{ maps_api_key }}&callback=initMap" defer></script>
+</head>
+<body>
+    <h1>DriveMaps</h1>
+    <div id="map"></div>
 
-    const map = new google.maps.Map(document.getElementById("map"), {
-        zoom: 7,
-        center: center,
-    });
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Endereço Original</th>
+                <th>Endereço Atual</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for loc in locations %}
+            <tr>
+                <td>{{ loc.id }}</td>
+                <td>{{ loc.address_original }}</td>
+                <td>{{ loc.address_atual }}</td>
+                <td>{{ loc.status }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 
-    // Adiciona marcadores (PINs) para cada endereço válido
-    if (typeof locations !== "undefined") {
-        locations.forEach(loc => {
-            if (
-                typeof loc.lat === "number" &&
-                typeof loc.lng === "number" &&
-                !isNaN(loc.lat) &&
-                !isNaN(loc.lng)
-            ) {
-                const marker = new google.maps.Marker({
-                    position: { lat: loc.lat, lng: loc.lng },
-                    map: map,
-                    title: loc.address_atual ?? loc.address_original ?? "",
-                    label: loc.id ? String(loc.id) : undefined,
-                    draggable: true // permite mover o PIN para correção manual
-                });
-
-                // Evento para atualizar backend ao mover o PIN
-                marker.addListener('dragend', function (event) {
-                    const novaLat = event.latLng.lat();
-                    const novaLng = event.latLng.lng();
-
-                    // Prompt para editar o endereço, se desejado
-                    let novoEndereco = prompt(
-                        "Deseja atualizar o endereço? (Deixe em branco para manter o atual)",
-                        loc.address_atual ?? loc.address_original ?? ""
-                    );
-                    if (novoEndereco === null) {
-                        // Cancelado pelo usuário, volta PIN para local original
-                        marker.setPosition({ lat: loc.lat, lng: loc.lng });
-                        return;
-                    }
-                    if (!novoEndereco.trim()) {
-                        novoEndereco = loc.address_atual ?? loc.address_original ?? "";
-                    }
-
-                    fetch("/atualizar_endereco", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            id: loc.id,
-                            address_atual: novoEndereco,
-                            lat: novaLat,
-                            lng: novaLng
-                        })
-                    })
-                    .then(res => res.json())
-                    .then(data => {
-                        if (data.status === "ok") {
-                            alert("Endereço atualizado com sucesso!");
-                            // Opcional: atualizar a linha da tabela, recarregar, etc.
-                            location.reload();
-                        } else {
-                            alert("Erro ao atualizar endereço.");
-                            marker.setPosition({ lat: loc.lat, lng: loc.lng });
-                        }
-                    })
-                    .catch(() => {
-                        alert("Erro ao comunicar com o servidor.");
-                        marker.setPosition({ lat: loc.lat, lng: loc.lng });
-                    });
-                });
-            }
-        });
-    }
-}
-
-window.initMap = initMap;
+    <script>
+        // Passa os dados do backend para o JS
+        const locations = {{ locations|tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='js/map.js') }}"></script>
+</body>
+</html>
