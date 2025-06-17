@@ -1,50 +1,43 @@
-<!DOCTYPE html>
-<html lang="pt">
-<head>
-    <meta charset="UTF-8">
-    <title>DriveMaps</title>
-    <style>
-        #map { width: 100%; height: 400px; margin-bottom: 20px; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { border: 1px solid #ccc; padding: 6px 10px; font-size: 15px; }
-        th { background: #f4f4f4; }
-    </style>
-    <!-- Google Maps API (a chave é passada do backend) -->
-    <script src="https://maps.googleapis.com/maps/api/js?key={{ maps_api_key }}&callback=initMap" defer></script>
-</head>
-<body>
-    <h1>DriveMaps</h1>
-    <div id="map"></div>
+let map;
+let markers = [];
 
-    <table>
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Endereço Original</th>
-                <th>Endereço Atual</th>
-                <th>Status</th>
-                <th>Ação</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for loc in locations %}
-            <tr>
-                <td>{{ loc.id }}</td>
-                <td>{{ loc.address_original }}</td>
-                <td>{{ loc.address_atual }}</td>
-                <td>{{ loc.status }}</td>
-                <td>
-                  <button onclick="validarEndereco({{ loc.address_atual|tojson }})">Validar</button>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+function initMap() {
+    // Define a posição inicial (centro do Brasil por padrão)
+    const initialCenter = { lat: -14.235004, lng: -51.92528 };
 
-    <script>
-        // Passa os dados do backend para o JS
-        const locations = {{ locations|tojson }};
-    </script>
-    <script src="{{ url_for('static', filename='js/map.js') }}"></script>
-</body>
-</html>
+    map = new google.maps.Map(document.getElementById('map'), {
+        center: initialCenter,
+        zoom: 5,
+    });
+
+    // Adiciona os marcadores dos endereços
+    if (Array.isArray(locations)) {
+        locations.forEach((loc) => {
+            if (loc.lat && loc.lng) {
+                const marker = new google.maps.Marker({
+                    position: { lat: loc.lat, lng: loc.lng },
+                    map: map,
+                    title: loc.address_atual || loc.address_original || "",
+                });
+                markers.push(marker);
+            }
+        });
+
+        // Se tiver ao menos um endereço, centraliza no primeiro
+        if (locations.length > 0 && locations[0].lat && locations[0].lng) {
+            map.setCenter({ lat: locations[0].lat, lng: locations[0].lng });
+            map.setZoom(12);
+        }
+    }
+}
+
+// Função chamada ao clicar em "Validar"
+function validarEndereco(address) {
+    alert("Endereço para validar:\n" + address);
+    // Aqui você pode implementar a lógica de validação (ex: chamada AJAX)
+}
+
+// Se o Google Maps já carregou, chama initMap
+if (typeof google !== "undefined" && typeof google.maps !== "undefined") {
+    initMap();
+}
