@@ -1,65 +1,55 @@
-from .validators import validate_address_cep
-from app.utils.normalize import normalize_text, normalize_cep
-import pandas as pd
 import re
+from app.services.validators import validate_address_cep
+from app.utils.normalize import normalize_cep
 
-class BaseImporter:
-    def parse(self, file):
-        raise NotImplementedError
+class PaackTextImporter:
+    """
+    Parser para listas coladas em texto do Paack, pegando apenas endereço e ID de pacote.
+    O ID de pacote é o número sequencial (ex: 1, 2, 3...).
+    """
 
-class PaackImporter(BaseImporter):
-    def parse(self, file):
-        file.seek(0)
-        filename = file.filename.lower()
-        if filename.endswith(('xlsx', 'xls')):
-            df = pd.read_excel(file)
-        else:
-            df = pd.read_csv(file)
-        col_end = next((c for c in df.columns if 'endereco' in c.lower()), None)
-        col_cep = next((c for c in df.columns if 'cep' in c.lower()), None)
-        if not col_end or not col_cep:
-            raise ValueError("Colunas 'Endereço' e 'CEP' não encontradas")
-        result = []
-        for _, row in df.iterrows():
-            address = str(row[col_end]).strip()
-            cep = normalize_cep(str(row[col_cep]))
-            res = validate_address_cep(address, cep)
-            result.append({
-                "address": address,
+    def parse(self, text):
+        lines = [l.strip() for l in text.splitlines() if l.strip()]
+        blocks = []
+        i = 0
+        while i < len(lines):
+            # 1. Procura endereço com CEP
+            if re.search(r'\d{4}-\d{3}', lines[i]):
+                endereco = lines[i]
+                cep_match = re.search(r'(\d{4}-\d{3})', endereco)
+                cep = cep_match.group(1) if cep_match else ''
+            else:
+                i += 1
+                continue
+
+            # 2. Pega o ID do pacote (linha 3 do bloco)
+            order_number = ''
+            if i+3 < len(lines) and re.match(r'^\d+$', lines[i+3]):
+                order_number = lines[i+3]
+            else:
+                order_number = ''  # Fallback vazio se não encontrar
+
+            # 3. Validação e normalização
+            cep = normalize_cep(cep)
+            res = validate_address_cep(endereco, cep)
+            blocks.append({
+                "address": endereco,
+                "order_number": order_number,
                 "cep": cep,
                 **res,
                 "importacao_tipo": "paack"
             })
-        return result
 
-class DelnextImporter(BaseImporter):
-    def parse(self, file):
-        file.seek(0)
-        filename = file.filename.lower()
-        if filename.endswith(('xlsx', 'xls')):
-            df = pd.read_excel(file, header=1)
-        else:
-            df = pd.read_csv(file, header=1)
-        col_morada = next((c for c in df.columns if 'morada' in c.lower()), None)
-        col_cep = next((c for c in df.columns if 'código postal' in c.lower() or 'codigo postal' in c.lower()), None)
-        if not col_morada or not col_cep:
-            raise ValueError("Colunas 'Morada' e 'Código Postal' não encontradas")
-        result = []
-        for _, row in df.iterrows():
-            address = str(row[col_morada]).strip()
-            cep = normalize_cep(str(row[col_cep]))
-            res = validate_address_cep(address, cep)
-            result.append({
-                "address": address,
-                "cep": cep,
-                **res,
-                "importacao_tipo": "delnext"
-            })
-        return result
+            # 4. Pula bloco típico (7 linhas)
+            i += 7
+        return blocks
 
-def get_importer(empresa):
-    if empresa == "paack":
+# Atualize sua função get_importer conforme necessário:
+def get_importer(empresa, input_type='file'):
+    if empresa == "paack" and input_type == 'file':
         return PaackImporter()
+    if empresa == "paack" and input_type == 'text':
+        return PaackTextImporter()
     if empresa == "delnext":
         return DelnextImporter()
     raise ValueError("Empresa não suportada")
