@@ -98,8 +98,8 @@
     {% for item in lista %}
       {% if item.lat and item.lng %}
         {
-          lat: {{ item.lat }},
-          lng: {{ item.lng }},
+          lat: {{ item.lat|float }},
+          lng: {{ item.lng|float }},
           title: `{{ item.address|e }}`
         },
       {% endif %}
