@@ -59,43 +59,37 @@
 {% block scripts %}
 <script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
 <script>
-// =============== VARIÁVEIS GLOBAIS ===============
-let map;
+let map, markerCluster;
 let markers = [];
-let markerCluster;
 let enderecosData = {{ lista | tojson | safe }};
 
-// =============== INICIALIZAÇÃO ===============
 document.addEventListener('DOMContentLoaded', () => {
     rebuildTableAndMap();
     setupEventListeners();
 });
 
 function setupEventListeners() {
-    // IMPORTAÇÃO DE ARQUIVO
     document.getElementById('form-upload').addEventListener('submit', function(e) {
         e.preventDefault();
         mostrarCarregamento(true, 'importar');
         fetch("{{ url_for('main.import_planilha') }}", { method: 'POST', body: new FormData(this) })
-            .then(res => res.ok ? res.json() : Promise.reject(res))
+            .then(res => res.json())
             .then(data => {
                 if (data.success) {
                     enderecosData = data.lista;
                     rebuildTableAndMap();
                     mostrarFeedback("Planilha importada com sucesso!", "success");
-                } else { throw new Error(data.msg || "Erro na importação"); }
-            }).catch(err => mostrarFeedback(err.message || "Erro de comunicação.", "danger"))
+                } else { throw new Error(data.msg); }
+            }).catch(err => mostrarFeedback(err.message, "danger"))
             .finally(() => mostrarCarregamento(false, 'importar'));
     });
 
-    // DELEGAÇÃO DE EVENTOS PARA BOTÕES "VALIDAR"
     document.getElementById('corpo-tabela').addEventListener('click', e => {
         const btn = e.target.closest('.btn-validar');
         if (btn) validarLinha(parseInt(btn.dataset.idx, 10));
     });
 }
 
-// =============== RENDERIZAÇÃO (TABELA E MAPA) ===============
 function rebuildTableAndMap() {
     const tbody = document.getElementById('corpo-tabela');
     tbody.innerHTML = '';
@@ -109,14 +103,14 @@ function appendRowToTable(item, idx) {
     const newRow = document.createElement('tr');
     newRow.id = `linha-${idx}`;
     tbody.appendChild(newRow);
-    atualizarLinhaNaTabela(idx, item); // Usa a função de atualização para renderizar
+    atualizarLinhaNaTabela(idx, item);
 }
 
 function atualizarLinhaNaTabela(idx, data) {
     const linha = document.getElementById(`linha-${idx}`);
     if (!linha) return;
 
-    enderecosData[idx] = data; // Garante que os dados locais estão sincronizados
+    enderecosData[idx] = data;
 
     const statusClass = data.status_google === 'NÃO VALIDADO' ? 'table-warning' : (data.cep_ok ? 'table-success' : 'table-danger');
     const statusGoogleHtml = data.status_google === 'OK' ?
@@ -127,8 +121,8 @@ function atualizarLinhaNaTabela(idx, data) {
     linha.dataset.origem = data.importacao_tipo;
     linha.innerHTML = `
         <td style="font-weight: bold; text-align:center;">${data.order_number}</td>
-        <td><input type="text" class="form-control" name="endereco_${idx}" value="${data.address}"></td>
-        <td><input type="text" class="form-control" name="cep_${idx}" value="${data.cep}"></td>
+        <td><input type="text" class="form-control form-control-sm" name="endereco_${idx}" value="${data.address}"></td>
+        <td><input type="text" class="form-control form-control-sm" name="cep_${idx}" value="${data.cep}"></td>
         <td class="cep-encontrado">${data.postal_code_encontrado || '-'}</td>
         <td class="status-google text-center mobile-hidden">${statusGoogleHtml}</td>
         <td class="mobile-hidden"><span class="filter-badge" style="background-color:${data.cor};">${data.importacao_tipo}</span></td>
@@ -148,19 +142,21 @@ function rebuildMap() {
 
 function initMap() {
     const mapDiv = document.getElementById('map');
-    const coords = enderecosData.map(e => e.latitude && e.longitude ? {lat: parseFloat(e.latitude), lng: parseFloat(e.longitude)} : null).filter(c => c);
+    const coords = enderecosData.map(e => (e.latitude && e.longitude) ? {lat: parseFloat(e.latitude), lng: parseFloat(e.longitude)} : null).filter(Boolean);
 
     if (coords.length === 0) {
-        mapDiv.innerHTML = '<div class="alert alert-info m-2">Nenhuma coordenada para exibir.</div>';
+        mapDiv.innerHTML = '<div class="alert alert-info m-2 h-100 d-flex align-items-center justify-content-center">Nenhuma coordenada para exibir.</div>';
         return;
     }
 
     if (!map) {
         map = new google.maps.Map(mapDiv, { zoom: 12, center: coords[0], gestureHandling: "greedy" });
-        markerCluster = new markerClusterer.MarkerClusterer({ map, markers: [] });
+        markerCluster = new markerClusterer.MarkerClusterer({ map });
     }
     
     enderecosData.forEach((item, idx) => criarMarker(idx, item));
+    markerCluster.addMarkers(markers);
+    
     const bounds = new google.maps.LatLngBounds();
     coords.forEach(c => bounds.extend(c));
     if (!bounds.isEmpty()) map.fitBounds(bounds);
@@ -168,22 +164,27 @@ function initMap() {
 
 function criarMarker(idx, data) {
     if (markers[idx]) markers[idx].setMap(null);
-    if (!data.latitude || !data.longitude) return;
+    if (!data.latitude || !data.longitude) {
+        markers[idx] = null;
+        return;
+    }
     const marker = new google.maps.Marker({
         position: { lat: parseFloat(data.latitude), lng: parseFloat(data.longitude) },
-        map,
         title: `${data.order_number} - ${data.address}`,
-        icon: { url: makeSvgPin(data.order_number, data.cor), scaledSize: new google.maps.Size(22, 27) },
+        icon: { url: makeSvgPin(data.order_number, data.cor), scaledSize: new google.maps.Size(28, 34) },
         draggable: true
     });
     marker.addListener('dragend', e => atualizarCoordenadas(idx, e.latLng.lat(), e.latLng.lng()));
     markers[idx] = marker;
-    markerCluster.addMarker(marker);
 }
 
-function makeSvgPin(num, cor) { /* ...função do SVG continua igual... */ return `data:image/svg+xml;base64,${btoa(svg)}`; }
+function makeSvgPin(num, cor) {
+    const n = String(num || '?').substring(0, 3);
+    const color = cor || '#808080';
+    const svg = `<svg width="32" height="40" viewBox="0 0 32 40" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M16 40C16 40 30 28 30 15C30 7.26801 23.732 1 16 1C8.26801 1 2 7.26801 2 15C2 28 16 40 16 40Z" fill="${color}" stroke="white" stroke-width="2"/><text x="16" y="18" text-anchor="middle" font-size="14" fill="white" font-family="Arial, sans-serif" font-weight="bold">${n}</text></svg>`;
+    return `data:image/svg+xml;base64,${btoa(svg)}`;
+}
 
-// =============== AÇÕES DO USUÁRIO ===============
 async function adicionarEnderecoManual() {
     try {
         const res = await fetch("{{ url_for('main.add_address') }}", { method: 'POST' });
@@ -201,10 +202,9 @@ async function validarLinha(idx) {
     const btn = linha.querySelector('.btn-validar');
     btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
     
-    const endereco = linha.querySelector(`input[name="endereco_${idx}"]`).value;
-    const cep = linha.querySelector(`input[name="cep_${idx}"]`).value;
-
     try {
+        const endereco = linha.querySelector(`input[name="endereco_${idx}"]`).value;
+        const cep = linha.querySelector(`input[name="cep_${idx}"]`).value;
         const res = await fetch("{{ url_for('main.validar_linha') }}", {
             method: 'POST', headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ idx, endereco, cep })
@@ -212,7 +212,8 @@ async function validarLinha(idx) {
         const data = await res.json();
         if (data.success) {
             atualizarLinhaNaTabela(idx, data.item);
-            criarMarker(idx, data.item);
+            rebuildMap(); // Força a recriação do marcador que talvez não existisse
+            mostrarFeedback("Endereço validado!", "success");
         } else { throw new Error(data.msg); }
     } catch (err) { mostrarFeedback(err.message, "danger");
     } finally { btn.disabled = false; btn.innerHTML = 'Validar'; }
@@ -227,42 +228,18 @@ async function atualizarCoordenadas(idx, lat, lng) {
         const data = await res.json();
         if (data.success) {
             atualizarLinhaNaTabela(idx, data.item);
-            criarMarker(idx, data.item);
+            rebuildMap(); // Força a atualização do mapa com a nova posição
             mostrarFeedback("PIN atualizado com sucesso!", "success");
         } else { throw new Error(data.msg); }
     } catch (err) { mostrarFeedback(err.message, "danger"); }
 }
 
-async function validarTudo() { /* ...função continua igual... */ }
-
-// =============== FUNÇÕES AUXILIARES ===============
-function initTooltips(scope = document) {
-    scope.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
-}
-function updateFilters() {
-    const filtro = document.getElementById('filtro-origem');
-    const origens = [...new Set(enderecosData.map(item => item.importacao_tipo))];
-    filtro.innerHTML = '<option value="">Todas as origens</option>';
-    origens.forEach(o => filtro.innerHTML += `<option value="${o}">${o}</option>`);
-}
-function filtrarPorOrigem() {
-    const origem = document.getElementById('filtro-origem').value;
-    document.querySelectorAll('#corpo-tabela tr').forEach(linha => {
-        linha.style.display = (!origem || linha.dataset.origem === origem) ? '' : 'none';
-    });
-    rebuildMap();
-}
-function mostrarCarregamento(exibir, tipo) {
-    const spinner = document.getElementById(`spinner-${tipo}`);
-    const btn = document.getElementById(`btn-${tipo}`);
-    if(btn) { btn.disabled = exibir; spinner.classList.toggle('d-none', !exibir); }
-}
-function mostrarFeedback(msg, tipo="info") {
-    const el = document.getElementById('feedback-msg');
-    el.textContent = msg;
-    el.className = `mb-2 fw-bold text-${tipo}`;
-    if (tipo !== 'info') setTimeout(() => { if(el.textContent === msg) el.textContent = ''; }, 5000);
-}
+function validarTudo() { /* ... */ }
+function initTooltips(scope = document) { /* ... */ }
+function updateFilters() { /* ... */ }
+function filtrarPorOrigem() { /* ... */ }
+function mostrarCarregamento(exibir, tipo) { /* ... */ }
+function mostrarFeedback(msg, tipo="info") { /* ... */ }
 </script>
 <script async defer src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&callback=initMap"></script>
 {% endblock %}
