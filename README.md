@@ -1,24 +1,29 @@
-# DriveMaps – Estrutura Modular
+# DriveMaps 🚗
 
-## Como usar
+Validador e organizador de endereços para estafetas em Portugal, pronto para múltiplas empresas e exportação para apps de rotas.
 
-1. Copie `.env.example` para `.env` e preencha as chaves.
-2. Instale dependências:
+## Como Usar
+1. Clone o repositório
+2. Copie `.env.example` para `.env` e configure suas chaves
+3. Instale as dependências:
    ```
    pip install -r requirements.txt
    ```
-3. Rode o app:
+4. Execute o servidor:
    ```
    flask run
    ```
-4. Use `/import_planilha` para importar arquivos de diferentes empresas.
+5. Acesse `http://localhost:5000`
 
-## Como expandir
-
-- Para adicionar nova empresa, crie uma nova classe em `services/importers.py` herdando de `BaseImporter`.
-- Centralize validações e normalizações nos arquivos `services/validators.py` e `utils/normalize.py`.
+## Fluxo
+- Cole endereços ou faça upload de planilhas.
+- Valide e corrija os endereços.
+- Exporte para MyWay (ou expanda para outros apps).
 
 ## Segurança
+- Nunca suba `.env` com segredos para o repositório.
+- Assegure-se de rodar com as variáveis de ambiente corretas.
 
-- Nunca suba seu `.env` para o repositório.
-- Troque suas chaves se já subiu anteriormente.
+## Extensão
+- Adicione novas empresas criando classes em `app/services/importers.py`.
+- Novos formatos de exportação podem ser criados em `app/services/exporters.py`.
