@@ -2,9 +2,6 @@ import re
 from app.services.validators import validate_address_cep
 from app.utils.normalize import normalize_cep
 
-# Importe o novo importer de planilhas Paack
-from app.services.importers.paack_importer import PaackSheetImporter
-
 class PaackTextImporter:
     """
     Parser para listas coladas em texto do Paack, pegando apenas endereço e ID de pacote.
@@ -54,9 +51,7 @@ class DelnextImporter:
         return []
 
 def get_importer(empresa, input_type='file'):
-    if empresa == "paack" and input_type == 'file':
-        return PaackSheetImporter()
-    if empresa == "paack" and input_type == 'text':
+    if empresa == "paack":
         return PaackTextImporter()
     if empresa == "delnext":
         return DelnextImporter()
