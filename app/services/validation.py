@@ -1,4 +1,3 @@
-
 from app.utils.normalize import normalize_text
 
 def validate_address_cep(address, cep):
