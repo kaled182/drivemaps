@@ -1,8 +1,10 @@
+import os
 from flask import Flask
 from .routes import main_routes
 
 def create_app():
     app = Flask(__name__)
-    app.secret_key = "secret-key-temporaria"  # Substitua por variável de ambiente em produção!
-    app.register_blueprint(main_routes)       # ESSENCIAL para rotas funcionarem!
+    app.secret_key = os.environ.get("SECRET_KEY", "troque-esta-chave")
+    app.config['SESSION_COOKIE_NAME'] = 'drivemaps_session'
+    app.register_blueprint(main_routes)
     return app
