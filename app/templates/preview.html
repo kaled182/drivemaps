@@ -381,7 +381,6 @@ async function atualizarCoordenadas(idx, lat, lng) {
         const data = await response.json();
         
         if (data.success) {
-            // PROBLEMA 2: AQUI FOI ALTERADO PARA USAR DIRETAMENTE data.item
             enderecosData[idx] = data.item; // Usa o item COMPLETAMENTE atualizado do backend
             atualizarLinhaNaTabela(idx, data.item); // Atualiza a linha na tabela
             criarMarker(idx, data.item); // Recria o marcador para refletir novas coordenadas/status
@@ -441,7 +440,7 @@ async function validarLinha(idx) {
     btnValidar.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Validando...';
     
     try {
-        // PROBLEMA 3: OBTÉM OS VALORES ATUAIS DOS INPUTS DA LINHA
+        // OBTÉM OS VALORES ATUAIS DOS INPUTS DA LINHA
         const endereco = document.querySelector(`#linha-${idx} input[name="endereco_${idx}"]`).value;
         const cep = document.querySelector(`#linha-${idx} input[name="cep_${idx}"]`).value;
         const importacao_tipo = document.querySelector(`#linha-${idx} input[name="importacao_tipo_${idx}"]`).value;
