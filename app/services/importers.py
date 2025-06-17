@@ -3,55 +3,63 @@ from app.services.validators import validate_address_cep
 from app.utils.normalize import normalize_cep
 import csv
 from io import StringIO
-from app.services.geocode import get_lat_lng  # <-- Adicionado para geocodificação
+from app.services.geocode import get_lat_lng
 
-GOOGLE_MAPS_API_KEY = "SUA_CHAVE_AQUI"  # Substitua pela sua chave real ou importe de config/env
+GOOGLE_MAPS_API_KEY = "SUA_CHAVE_AQUI"  # Troque pela sua chave real
+
+# Regex para validar o padrão exigido para PINs
+PIN_ADDRESS_REGEX = re.compile(
+    r'^\s*\d{4}-\d{3}\s*(?:-\s*[^-]*){0,2}\s*$', re.IGNORECASE
+)
 
 class PaackTextImporter:
     """
     Parser para listas coladas em texto do Paack.
-    Faz geocodificação do endereço para preencher lat/lng.
+    Só considera endereços que seguem o padrão para criar PIN.
     """
     def parse(self, text):
         lines = [l.strip() for l in text.splitlines() if l.strip()]
         blocks = []
         i = 0
         while i < len(lines):
-            # 1. Procura endereço com CEP
-            if re.search(r'\d{4}-\d{3}', lines[i]):
+            # 1. Procura linha com CEP
+            cep_match = re.search(r'\d{4}-\d{3}', lines[i])
+            if cep_match:
                 endereco = lines[i]
-                cep_match = re.search(r'(\d{4}-\d{3})', endereco)
-                cep = cep_match.group(1) if cep_match else ''
-            else:
-                i += 1
-                continue
+                normalized_endereco = endereco
+                # Monta o endereço no formato "CEP - RUA - NUMERO" mesmo que rua/numero estejam faltando
+                cep = cep_match.group(0)
+                # Normaliza para garantir separador padrão
+                after_cep = endereco.split(cep, 1)[1].strip(" ,")
+                if after_cep:
+                    # tenta extrair rua e numero
+                    parts = [cep] + [p.strip(" ,") for p in re.split(r',|;', after_cep) if p.strip()]
+                    normalized_endereco = " - ".join(parts)
+                else:
+                    normalized_endereco = cep
 
-            # 2. Pega o ID do pacote (linha 3 do bloco)
-            order_number = ''
-            if i+3 < len(lines) and re.match(r'^\d+$', lines[i+3]):
-                order_number = lines[i+3]
-            else:
-                order_number = ''  # Fallback vazio se não encontrar
-
-            # 3. Validação e normalização
-            cep = normalize_cep(cep)
-            res = validate_address_cep(endereco, cep)
-
-            # 4. Geocodificação do endereço para obter lat/lng
-            lat, lng = get_lat_lng(endereco, GOOGLE_MAPS_API_KEY)
-
-            blocks.append({
-                "address": endereco,
-                "order_number": order_number,
-                "cep": cep,
-                "lat": lat,
-                "lng": lng,
-                **res,
-                "importacao_tipo": "paack"
-            })
-
-            # 5. Pula bloco típico (7 linhas)
-            i += 7
+                # 2. Só aceita se seguir o padrão
+                if PIN_ADDRESS_REGEX.match(normalized_endereco):
+                    order_number = ''
+                    if i+3 < len(lines) and re.match(r'^\d+$', lines[i+3]):
+                        order_number = lines[i+3]
+                    else:
+                        order_number = ''
+                    # normalização e validação
+                    cep = normalize_cep(cep)
+                    res = validate_address_cep(endereco, cep)
+                    lat, lng = get_lat_lng(normalized_endereco, GOOGLE_MAPS_API_KEY)
+                    blocks.append({
+                        "address": normalized_endereco,
+                        "order_number": order_number,
+                        "cep": cep,
+                        "lat": lat,
+                        "lng": lng,
+                        **res,
+                        "importacao_tipo": "paack"
+                    })
+                # Senão, ignora (sem PIN)
+            i += 7  # Pula bloco típico
         return blocks
 
 class DelnextImporter:
@@ -84,14 +92,16 @@ class DelnextImporter:
             except Exception:
                 lng = None
 
-            item = {
-                "order_number": order_number,
-                "address": address,
-                "lat": lat,
-                "lng": lng,
-                "importacao_tipo": "delnext"
-            }
-            lista.append(item)
+            # Só PIN se endereço seguir padrão
+            if address and PIN_ADDRESS_REGEX.match(address):
+                item = {
+                    "order_number": order_number,
+                    "address": address,
+                    "lat": lat,
+                    "lng": lng,
+                    "importacao_tipo": "delnext"
+                }
+                lista.append(item)
         return lista
 
 def get_importer(empresa, input_type='file'):
