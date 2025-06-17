@@ -1,8 +1,10 @@
-// Integração do mapa com múltiplos pins vindos do backend, agora com InfoWindow (tooltip ao clicar)
+// Integração do mapa com múltiplos pins vindos do backend, com InfoWindow (tooltip) ao clicar
 
 function initMap() {
-    // Usa o primeiro endereço como centro, se houver, senão um padrão
-    const center = locations.length > 0 ? { lat: locations[0].lat, lng: locations[0].lng } : { lat: -41.504073, lng: -8.761827 };
+    // Centraliza o mapa em 41.504073, -8.761827 se não houver pins
+    const center = locations.length > 0
+        ? { lat: locations[0].lat, lng: locations[0].lng }
+        : { lat: 41.504073, lng: -8.761827 };
 
     const map = new google.maps.Map(document.getElementById("map"), {
         zoom: 12,
@@ -19,7 +21,6 @@ function initMap() {
             title: loc.title || "",
         });
 
-        // InfoWindow (tooltip) ao clicar
         marker.addListener("click", () => {
             infoWindow.setContent(`<div style="font-size:16px;">${marker.getTitle()}</div>`);
             infoWindow.open(map, marker);
