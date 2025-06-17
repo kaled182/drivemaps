@@ -1,135 +1,89 @@
-import os
-import io
-from flask import Blueprint, render_template, request, redirect, url_for, session, send_file, jsonify
-from app.services.importers import get_importer
-from app.services.exporters import export_to_myway
-from app.services.validators import validate_address_cep
-from app.utils.normalize import normalize_cep
+from flask import Flask, render_template, request, jsonify, redirect, url_for
+from app.models import db, Endereco
 
-main_routes = Blueprint('main', __name__)
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///enderecos.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db.init_app(app)
 
-@main_routes.route('/', methods=['GET'])
-def home():
-    session.clear()
-    return render_template("home.html")
+# Página principal com mapa e tabela
+@app.route("/")
+def index():
+    enderecos = Endereco.query.all()
+    # Constrói lista para o mapa (coordenadas e info)
+    locations = [
+        {
+            "id": e.id,
+            "address_original": e.address_original,
+            "address_atual": e.address_atual,
+            "lat": e.lat,
+            "lng": e.lng,
+            "status": e.status or "OK"
+        }
+        for e in enderecos
+    ]
+    return render_template("map.html", locations=locations)
 
-@main_routes.route('/preview', methods=['POST'])
-def preview():
-    session['lista'] = []
-    session['preview_loaded'] = True
-    session.modified = True
+# Rota para importar endereços (simples, por texto ou arquivo)
+@app.route("/importar", methods=["POST"])
+def importar():
+    # Exemplo: importar de textarea (campo 'enderecos')
+    enderecos_texto = request.form.get("enderecos")
+    if not enderecos_texto:
+        return redirect(url_for("index"))
 
-    # Se vier upload de arquivo, é Delnext ou Paack planilha
-    if 'planilha' in request.files and request.files['planilha'].filename:
-        file = request.files['planilha']
-        empresa = request.form.get('empresa', '').lower()
-        if not empresa:
-            return render_template("home.html", msg="Selecione a empresa antes de importar planilha.")
-        importer = get_importer(empresa, input_type='file')
-        lista_preview_novos = importer.parse(file)
-    else:
-        # Caso contrário, assume texto colado no formato Paack
-        enderecos_brutos = request.form.get('enderecos', '')
-        if not enderecos_brutos.strip():
-            return render_template("home.html", msg="Cole endereços ou importe uma planilha.")
-        paack_text_importer = get_importer('paack', input_type='text')
-        lista_preview_novos = paack_text_importer.parse(enderecos_brutos)
+    linhas = [l.strip() for l in enderecos_texto.splitlines() if l.strip()]
+    for line in linhas:
+        # Suponha que geocodificação e extração de dados já foi feita
+        novo_end = Endereco(
+            address_original=line,
+            address_atual=line,
+            lat=None,
+            lng=None,
+            status="OK"
+        )
+        db.session.add(novo_end)
+    db.session.commit()
+    return redirect(url_for("index"))
 
-    session['lista'] = lista_preview_novos
-    session.modified = True
-    origens = list({item.get('importacao_tipo', 'manual') for item in lista_preview_novos})
-    return render_template(
-        "preview.html",
-        lista=lista_preview_novos,
-        GOOGLE_API_KEY=os.environ.get("GOOGLE_API_KEY", ""),
-        origens=origens
-    )
+# Rota para atualizar endereço após validação/movimentação do PIN
+@app.route("/atualizar_endereco", methods=["POST"])
+def atualizar_endereco():
+    data = request.json
+    eid = data.get("id")
+    endereco = Endereco.query.get(eid)
+    if not endereco:
+        return jsonify({"status": "erro", "msg": "Endereço não encontrado"}), 404
 
-@main_routes.route('/import_planilha', methods=['POST'])
-def import_planilha():
-    try:
-        file = request.files.get('planilha')
-        empresa = request.form.get('empresa', '').lower()
-        if not file or not empresa:
-            return jsonify({"success": False, "msg": "Arquivo ou empresa não especificados"}), 400
-        importer = get_importer(empresa, input_type='file')
-        novos_itens = importer.parse(file)
-        lista_atual = session.get('lista', [])
-        # Evita duplicatas
-        for item in novos_itens:
-            if item not in lista_atual:
-                lista_atual.append(item)
-        session['lista'] = lista_atual
-        session.modified = True
-        return jsonify({
-            "success": True,
-            "lista": lista_atual,
-            "origens": list({i.get("importacao_tipo", "manual") for i in lista_atual}),
-            "total": len(lista_atual)
-        })
-    except Exception as e:
-        return jsonify({"success": False, "msg": f"Erro: {str(e)}"}), 500
+    endereco.address_atual = data.get("address_atual", endereco.address_atual)
+    endereco.lat = data.get("lat", endereco.lat)
+    endereco.lng = data.get("lng", endereco.lng)
+    endereco.status = data.get("status", endereco.status)
+    db.session.commit()
+    return jsonify({"status": "ok"})
 
-@main_routes.route('/api/session-data', methods=['GET'])
-def get_session_data():
-    try:
-        return jsonify({
-            "success": True,
-            "lista": session.get('lista', []),
-            "origens": list({item.get("importacao_tipo", "manual") for item in session.get('lista', [])}),
-            "total": len(session.get('lista', []))
-        })
-    except Exception as e:
-        return jsonify({"success": False, "msg": str(e)}), 500
+# Rota para buscar endereço por id (AJAX)
+@app.route("/endereco/<int:eid>")
+def get_endereco(eid):
+    endereco = Endereco.query.get(eid)
+    if not endereco:
+        return jsonify({"erro": "Endereço não encontrado"}), 404
+    return jsonify({
+        "id": endereco.id,
+        "address_original": endereco.address_original,
+        "address_atual": endereco.address_atual,
+        "lat": endereco.lat,
+        "lng": endereco.lng,
+        "status": endereco.status
+    })
 
-@main_routes.route('/api/validar-linha', methods=['POST'])
-def validar_linha():
-    try:
-        data = request.get_json()
-        idx = int(data.get('idx', -1))
-        endereco = data.get('endereco', '')
-        cep = normalize_cep(data.get('cep', ''))
+# Utilitário para criar o banco (roda uma vez)
+@app.cli.command("criar-db")
+def criar_db():
+    db.create_all()
+    print("Banco de dados criado.")
 
-        lista_atual = session.get('lista', [])
-        if idx < 0 or idx >= len(lista_atual):
-            return jsonify({"success": False, "msg": "Índice inválido"}), 400
-
-        res = validate_address_cep(endereco, cep)
-        lista_atual[idx].update({
-            "address": endereco,
-            "cep": cep,
-            **res
-        })
-        session['lista'] = lista_atual
-        session.modified = True
-
-        return jsonify({
-            "success": True,
-            "item": lista_atual[idx],
-            "idx": idx
-        })
-    except Exception as e:
-        return jsonify({"success": False, "msg": f"Erro: {str(e)}"}), 500
-
-@main_routes.route('/generate', methods=['POST'])
-def generate():
-    try:
-        lista_para_csv = session.get('lista', [])
-        csv_bytes = export_to_myway(lista_para_csv)
-        session['csv_content'] = csv_bytes.decode("utf-8")
-        session.modified = True
-        return redirect(url_for('main.download'))
-    except Exception as e:
-        return jsonify({"success": False, "msg": f"Erro ao gerar CSV: {str(e)}"}), 500
-
-@main_routes.route('/download')
-def download():
-    csv_content = session.get('csv_content', '')
-    if not csv_content:
-        return redirect(url_for('main.home'))
-    return send_file(
-        io.BytesIO(csv_content.encode("utf-8")),
-        mimetype='text/csv',
-        as_attachment=True,
-        download_name="enderecos_myway.csv"
-    )
+if __name__ == "__main__":
+    with app.app_context():
+        db.create_all()
+    app.run(debug=True)
