@@ -1,13 +1,24 @@
-# DriveMaps 🚗
+# DriveMaps – Estrutura Modular
 
-Gere rotas otimizadas para motoristas usando Flask + Google Maps API.
+## Como usar
 
-## Como Usar
-1. Clone o repositório
-2. Crie um `.env` baseado em `.env.example`
-3. Execute `pip install -r requirements.txt`
-4. Acesse `http://localhost:5000`
+1. Copie `.env.example` para `.env` e preencha as chaves.
+2. Instale dependências:
+   ```
+   pip install -r requirements.txt
+   ```
+3. Rode o app:
+   ```
+   flask run
+   ```
+4. Use `/import_planilha` para importar arquivos de diferentes empresas.
 
-## Deploy no Render
-- Configuração automática via `render.yaml`
-- Comando de start: `gunicorn 'app:create_app()'`
+## Como expandir
+
+- Para adicionar nova empresa, crie uma nova classe em `services/importers.py` herdando de `BaseImporter`.
+- Centralize validações e normalizações nos arquivos `services/validators.py` e `utils/normalize.py`.
+
+## Segurança
+
+- Nunca suba seu `.env` para o repositório.
+- Troque suas chaves se já subiu anteriormente.
