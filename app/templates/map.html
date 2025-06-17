@@ -1,0 +1,22 @@
+<table>
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Endereço</th>
+            <th>Status</th>
+            <th>Ação</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in locations %}
+        <tr>
+            <td>{{ loop.index }}</td>
+            <td>{{ item.address }}</td> <!-- Sempre o endereço original -->
+            <td>{{ item.status or "OK" }}</td>
+            <td>
+                <button onclick="validarEndereco('{{ item.address|escapejs }}')">Validar</button>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
