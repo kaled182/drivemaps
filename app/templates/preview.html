@@ -93,8 +93,19 @@
 {% block scripts %}
 <script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
 <script>
-// O JS pode ser migrado do seu preview.html original para cá, 
-// ajustando endpoints conforme as rotas acima.
+  // Passa os endereços para o JS, para uso pelo mapa
+  const locations = [
+    {% for item in lista %}
+      {% if item.lat and item.lng %}
+        {
+          lat: {{ item.lat }},
+          lng: {{ item.lng }},
+          title: `{{ item.address|e }}`
+        },
+      {% endif %}
+    {% endfor %}
+  ];
 </script>
+<script src="{{ url_for('static', filename='js/map.js') }}"></script>
 <script async defer src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&callback=initMap"></script>
 {% endblock %}
