@@ -1,19 +1,8 @@
-# Requirements para DriveMaps
-Flask==2.3.3
-Flask-Session==0.5.0
-pandas==2.0.3
-requests==2.31.0
-openpyxl==3.1.2
-xlrd==2.0.1
-
-# Desenvolvimento e testes
-pytest==7.4.2
-pytest-flask==1.2.0
-python-dotenv==1.0.0
-
-# Produção
+flask==2.3.3
+Flask-Session==0.4.0
 gunicorn==21.2.0
-waitress==2.1.2
-
-# Segurança
-Werkzeug==2.3.7
+python-dotenv==1.0.1
+requests==2.31.0
+numpy==1.23.5  # Versão testada e estável com pandas 1.5.3
+pandas==1.5.3  # Versão compatível com numpy 1.23.5
+openpyxl==3.1.2
