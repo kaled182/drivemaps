@@ -1,27 +1,49 @@
 {% extends "base.html" %}
+
 {% block content %}
 <div class="row justify-content-center mt-5">
     <div class="col-lg-8 col-md-10 col-12">
-        <div class="card shadow-lg">
-            <div class="card-header bg-primary text-white">Importar Endereços</div>
+        <div class="card shadow-lg border-0">
+            <div class="card-header bg-primary text-white fw-bold">
+                Importar Endereços
+            </div>
             <div class="card-body">
+                <!-- Formulário manual -->
                 <form method="post" action="{{ url_for('main.preview') }}">
                     <div class="mb-3">
-                        <label for="enderecos" class="form-label">Cole aqui os endereços (Paack padrão):</label>
-                        <textarea id="enderecos" name="enderecos" rows="7" class="form-control" placeholder="Exemplo:&#10;Rua, 4900-000, Cidade&#10;#CódigoPaack&#10;Rua, 4900-000, Cidade&#10;1"></textarea>
+                        <label for="enderecos" class="form-label fw-semibold">
+                            Cole aqui os endereços (Paack padrão):
+                        </label>
+                        <textarea id="enderecos" name="enderecos" rows="7" class="form-control" placeholder="Exemplo:&#10;Rua, 4900-000, Cidade&#10;#CódigoPaack&#10;Rua, 4900-000, Cidade&#10;1" required></textarea>
                     </div>
-                    <button type="submit" class="btn btn-success">Validar Lista Manual</button>
+                    <button type="submit" class="btn btn-success w-100">
+                        Validar Lista Manual
+                    </button>
                 </form>
-                <hr>
+
+                <hr class="my-4">
+
+                <!-- Formulário de upload -->
                 <form id="form-upload" enctype="multipart/form-data" method="post" action="{{ url_for('main.import_planilha') }}">
-                    <div class="d-flex flex-row gap-2 align-items-center">
-                        <select name="empresa" class="form-select form-select-sm" required>
-                            <option value="">Empresa</option>
-                            <option value="delnext">Delnext</option>
-                            <option value="paack">Paack (Padrão)</option>
-                        </select>
-                        <input type="file" name="planilha" accept=".xls,.xlsx,.csv,.txt" required class="form-control form-control-sm">
-                        <button type="submit" class="btn btn-secondary btn-sm">Importar Arquivo</button>
+                    <div class="row g-2 align-items-center">
+                        <div class="col-md-4">
+                            <label for="empresa" class="form-label mb-0 small">Empresa</label>
+                            <select name="empresa" id="empresa" class="form-select form-select-sm" required>
+                                <option value="">Selecione...</option>
+                                <option value="delnext">Delnext</option>
+                                <option value="paack">Paack (Padrão)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-5">
+                            <label for="planilha" class="form-label mb-0 small">Arquivo</label>
+                            <input type="file" name="planilha" id="planilha" accept=".xls,.xlsx,.csv,.txt" required class="form-control form-control-sm">
+                        </div>
+                        <div class="col-md-3 d-grid">
+                            <label class="form-label mb-0 invisible">Enviar</label>
+                            <button type="submit" class="btn btn-secondary btn-sm">
+                                Importar Arquivo
+                            </button>
+                        </div>
                     </div>
                 </form>
             </div>
