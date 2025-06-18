@@ -1,6 +1,8 @@
 from flask import Blueprint, render_template, request, session, jsonify
 from app.utils.google import valida_rua_google
 from app.utils.helpers import normalizar, registro_unico, CORES_IMPORTACAO
+import os
+import re
 
 preview_bp = Blueprint('preview', __name__)
 
