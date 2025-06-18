@@ -1,0 +1,55 @@
+# DriveMaps - Validador de Endereços
+
+Sistema Flask para validação e geocodificação de endereços usando Google Maps API.
+
+## Funcionalidades
+
+- ✅ Importação de planilhas (Delnext, Paack)
+- ✅ Validação de endereços via Google Maps
+- ✅ Interface interativa com mapas
+- ✅ Geração de CSV para rotas
+- ✅ Tratamento de erros robusto
+- ✅ Segurança aprimorada
+
+## Correções Implementadas
+
+### 🔧 Problemas Corrigidos
+
+1. **Inconsistência de Cores**: Padronização em `helpers.py`
+2. **Variável Global**: Removida, agora usa sessão segura
+3. **Validação de Entrada**: Implementada em todas as APIs
+4. **Segurança**: Proxy para Google API, sanitização de dados
+5. **Arquivo Principal**: Criado `app.py` como ponto de entrada
+
+### 🛡️ Melhorias de Segurança
+
+- Sanitização de endereços
+- Validação de CEP português
+- Limits de tamanho de dados
+- Tratamento robusto de erros
+- Proxy para API externa
+
+### 📊 Novas Funcionalidades
+
+- Estatísticas detalhadas
+- Limpeza automática de sessão
+- Comparação inteligente de ruas
+- Logs estruturados
+- Reverse geocoding seguro
+
+## Instalação
+
+```bash
+# Clone o repositório
+git clone https://github.com/kaled182/drivemaps.git
+cd drivemaps
+
+# Instale dependências
+pip install -r requirements.txt
+
+# Configure variáveis de ambiente
+export GOOGLE_API_KEY="sua_chave_api_google"
+export FLASK_DEBUG="true"  # apenas desenvolvimento
+
+# Execute a aplicação
+python app.py
