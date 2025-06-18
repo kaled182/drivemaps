@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for
-from app.models import db, Endereco
+from app.utils.models import db, Endereco
 
 main_routes = Blueprint("main_routes", __name__)
 
