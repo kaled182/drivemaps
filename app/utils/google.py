@@ -1,5 +1,3 @@
-# app/utils/google.py
-
 import requests
 import os
 from functools import lru_cache
@@ -69,3 +67,6 @@ def valida_rua_google(endereco, cep):
     except Exception as e:
         logger.exception("Erro na consulta à API do Google Maps")
         return {"status": "ERROR", "msg": str(e)}
+
+# Alias para manter compatibilidade com api.py
+valida_rua_google_cache = valida_rua_google
