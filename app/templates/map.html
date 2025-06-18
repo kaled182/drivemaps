@@ -9,16 +9,15 @@
         th, td { border: 1px solid #ccc; padding: 6px 10px; font-size: 15px; }
         th { background: #f4f4f4; }
     </style>
-    <!-- Google Maps API (a chave é passada do backend) -->
     <script src="https://maps.googleapis.com/maps/api/js?key={{ maps_api_key }}&callback=initMap" defer></script>
 </head>
 <body>
     <h1>DriveMaps</h1>
 
-    <!-- Formulário de importação -->
-    <form action="{{ url_for('importar_paack') }}" method="post" enctype="multipart/form-data" style="margin-bottom:20px;">
-        <label for="file">Importar lista Paack (.csv):</label>
-        <input type="file" name="file" id="file" required>
+    <!-- Formulário para colar endereços -->
+    <form action="{{ url_for('main_routes.importar') }}" method="post" style="margin-bottom:20px;">
+        <label for="enderecos">Cole a lista de endereços (um por linha):</label><br>
+        <textarea id="enderecos" name="enderecos" rows="5" style="width:100%;" required></textarea><br>
         <button type="submit">Importar</button>
     </form>
 
@@ -50,7 +49,6 @@
     </table>
 
     <script>
-        // Passa os dados do backend para o JS
         const locations = {{ locations|tojson }};
     </script>
     <script src="{{ url_for('static', filename='js/map.js') }}"></script>
