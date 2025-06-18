@@ -1,5 +1,6 @@
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for
 from app.utils.models import db, Endereco
+from app.utils.normalize import linhas_para_enderecos
 
 main_routes = Blueprint("main_routes", __name__)
 
@@ -14,7 +15,8 @@ def index():
             "address_atual": e.address_atual,
             "lat": e.lat,
             "lng": e.lng,
-            "status": e.status or "OK"
+            "status": e.status or "OK",
+            "id_pacote": getattr(e, "id_pacote", None)
         }
         for e in enderecos
     ]
@@ -27,14 +29,16 @@ def importar():
     if not enderecos_texto:
         return redirect(url_for("main_routes.index"))
 
-    linhas = [l.strip() for l in enderecos_texto.splitlines() if l.strip()]
-    for line in linhas:
+    linhas = enderecos_texto.splitlines()
+    pares = linhas_para_enderecos(linhas)
+    for endereco, numero_pacote in pares:
         novo_end = Endereco(
-            address_original=line,
-            address_atual=line,
+            address_original=endereco,
+            address_atual=endereco,
             lat=None,
             lng=None,
-            status="OK"
+            status="OK",
+            id_pacote=numero_pacote  # Retire se não houver esse campo no modelo
         )
         db.session.add(novo_end)
     db.session.commit()
@@ -68,7 +72,8 @@ def get_endereco(eid):
         "address_atual": endereco.address_atual,
         "lat": endereco.lat,
         "lng": endereco.lng,
-        "status": endereco.status
+        "status": endereco.status,
+        "id_pacote": getattr(endereco, "id_pacote", None)
     })
 
 # Utilitário para criar o banco (roda uma vez pelo terminal)
