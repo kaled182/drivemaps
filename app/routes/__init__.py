@@ -1,16 +1,13 @@
 # app/routes/__init__.py
 
 from flask import Blueprint
-from .importacao import import_routes
-from .preview import preview_routes
-from .gerar import gerar_routes
-from .api import api_routes
+from .importacao import importacao_bp
+from .preview import preview_bp
+from .gerar import gerar_bp
+from .api import api_bp
 
-# Cria um blueprint principal para rotas
-main_routes = Blueprint('main', __name__)
-
-# Registra os sub-blueprints de rotas específicas
-main_routes.register_blueprint(import_routes)
-main_routes.register_blueprint(preview_routes)
-main_routes.register_blueprint(gerar_routes)
-main_routes.register_blueprint(api_routes)
+def register_routes(app):
+    app.register_blueprint(importacao_bp)
+    app.register_blueprint(preview_bp)
+    app.register_blueprint(gerar_bp)
+    app.register_blueprint(api_bp)
