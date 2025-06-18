@@ -1,22 +1,31 @@
 {% extends "base.html" %}
-
 {% block content %}
-<h2>Validar Endereços</h2>
-<form action="{{ url_for('main.preview') }}" method="POST">
-    <div class="mb-3">
-        <label for="enderecos" class="form-label">Cole seus endereços (um por linha):</label>
-        <textarea class="form-control" id="enderecos" name="enderecos" rows="10" 
-                  placeholder="Exemplo: Rua das Flores 123, 1000-001 Lisboa"></textarea>
+<div class="row justify-content-center mt-5">
+    <div class="col-lg-8 col-md-10 col-12">
+        <div class="card shadow-lg">
+            <div class="card-header bg-primary text-white">Importar Endereços</div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('main.preview') }}">
+                    <div class="mb-3">
+                        <label for="enderecos" class="form-label">Cole aqui os endereços (Paack padrão):</label>
+                        <textarea id="enderecos" name="enderecos" rows="7" class="form-control" placeholder="Exemplo:&#10;Rua, 4900-000, Cidade&#10;#CódigoPaack&#10;Rua, 4900-000, Cidade&#10;1"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-success">Validar Lista Manual</button>
+                </form>
+                <hr>
+                <form id="form-upload" enctype="multipart/form-data" method="post" action="{{ url_for('main.import_planilha') }}">
+                    <div class="d-flex flex-row gap-2 align-items-center">
+                        <select name="empresa" class="form-select form-select-sm" required>
+                            <option value="">Empresa</option>
+                            <option value="delnext">Delnext</option>
+                            <option value="paack">Paack (Padrão)</option>
+                        </select>
+                        <input type="file" name="planilha" accept=".xls,.xlsx,.csv,.txt" required class="form-control form-control-sm">
+                        <button type="submit" class="btn btn-secondary btn-sm">Importar Arquivo</button>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
-    <button type="submit" class="btn btn-primary">Validar Endereços</button>
-</form>
-
-<div class="mt-4">
-    <h3>Como usar:</h3>
-    <ol>
-        <li>Cole a lista de endereços no formato acima</li>
-        <li>Clique em "Validar Endereços"</li>
-        <li>Confira a pré-visualização e gere o CSV</li>
-    </ol>
 </div>
 {% endblock %}
