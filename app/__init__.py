@@ -1,7 +1,7 @@
 import os
 from flask import Flask
-from app.models import db
-from app.routes import main_routes
+from app.utils.models import db
+from app.utils.routes import main_routes
 
 def create_app():
     app = Flask(__name__)
@@ -10,6 +10,5 @@ def create_app():
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///enderecos.db'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     db.init_app(app)
-
     app.register_blueprint(main_routes)
     return app
