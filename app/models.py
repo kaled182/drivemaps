@@ -14,7 +14,7 @@ class Endereco(db.Model):
     cep = db.Column(db.String(16), nullable=True)
     importacao_tipo = db.Column(db.String(32), nullable=True)
     status = db.Column(db.String(32), nullable=True, default="OK") # Para controle/validação futura
-    # outros campos que desejar
+    id_pacote = db.Column(db.String(20), nullable=True)            # Número sequencial do pacote
 
     def __repr__(self):
         return f"<Endereco {self.id} - {self.address_atual}>"
