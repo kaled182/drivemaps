@@ -22,3 +22,19 @@ def normalize_cep(cep):
         if len(numbers) >= 7:
             return f"{numbers[:4]}-{numbers[4:7]}"
     return cep
+
+def tipo_linha(linha):
+    linha = linha.strip()
+    # ID de pacote: começa com #
+    if re.match(r'^#\w+', linha):
+        return "id_pacote"
+    # Endereço: tem vírgulas e números seguidos de texto (simplificado)
+    if re.match(r".*\d{3,}.*\,.*", linha) and not linha.startswith("#"):
+        return "endereco"
+    # Número do pacote: só número
+    if linha.isdigit():
+        return "numero_pacote"
+    # Horários e outros
+    if re.match(r'^\d{1,2}:\d{2}', linha) or '-' in linha or linha.lower() == "today":
+        return "horario"
+    return "outro"
