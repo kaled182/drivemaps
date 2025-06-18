@@ -65,18 +65,20 @@
                 <td class="status-google text-center mobile-hidden">
                     {% if item.status_google == 'OK' %}
                         <span class="text-success">OK</span>
-                        {% if not item.rua_bate %}<span title="Rua diferente do Google!">⚠️</span>{% endif %}
+                        {% if not item.rua_bate %}
+                            <span title="Rua diferente do Google!">⚠️</span>
+                        {% endif %}
                     {% else %}
                         <span class="text-danger">{{ item.status_google or 'NÃO ENCONTRADO' }}</span>
                     {% endif %}
                 </td>
                 <td class="mobile-hidden">
-                    <span class="filter-badge" style="background-color:{{ item.cor|default('#0074D9') }}; color: white;">
+                    <span class="filter-badge" style="background-color: {{ item.cor|default('#f0f0f0', true) }}; color: #000;">
                         {{ item.importacao_tipo|capitalize }}
                     </span>
                 </td>
                 <td class="text-center">
-                    <button type="button" onclick="validarLinha({{ loop.index0 }})" class="btn btn-warning btn-sm w-100 mb-1">Validar</button>
+                    <button type="button" onclick="validarLinha('{{ loop.index0 }}')" class="btn btn-warning btn-sm w-100 mb-1">Validar</button>
                 </td>
             </tr>
             {% endfor %}
@@ -95,8 +97,7 @@
 <script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
 <script>
 let map, markers = [], markerCluster;
-let enderecosData = {{ lista|tojson }};
-
+let enderecosData = {{ lista|tojson|safe }};
 function makeSvgPin(numero, corHex) {
     let n = String(numero).substring(0, 3);
     let svg = `<svg width="44" height="54" viewBox="0 0 44 54" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -220,7 +221,9 @@ function initMap() {
         bounds.extend({lat: parseFloat(e.latitude), lng: parseFloat(e.longitude)});
     });
     if (!bounds.isEmpty()) map.fitBounds(bounds);
+    // <-- Adicionado fechamento da função initMap
 }
+
 // Importação AJAX do arquivo
 document.getElementById('form-upload').addEventListener('submit', function(e) {
     e.preventDefault();

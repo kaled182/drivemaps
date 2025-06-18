@@ -13,14 +13,19 @@ CORES_IMPORTACAO = [
     "#8A2BE2"   # Roxo para manual ou outros
 ]
 
+
 @lru_cache(maxsize=1000)
 def valida_rua_google(endereco, cep):
     """
-    Consulta a API do Google Maps e retorna os dados de geolocalização e validação do endereço.
+    Consulta a API do Google Maps e retorna os dados de geolocalização e
+    validação do endereço.
     """
     chave = os.environ.get("GOOGLE_API_KEY")
     if not chave:
-        logger.warning("Google API Key não encontrada nas variáveis de ambiente")
+        logger.warning(
+            "Google API Key não encontrada nas variáveis de "
+            "ambiente"
+        )
         return {"status": "API_KEY_MISSING"}
 
     full_address = f"{endereco}, {cep}"
@@ -67,6 +72,7 @@ def valida_rua_google(endereco, cep):
     except Exception as e:
         logger.exception("Erro na consulta à API do Google Maps")
         return {"status": "ERROR", "msg": str(e)}
+
 
 # Alias para manter compatibilidade com api.py
 valida_rua_google_cache = valida_rua_google

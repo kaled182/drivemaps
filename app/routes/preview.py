@@ -6,6 +6,7 @@ import re
 
 preview_bp = Blueprint('preview', __name__)
 
+
 @preview_bp.route('/preview', methods=['POST'])
 def preview():
     try:
@@ -20,28 +21,44 @@ def preview():
             raise ValueError("Nenhum endereço fornecido")
 
         regex_cep = r'(\d{4}-\d{3})'
-        linhas = [linha.strip() for linha in enderecos_brutos.split('\n') if linha.strip()]
+        linhas = [
+            linha.strip()
+            for linha in enderecos_brutos.split('\n')
+            if linha.strip()
+        ]
         lista_preview = []
         i = 0
         while i < len(linhas) - 2:
             linha = linhas[i]
             if i + 2 < len(linhas) and linhas[i+2] == linha:
                 numero_pacote = linhas[i+3] if (i+3) < len(linhas) else ""
-                cep = re.search(regex_cep, linha).group(1) if re.search(regex_cep, linha) else ''
+                cep_match = re.search(regex_cep, linha)
+                cep = cep_match.group(1) if cep_match else ''
                 res_google = valida_rua_google(linha, cep)
                 rua_digitada = linha.split(',')[0] if linha else ''
                 rua_google = res_google.get('route_encontrada', '')
-                rua_bate = normalizar(rua_digitada) in normalizar(rua_google) or normalizar(rua_google) in normalizar(rua_digitada)
+                rua_bate = (
+                    normalizar(rua_digitada) in normalizar(rua_google)
+                    or normalizar(rua_google) in normalizar(rua_digitada)
+                )
                 cep_ok = cep == res_google.get('postal_code_encontrado', '')
                 lista_preview.append({
                     "order_number": numero_pacote,
                     "address": linha,
                     "cep": cep,
                     "status_google": res_google.get('status'),
-                    "postal_code_encontrado": res_google.get('postal_code_encontrado', ''),
-                    "endereco_formatado": res_google.get('endereco_formatado', ''),
-                    "latitude": res_google.get('coordenadas', {}).get('lat', ''),
-                    "longitude": res_google.get('coordenadas', {}).get('lng', ''),
+                    "postal_code_encontrado": res_google.get(
+                        'postal_code_encontrado', ''
+                    ),
+                    "endereco_formatado": res_google.get(
+                        'endereco_formatado', ''
+                    ),
+                    "latitude": res_google.get(
+                        'coordenadas', {}
+                    ).get('lat', ''),
+                    "longitude": res_google.get(
+                        'coordenadas', {}
+                    ).get('lng', ''),
                     "rua_google": rua_google,
                     "cep_ok": cep_ok,
                     "rua_bate": rua_bate,
@@ -69,7 +86,10 @@ def preview():
             lista=lista_atual,
             GOOGLE_API_KEY=os.environ.get("GOOGLE_API_KEY", ""),
             CORES_IMPORTACAO=CORES_IMPORTACAO,
-            origens=list({item.get('importacao_tipo', 'manual') for item in lista_atual})
+            origens=list({
+                item.get('importacao_tipo', 'manual')
+                for item in lista_atual
+            })
         )
 
     except Exception as e:
