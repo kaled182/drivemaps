@@ -1,124 +1,242 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h2>Pré-visualização dos Endereços</h2>
-<form action="{{ url_for('main.generate') }}" method="post">
-    <table class="table table-bordered">
-        <thead>
+<style>
+  #map-top-sticky { position: sticky; top: 0; z-index: 100; background: #f8fafd; box-shadow: 0 4px 18px #0001; border-radius: 0 0 14px 14px;}
+  @media (max-width: 600px) { #map-top-sticky { height: 240px !important; max-height: 45vh; } .table-responsive { overflow-x: auto; } .mobile-hidden { display: none; }}
+  @media (min-width: 601px) { #map-top-sticky { height: 420px !important; max-height: 55vh; }}
+  .table-responsive { margin-top: 6px; }
+  .filter-badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 12px; margin-right: 5px; }
+  .progress-sm { height: 24px; }
+</style>
+
+<div id="map-top-sticky"><div id="map" style="width:100%;height:100%;min-height:220px;"></div></div>
+<div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
+    <div class="d-flex flex-row gap-2">
+        <select id="filtro-origem" class="form-select form-select-sm" onchange="filtrarPorOrigem()">
+            <option value="">Todas as origens</option>
+            {% for origem in origens %}
+                <option value="{{ origem }}">{{ origem|capitalize }}</option>
+            {% endfor %}
+        </select>
+        <button type="button" class="btn btn-warning btn-sm" onclick="validarTudo()">Validar Tudo</button>
+    </div>
+    <form id="form-upload" enctype="multipart/form-data" method="post" action="{{ url_for('main.import_planilha') }}" class="d-flex flex-row gap-2">
+        <select name="empresa" class="form-select form-select-sm" style="width:auto;" required>
+            <option value="">Empresa</option>
+            <option value="delnext">Delnext</option>
+            <option value="paack">Paack (Padrão)</option>
+        </select>
+        <input type="file" name="planilha" accept=".xls,.xlsx,.csv,.txt" required class="form-control form-control-sm">
+        <button type="submit" class="btn btn-secondary btn-sm">Importar</button>
+    </form>
+</div>
+<div id="progresso-validacao" class="progress progress-sm mb-3" style="display: none;">
+    <div id="progresso-barra" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%">0%</div>
+</div>
+<div class="table-responsive">
+<form id="form-csv" action="{{ url_for('main.generate') }}" method="post" autocomplete="off">
+    <table class="table table-bordered align-middle" id="tabela-enderecos">
+        <thead class="table-light">
             <tr>
-                <th>#</th>
+                <th style="width:40px;">ID</th>
                 <th>Endereço</th>
-                <th>CEP Informado</th>
-                <th>CEP Encontrado</th>
-                <th>Status</th>
-                <th>Sugestões (GeoAPI)</th>
-                <th>Corrigir/Confirmar</th>
+                <th style="width:110px;">CODP</th>
+                <th style="width:110px;">CODP Google</th>
+                <th class="mobile-hidden" style="width:110px;">Status</th>
+                <th class="mobile-hidden" style="width:100px;">Origem</th>
+                <th style="width:120px;">Ação</th>
             </tr>
         </thead>
-        <tbody>
+        <tbody id="corpo-tabela">
             {% for item in lista %}
-            <tr id="linha-{{ loop.index0 }}"
-                class="{% if item['status'] == 'OK' and item['cep'] == item['postal_code_encontrado'] %}table-success{% elif item['status'] == 'OK' %}table-warning{% else %}table-danger{% endif %}">
-                <td>{{ loop.index }}</td>
+            <tr id="linha-{{ loop.index0 }}" class="{% if item.cep_ok %}table-success{% else %}table-danger{% endif %}" data-origem="{{ item.importacao_tipo }}">
+                <td style="font-weight: bold; text-align:center;">{{ item['order_number'] or loop.index }}</td>
                 <td>
                     <input type="hidden" name="numero_pacote_{{ loop.index0 }}" value="{{item['order_number']}}">
-                    <input type="text" class="form-control" name="endereco_{{ loop.index0 }}" value="{{item['address']}}"
-                    {% if item['status'] == 'OK' and item['cep'] == item['postal_code_encontrado'] %}readonly{% endif %}>
+                    <input type="hidden" name="importacao_tipo_{{ loop.index0 }}" value="{{item['importacao_tipo']}}">
+                    <input type="hidden" name="cor_{{ loop.index0 }}" value="{{item['cor']}}">
+                    <input type="text" class="form-control" name="endereco_{{ loop.index0 }}" value="{{item['address']}}">
                 </td>
                 <td>
-                    <input type="text" class="form-control" name="cep_{{ loop.index0 }}" value="{{item['cep']}}"
-                    {% if item['status'] == 'OK' and item['cep'] == item['postal_code_encontrado'] %}readonly{% endif %}>
+                    <input type="text" class="form-control" name="cep_{{ loop.index0 }}" value="{{item['cep']}}">
                 </td>
-                <td class="cep-encontrado">
-                    {{ item['postal_code_encontrado'] or "-" }}
-                </td>
-                <td class="status">
-                    {% if item['status'] == 'OK' and item['cep'] == item['postal_code_encontrado'] %}
+                <td class="cep-encontrado">{{ item['postal_code_encontrado'] or '-' }}</td>
+                <td class="status-google text-center mobile-hidden">
+                    {% if item.status_google == 'OK' %}
                         <span class="text-success">OK</span>
-                    {% elif item['status'] == 'OK' %}
-                        <span class="text-warning">OK (CEP divergente)</span>
+                        {% if not item.rua_bate %}<span title="Rua diferente do Google!">⚠️</span>{% endif %}
                     {% else %}
-                        <span class="text-danger">{{ item['status'] or "ERRO" }}</span>
+                        <span class="text-danger">{{ item.status_google or 'NÃO ENCONTRADO' }}</span>
                     {% endif %}
                 </td>
-                <td>
-                    <small>{{ item['rua_geoapi'] }}</small>
+                <td class="mobile-hidden">
+                    <span class="filter-badge" style="background-color:{{ item.cor|default('#0074D9') }}; color: white;">
+                        {{ item.importacao_tipo|capitalize }}
+                    </span>
                 </td>
-                <td>
-                    {% if item['status'] != 'OK' or item['cep'] != item['postal_code_encontrado'] %}
-                        <button type="button" onclick="validarLinha({{ loop.index0 }})" class="btn btn-warning btn-sm">Validar novamente</button>
-                    {% else %}
-                        <span class="text-success">✔️</span>
-                    {% endif %}
+                <td class="text-center">
+                    <button type="button" onclick="validarLinha({{ loop.index0 }})" class="btn btn-warning btn-sm w-100 mb-1">Validar</button>
                 </td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
-    <input type="hidden" name="total" value="{{lista|length}}">
-    <button type="submit" name="finalizar" value="1" class="btn btn-success">Gerar CSV para MyWay</button>
+    <div class="d-flex justify-content-between my-2">
+        <button type="button" class="btn btn-primary" onclick="adicionarEnderecoManual()">+ Adicionar endereço</button>
+        <button id="btn-csv" type="submit" name="finalizar" value="1" class="btn btn-success">Gerar CSV para MyWay</button>
+    </div>
+    <input type="hidden" name="total" id="total-linhas" value="{{lista|length}}">
 </form>
+</div>
+{% endblock %}
 
+{% block scripts %}
+<script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
 <script>
-function validarLinha(idx) {
-    const row = document.getElementById('linha-' + idx);
-    const endereco = row.querySelector('input[name="endereco_' + idx + '"]').value;
-    const cep = row.querySelector('input[name="cep_' + idx + '"]').value;
-    const numero_pacote = row.querySelector('input[name="numero_pacote_' + idx + '"]').value;
-    const btn = row.querySelector('button');
-    btn.disabled = true;
-    btn.textContent = "Validando...";
-    fetch("/api/validar-linha", {
-        method: "POST",
-        body: new URLSearchParams({
-            endereco: endereco,
-            cep: cep,
-            numero_pacote: numero_pacote
-        })
-    })
-    .then(resp => resp.json())
-    .then(data => {
-        row.querySelector('input[name="endereco_' + idx + '"]').value = data.address;
-        row.querySelector('input[name="cep_' + idx + '"]').value = data.cep;
-        let tdCep = row.querySelector('td.cep-encontrado');
-        tdCep.innerHTML = data.postal_code_encontrado || "-";
-        // Status atualizado e colorido
-        let tdStatus = row.querySelector('td.status');
-        tdStatus.innerHTML = '';
-        if (data.status === "OK" && data.cep === data.postal_code_encontrado) {
-            tdStatus.innerHTML = '<span class="text-success">OK</span>';
-        } else if (data.status === "OK") {
-            tdStatus.innerHTML = '<span class="text-warning">OK (CEP divergente)</span>';
-        } else {
-            tdStatus.innerHTML = '<span class="text-danger">' + (data.status || "ERRO") + '</span>';
-        }
-        // Sugestões da GeoAPI
-        row.children[5].innerHTML = data.ruas_geoapi ? data.ruas_geoapi.slice(0, 5).join(", ") : '';
-        // Cor da linha
-        if (data.status == "OK" && data.cep == data.postal_code_encontrado) {
-            row.className = "table-success";
-        } else if (data.status == "OK") {
-            row.className = "table-warning";
-        } else {
-            row.className = "table-danger";
-        }
-        if (data.status == "OK" && data.cep == data.postal_code_encontrado) {
-            btn.outerHTML = '<span class="text-success">✔️</span>';
-            row.querySelector('input[name="endereco_' + idx + '"]').setAttribute('readonly', 'readonly');
-            row.querySelector('input[name="cep_' + idx + '"]').setAttribute('readonly', 'readonly');
-        } else {
-            btn.disabled = false;
-            btn.textContent = "Validar novamente";
-            row.querySelector('input[name="endereco_' + idx + '"]').removeAttribute('readonly');
-            row.querySelector('input[name="cep_' + idx + '"]').removeAttribute('readonly');
-        }
-    })
-    .catch(() => {
-        btn.disabled = false;
-        btn.textContent = "Validar novamente";
-        alert("Erro ao validar endereço! Tente novamente.");
-    });
-    return false;
+let map, markers = [], markerCluster;
+let enderecosData = {{ lista|tojson }};
+
+function makeSvgPin(numero, corHex) {
+    let n = String(numero).substring(0, 3);
+    let svg = `<svg width="44" height="54" viewBox="0 0 44 54" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <ellipse cx="22" cy="22" rx="21" ry="21" fill="${corHex}"/>
+      <rect x="18" y="37" width="8" height="13" rx="4" fill="${corHex}"/>
+      <text x="22" y="31" text-anchor="middle" font-size="20" fill="#fff" font-family="Arial" font-weight="bold" alignment-baseline="middle" dominant-baseline="middle">${n}</text>
+    </svg>`;
+    return "data:image/svg+xml;base64," + btoa(svg);
 }
+
+function criarMarker(idx, data) {
+    if (markers[idx]) {
+        markers[idx].setMap(null);
+        if (markerCluster) markerCluster.removeMarker(markers[idx]);
+    }
+    if (!data.latitude || !data.longitude || isNaN(data.latitude) || isNaN(data.longitude)) return null;
+    const position = {lat: parseFloat(data.latitude), lng: parseFloat(data.longitude)};
+    const cor = data.cor || "#0074D9";
+    const pinUrl = makeSvgPin(data.numero_pacote || (idx+1), cor);
+
+    let marker = new google.maps.Marker({
+        position: position,
+        map: map,
+        title: `${data.numero_pacote || (idx+1)} - ${data.address}`,
+        icon: { url: pinUrl, scaledSize: new google.maps.Size(22, 27) },
+        draggable: true,
+        visible: !document.getElementById('filtro-origem').value ||
+                 document.getElementById('filtro-origem').value === data.importacao_tipo
+    });
+
+    markers[idx] = marker;
+    if (markerCluster) markerCluster.addMarker(marker);
+    return marker;
+}
+
+function filtrarPorOrigem() {
+    const origem = document.getElementById('filtro-origem').value;
+    const linhas = document.querySelectorAll('#corpo-tabela tr');
+    linhas.forEach(linha => {
+        if (linha.id === 'linha-nova') return;
+        linha.style.display = (!origem || linha.dataset.origem === origem) ? '' : 'none';
+    });
+    atualizarMarcadoresVisiveis();
+}
+function atualizarMarcadoresVisiveis() {
+    const origem = document.getElementById('filtro-origem').value;
+    markers.forEach((marker, idx) => {
+        if (marker) {
+            const linha = document.getElementById('linha-' + idx);
+            if (linha) {
+                const deveMostrar = !origem || linha.dataset.origem === origem;
+                marker.setVisible(deveMostrar);
+            }
+        }
+    });
+    if (markerCluster) markerCluster.repaint();
+}
+async function validarLinha(idx) {
+    const linha = enderecosData[idx];
+    try {
+        const response = await fetch('/api/validar-linha', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                idx: idx,
+                endereco: linha.address,
+                cep: linha.cep,
+                importacao_tipo: linha.importacao_tipo,
+                numero_pacote: linha.order_number
+            })
+        });
+        const data = await response.json();
+        if (data.success) {
+            enderecosData[idx] = data.item;
+            criarMarker(idx, data.item);
+            window.location.reload(); // Troque por atualização mais granular se quiser!
+        } else {
+            alert(data.msg || "Erro na validação");
+        }
+    } catch (error) {
+        alert("Erro ao conectar com o servidor");
+    }
+}
+async function validarTudo() {
+    const progressBar = document.getElementById('progresso-barra');
+    const progressContainer = document.getElementById('progresso-validacao');
+    progressContainer.style.display = 'block';
+    for (let i = 0; i < enderecosData.length; i++) {
+        await validarLinha(i);
+        progressBar.style.width = `${((i + 1) / enderecosData.length) * 100}%`;
+        progressBar.textContent = `${Math.round(((i + 1) / enderecosData.length) * 100)}%`;
+    }
+}
+function adicionarEnderecoManual() {
+    // Adiciona na tabela JS e DOM
+    // Recomendo POST no backend para sincronizar sessão (não implementado aqui)
+    alert('Adicionar endereço manual via JS e sincronizar com backend!');
+}
+function initMap() {
+    const coordenadasValidas = enderecosData.filter(e =>
+        e.latitude !== null && e.longitude !== null && !isNaN(e.latitude) && !isNaN(e.longitude)
+    );
+    if (coordenadasValidas.length === 0) {
+        document.getElementById('map').innerHTML =
+            '<div class="alert alert-warning">Nenhuma coordenada válida para exibir</div>';
+        return;
+    }
+    map = new google.maps.Map(document.getElementById('map'), {
+        zoom: 12,
+        center: {
+            lat: parseFloat(coordenadasValidas[0].latitude),
+            lng: parseFloat(coordenadasValidas[0].longitude)
+        }
+    });
+    markerCluster = new markerClusterer.MarkerClusterer({ map, markers: [] });
+    coordenadasValidas.forEach(e => {
+        criarMarker(e.idx, e);
+    });
+    const bounds = new google.maps.LatLngBounds();
+    coordenadasValidas.forEach(e => {
+        bounds.extend({lat: parseFloat(e.latitude), lng: parseFloat(e.longitude)});
+    });
+    if (!bounds.isEmpty()) map.fitBounds(bounds);
+}
+// Importação AJAX do arquivo
+document.getElementById('form-upload').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    fetch(this.action, {
+        method: 'POST',
+        body: formData
+    }).then(response => response.json()).then(data => {
+        if (data.success) {
+            enderecosData = data.lista;
+            window.location.reload();
+        } else {
+            alert(data.msg || "Falha ao importar arquivo!");
+        }
+    }).catch(() => alert("Erro ao importar arquivo!"));
+});
 </script>
+<script async defer src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&callback=initMap"></script>
 {% endblock %}
