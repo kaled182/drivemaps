@@ -4,17 +4,15 @@ import re
 import os
 from app.utils.google import valida_rua_google
 from app.utils.helpers import normalizar, registro_unico, cor_por_tipo
-
 import logging
-logger = logging.getLogger(__name__)
 
+logger = logging.getLogger(__name__)
 importacao_bp = Blueprint('importacao', __name__)
 
 ALLOWED_EXTENSIONS = {'csv', 'xls', 'xlsx', 'txt'}
 
 def extensao_permitida(filename):
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @importacao_bp.route('/import_planilha', methods=['POST'])
 def import_planilha():
@@ -29,6 +27,8 @@ def import_planilha():
             return jsonify({"success": False, "msg": "Tipo de arquivo não permitido"}), 400
 
         logger.info(f"Importação iniciada para empresa: {empresa}")
+        tipo_import = empresa
+        enderecos, ceps, order_numbers = [], [], []
 
         if empresa == "delnext":
             file.seek(0)
@@ -39,8 +39,6 @@ def import_planilha():
                 return jsonify({"success": False, "msg": "Colunas 'Morada' e 'Código Postal' obrigatórias"}), 400
             enderecos = df[col_end[0]].astype(str).tolist()
             ceps = df[col_cep[0]].astype(str).tolist()
-            order_numbers = [str(i+1) for i in range(len(enderecos))]
-            tipo_import = "delnext"
 
         elif empresa == "paack":
             file.seek(0)
@@ -48,21 +46,19 @@ def import_planilha():
                 conteudo = file.read().decode("utf-8")
                 linhas = conteudo.splitlines()
                 regex_cep = re.compile(r'(\d{4}-\d{3})')
-                enderecos, ceps, order_numbers = [], [], []
                 i = 0
                 while i < len(linhas) - 3:
-                    endereco_linha = linhas[i].strip()
-                    if linhas[i+2].strip() == endereco_linha:
-                        order_number = linhas[i+3].strip()
-                        cep_match = regex_cep.search(endereco_linha)
+                    linha = linhas[i].strip()
+                    if linhas[i+2].strip() == linha:
+                        order = linhas[i+3].strip()
+                        cep_match = regex_cep.search(linha)
                         cep = cep_match.group(1) if cep_match else ""
-                        enderecos.append(endereco_linha)
+                        enderecos.append(linha)
                         ceps.append(cep)
-                        order_numbers.append(order_number)
+                        order_numbers.append(order)
                         i += 4
                     else:
                         i += 1
-                tipo_import = "paack"
             else:
                 df = pd.read_excel(file, header=0)
                 col_end = [c for c in df.columns if 'endereco' in c.lower() or 'address' in c.lower()]
@@ -71,10 +67,12 @@ def import_planilha():
                     return jsonify({"success": False, "msg": "Colunas de endereço e CEP não encontradas"}), 400
                 enderecos = df[col_end[0]].astype(str).tolist()
                 ceps = df[col_cep[0]].astype(str).tolist()
-                order_numbers = [str(i+1) for i in range(len(enderecos))]
-                tipo_import = "paack"
+
         else:
             return jsonify({"success": False, "msg": "Empresa não suportada"}), 400
+
+        if not order_numbers:
+            order_numbers = [str(i + 1) for i in range(len(enderecos))]
 
         lista_atual = session.get('lista', [])
 
@@ -84,6 +82,7 @@ def import_planilha():
             rua_google = res_google.get('route_encontrada', '')
             rua_bate = normalizar(rua_digitada) in normalizar(rua_google) or normalizar(rua_google) in normalizar(rua_digitada)
             cep_ok = cep == res_google.get('postal_code_encontrado', '')
+
             novo = {
                 "order_number": order_number,
                 "address": endereco,
@@ -100,6 +99,7 @@ def import_planilha():
                 "importacao_tipo": tipo_import,
                 "cor": cor_por_tipo(tipo_import)
             }
+
             if registro_unico(lista_atual, novo):
                 lista_atual.append(novo)
 
