@@ -1,7 +1,19 @@
-flask==2.3.3
-Flask-Session==0.4.0
-gunicorn==21.2.0
-python-dotenv==1.0.1
+# Requirements para DriveMaps
+Flask==2.3.3
+Flask-Session==0.5.0
+pandas==2.0.3
 requests==2.31.0
-pandas
-openpyxl
+openpyxl==3.1.2
+xlrd==2.0.1
+
+# Desenvolvimento e testes
+pytest==7.4.2
+pytest-flask==1.2.0
+python-dotenv==1.0.0
+
+# Produção
+gunicorn==21.2.0
+waitress==2.1.2
+
+# Segurança
+Werkzeug==2.3.7
