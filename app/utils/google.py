@@ -1,9 +1,19 @@
+# app/utils/google.py
+
 import requests
 import os
 from functools import lru_cache
 import logging
 
 logger = logging.getLogger(__name__)
+
+CORES_IMPORTACAO = [
+    "#1E90FF",  # Azul padrão
+    "#FF8C00",  # Laranja para Paack
+    "#32CD32",  # Verde para Delnext
+    "#DC143C",  # Vermelho para divergentes
+    "#8A2BE2"   # Roxo para manual ou outros
+]
 
 @lru_cache(maxsize=1000)
 def valida_rua_google(endereco, cep):
