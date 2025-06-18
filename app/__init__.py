@@ -3,13 +3,12 @@
 from flask import Flask
 from flask_session import Session
 from .routes import register_routes
-from config import Config
 
 def create_app():
     app = Flask(__name__)
 
-    # Configurações
-    app.config.from_object(Config)
+    # Carrega configuração da classe Config
+    app.config.from_object('config.Config')
 
     # Inicializa sessão
     Session(app)
