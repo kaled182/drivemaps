@@ -23,18 +23,20 @@ def normalize_cep(cep):
             return f"{numbers[:4]}-{numbers[4:7]}"
     return cep
 
-def tipo_linha(linha):
-    linha = linha.strip()
-    # ID de pacote: começa com #
-    if re.match(r'^#\w+', linha):
-        return "id_pacote"
-    # Endereço: tem vírgulas e números seguidos de texto (simplificado)
-    if re.match(r".*\d{3,}.*\,.*", linha) and not linha.startswith("#"):
-        return "endereco"
-    # Número do pacote: só número
-    if linha.isdigit():
-        return "numero_pacote"
-    # Horários e outros
-    if re.match(r'^\d{1,2}:\d{2}', linha) or '-' in linha or linha.lower() == "today":
-        return "horario"
-    return "outro"
+def linhas_para_enderecos(linhas):
+    """
+    Recebe uma lista de linhas (preenchidas), retorna lista de tuplas (endereco, numero_pacote)
+    Processa em blocos de 3 linhas:
+      bloco[0]: endereço
+      bloco[1]: descarta
+      bloco[2]: número do pacote
+    """
+    res = []
+    linhas = [l.strip() for l in linhas if l.strip()]
+    for i in range(0, len(linhas), 3):
+        bloco = linhas[i:i+3]
+        if len(bloco) == 3:
+            endereco = bloco[0]
+            numero_pacote = bloco[2]
+            res.append((endereco, numero_pacote))
+    return res
