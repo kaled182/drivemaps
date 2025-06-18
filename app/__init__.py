@@ -1,8 +1,14 @@
 from flask import Flask
-from .routes import main_routes
+from flask_session import Session
 
 def create_app():
     app = Flask(__name__)
-    app.secret_key = "secret-key-temporaria"  # Substitua por variável de ambiente em produção!
-    app.register_blueprint(main_routes)       # ESSENCIAL para rotas funcionarem!
+    app.config['SECRET_KEY'] = 'sua_senha_super_secreta'
+    app.config['SESSION_TYPE'] = 'filesystem'
+    app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB upload
+
+    Session(app)
+    from .routes import main_routes
+    app.register_blueprint(main_routes)
+
     return app
