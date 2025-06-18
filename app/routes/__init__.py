@@ -1,5 +1,6 @@
 # app/routes/__init__.py
 
+from flask import Blueprint
 from .importacao import importacao_bp as importacao_routes
 from .preview import preview_bp as preview_routes
 from .gerar import gerar_routes
