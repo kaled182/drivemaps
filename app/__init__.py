@@ -1,7 +1,7 @@
 import os
 from flask import Flask
 from app.utils.models import db
-from app.utils.routes import main_routes
+from app.routes import main_routes
 
 def create_app():
     app = Flask(__name__)
