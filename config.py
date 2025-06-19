@@ -3,12 +3,12 @@ from datetime import timedelta
 
 class Config:
     # Configurações essenciais
-    SECRET_KEY = os.getenv(
-        'SECRET_KEY',
-        'sua-chave-secreta-aqui-deve-ser-longa-e-aleatoria'  # Substitua em produção!
-    )
+    SECRET_KEY = os.getenv('SECRET_KEY', os.urandom(24).hex())
+    FLASK_ENV = os.getenv('FLASK_ENV', 'production')
     
-    DEBUG = os.getenv('DEBUG', 'False') == 'True'
+    # Configurações de API externa
+    GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
+    MAP_ID = os.getenv('MAP_ID')
     
     # Configurações de sessão
     SESSION_TYPE = os.getenv('SESSION_TYPE', 'filesystem')
@@ -19,12 +19,10 @@ class Config:
     PERMANENT_SESSION_LIFETIME = timedelta(days=1)
     
     # Configurações de cookie
-    SESSION_COOKIE_NAME = 'mapsdrive_session'
-    SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'False') == 'True'
+    SESSION_COOKIE_NAME = os.getenv('SESSION_COOKIE_NAME', 'mapsdrive_session')
+    SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'True') == 'True'
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = 'Lax'
-    SESSION_COOKIE_PATH = '/'
-    SESSION_REFRESH_EACH_REQUEST = True
     
     # Configuração para Redis (se necessário)
     if SESSION_TYPE == 'redis':
@@ -32,3 +30,7 @@ class Config:
         REDIS_URL = os.getenv('REDIS_URL')
         if REDIS_URL:
             SESSION_REDIS = redis.from_url(REDIS_URL)
+    
+    @property
+    def DEBUG(self):
+        return self.FLASK_ENV.lower() == 'development'
