@@ -1,40 +1,103 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-bs-theme="light">
 <head>
     <meta charset="UTF-8">
-    <title>{% block title %}MapsDrive{% endblock %}</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-
-    <!-- Meta tags adicionais para SEO e acessibilidade -->
-    <meta name="description" content="Sistema interativo de validação e roteirização de endereços para entregas.">
-    <meta name="theme-color" content="#ffffff">
-    <meta name="author" content="MapsDrive">
-
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-
-    <!-- CSS customizado (se necessário no futuro) -->
+    <title>{% block title %}MapsDrive - Sistema de Roteirização{% endblock %}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- Meta tags SEO melhoradas -->
+    <meta name="description" content="Sistema avançado de validação e roteirização de endereços para entregas com integração ao Google Maps">
+    <meta name="keywords" content="roteirização, entregas, maps, logística, endereços">
+    <meta name="author" content="MapsDrive Team">
+    <meta name="theme-color" content="#1e88e5">
+    <meta name="robots" content="index, follow">
+    
+    <!-- Favicon (adicione o seu) -->
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+    
+    <!-- Bootstrap 5.3 com fallback local -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" 
+          integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" 
+          crossorigin="anonymous">
+    
+    <!-- Font Awesome para ícones -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- CSS customizado -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
     {% block styles %}{% endblock %}
 </head>
 <body class="d-flex flex-column min-vh-100">
-    <nav class="navbar navbar-expand-lg navbar-light bg-light shadow-sm">
-        <div class="container-fluid">
-            <a class="navbar-brand fw-bold text-primary" href="/">MapsDrive</a>
+    <!-- Barra de navegação melhorada -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="{{ url_for('home') }}">
+                <i class="fas fa-map-marked-alt me-2"></i>MapsDrive
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('home') }}">Início</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('preview') }}">Visualização</a>
+                    </li>
+                </ul>
+            </div>
         </div>
     </nav>
 
+    <!-- Container principal com mensagens flash -->
     <main class="container py-4 flex-fill">
-        {% block content %}{% endblock %}
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        {% block content %}
+        <!-- Conteúdo será injetado aqui -->
+        {% endblock %}
     </main>
 
-    <footer class="bg-light text-center text-muted py-3 border-top mt-auto">
-        <small>&copy; {{ now().year }} MapsDrive. Todos os direitos reservados.</small>
+    <!-- Rodapé melhorado -->
+    <footer class="bg-dark text-white py-4 mt-auto">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>Sobre o MapsDrive</h5>
+                    <p class="text-muted">Sistema de roteirização inteligente para otimização de entregas.</p>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <small>&copy; {{ now().year }} MapsDrive. Todos os direitos reservados.</small>
+                    <div class="mt-2">
+                        <a href="#" class="text-white me-3"><i class="fab fa-facebook-f"></i></a>
+                        <a href="#" class="text-white me-3"><i class="fab fa-twitter"></i></a>
+                        <a href="#" class="text-white"><i class="fab fa-linkedin-in"></i></a>
+                    </div>
+                </div>
+            </div>
+        </div>
     </footer>
 
-    <!-- Bootstrap JS Bundle (com Popper) -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-
-    <!-- Bloco para scripts customizados -->
+    <!-- Scripts essenciais -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" 
+            integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" 
+            crossorigin="anonymous"></script>
+    
+    <!-- jQuery (opcional, se necessário) -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    
+    <!-- Scripts customizados -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>
