@@ -1,53 +1,173 @@
 {% extends "base.html" %}
 
+{% block title %}Importar Endereços | MapsDrive{% endblock %}
+
+{% block styles %}
+<!-- CSS específico para esta página -->
+<style>
+    .address-textarea {
+        font-family: 'Courier New', monospace;
+        font-size: 0.9rem;
+    }
+    .form-section {
+        transition: all 0.3s ease;
+    }
+    .form-section:hover {
+        transform: translateY(-3px);
+    }
+    .file-upload-label {
+        cursor: pointer;
+        border: 2px dashed #dee2e6;
+        border-radius: 0.375rem;
+        padding: 1.5rem;
+        text-align: center;
+    }
+    .file-upload-label:hover {
+        border-color: #0d6efd;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="row justify-content-center mt-5">
-    <div class="col-lg-8 col-md-10 col-12">
+<div class="row justify-content-center mt-4">
+    <div class="col-lg-10 col-xl-8">
         <div class="card shadow-lg border-0">
-            <div class="card-header bg-primary text-white fw-bold">
-                Importar Endereços
+            <div class="card-header bg-primary text-white">
+                <h2 class="h5 mb-0"><i class="fas fa-map-marked-alt me-2"></i>Importar Endereços</h2>
             </div>
+            
             <div class="card-body">
-                <!-- Formulário manual -->
-                <form method="post" action="{{ url_for('main.preview') }}">
-                    <div class="mb-3">
-                        <label for="enderecos" class="form-label fw-semibold">
-                            Cole aqui os endereços (Paack padrão):
-                        </label>
-                        <textarea id="enderecos" name="enderecos" rows="7" class="form-control" placeholder="Exemplo:&#10;Rua, 4900-000, Cidade&#10;#CódigoPaack&#10;Rua, 4900-000, Cidade&#10;1" required></textarea>
-                    </div>
-                    <button type="submit" class="btn btn-success w-100">
-                        Validar Lista Manual
-                    </button>
-                </form>
-
-                <hr class="my-4">
-
-                <!-- Formulário de upload -->
-                <form id="form-upload" enctype="multipart/form-data" method="post" action="{{ url_for('main.import_planilha') }}">
-                    <div class="row g-2 align-items-center">
-                        <div class="col-md-4">
-                            <label for="empresa" class="form-label mb-0 small">Empresa</label>
-                            <select name="empresa" id="empresa" class="form-select form-select-sm" required>
-                                <option value="">Selecione...</option>
-                                <option value="delnext">Delnext</option>
-                                <option value="paack">Paack (Padrão)</option>
-                            </select>
+                <!-- Seção de Importação Manual -->
+                <div class="form-section mb-5 p-3 rounded bg-light">
+                    <h3 class="h6 mb-3 text-primary fw-bold">
+                        <i class="fas fa-keyboard me-2"></i>Inserção Manual
+                    </h3>
+                    
+                    <form method="post" action="{{ url_for('main.preview') }}" id="manualForm">
+                        <div class="mb-3">
+                            <label for="enderecos" class="form-label fw-semibold">
+                                Cole os endereços (um por linha):
+                            </label>
+                            <textarea id="enderecos" name="enderecos" rows="8" 
+                                      class="form-control address-textarea" 
+                                      placeholder="Exemplo de formato (Paack):&#10;Rua Exemplo, 123, 4900-000 Cidade&#10;#COD12345&#10;Avenida Teste, 456, 4900-001 Cidade&#10;1" 
+                                      required></textarea>
+                            <div class="form-text mt-1">
+                                Formato esperado: <code>Endereço Completo</code> seguido opcionalmente por <code>#Código</code>
+                            </div>
                         </div>
-                        <div class="col-md-5">
-                            <label for="planilha" class="form-label mb-0 small">Arquivo</label>
-                            <input type="file" name="planilha" id="planilha" accept=".xls,.xlsx,.csv,.txt" required class="form-control form-control-sm">
-                        </div>
-                        <div class="col-md-3 d-grid">
-                            <label class="form-label mb-0 invisible">Enviar</label>
-                            <button type="submit" class="btn btn-secondary btn-sm">
-                                Importar Arquivo
+                        
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-success btn-lg">
+                                <i class="fas fa-check-circle me-2"></i>Validar Endereços
                             </button>
                         </div>
+                    </form>
+                </div>
+
+                <div class="text-center my-3 text-muted">
+                    <span class="bg-white px-3">OU</span>
+                </div>
+
+                <!-- Seção de Upload de Arquivo -->
+                <div class="form-section p-3 rounded bg-light">
+                    <h3 class="h6 mb-3 text-primary fw-bold">
+                        <i class="fas fa-file-upload me-2"></i>Importar Arquivo
+                    </h3>
+                    
+                    <form id="uploadForm" enctype="multipart/form-data" method="post" 
+                          action="{{ url_for('main.import_planilha') }}" class="needs-validation" novalidate>
+                        <div class="row g-3 align-items-end">
+                            <div class="col-md-4">
+                                <label for="empresa" class="form-label small fw-semibold">Formato do Arquivo</label>
+                                <select name="empresa" id="empresa" class="form-select" required>
+                                    <option value="" disabled selected>Selecione...</option>
+                                    <option value="delnext">Delnext</option>
+                                    <option value="paack">Paack (Padrão)</option>
+                                    <option value="custom">Personalizado</option>
+                                </select>
+                            </div>
+                            
+                            <div class="col-md-5">
+                                <label for="planilha" class="form-label small fw-semibold">Selecione o arquivo</label>
+                                <input type="file" name="planilha" id="planilha" 
+                                       accept=".xlsx,.xls,.csv,.txt" required 
+                                       class="form-control">
+                                <div class="form-text">Formatos suportados: .xlsx, .xls, .csv</div>
+                            </div>
+                            
+                            <div class="col-md-3 d-grid">
+                                <button type="submit" class="btn btn-primary" id="uploadBtn">
+                                    <i class="fas fa-upload me-2"></i>Importar
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                    
+                    <div class="mt-3 alert alert-info">
+                        <small>
+                            <i class="fas fa-info-circle me-2"></i>
+                            Para formatos personalizados, consulte nosso 
+                            <a href="#" data-bs-toggle="modal" data-bs-target="#formatosModal">guia de formatação</a>.
+                        </small>
                     </div>
-                </form>
+                </div>
             </div>
         </div>
     </div>
 </div>
+
+<!-- Modal de Ajuda -->
+<div class="modal fade" id="formatosModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">Formatos Suportados</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Conteúdo do modal com exemplos -->
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<!-- Validação e scripts específicos -->
+<script>
+    // Validação do formulário
+    (() => {
+        'use strict'
+        
+        // Fetch forms to apply custom Bootstrap validation styles to
+        const forms = document.querySelectorAll('.needs-validation')
+        
+        // Loop over them and prevent submission
+        Array.from(forms).forEach(form => {
+            form.addEventListener('submit', event => {
+                if (!form.checkValidity()) {
+                    event.preventDefault()
+                    event.stopPropagation()
+                }
+                
+                form.classList.add('was-validated')
+            }, false)
+        })
+    })()
+    
+    // Feedback durante upload
+    document.getElementById('uploadForm').addEventListener('submit', function() {
+        const btn = document.getElementById('uploadBtn')
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span>Processando...'
+        btn.disabled = true
+    })
+    
+    // Exemplo de endereço
+    document.getElementById('enderecos').addEventListener('focus', function() {
+        if (this.value === '') {
+            this.value = "Rua Exemplo, 123, 4900-000 Cidade\n#COD12345\nAvenida Teste, 456, 4900-001 Cidade\n1"
+        }
+    })
+</script>
 {% endblock %}
