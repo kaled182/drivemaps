@@ -14,11 +14,15 @@ def create_app():
     
     # Carrega configurações
     app.config.from_object('config.Config')
+    app.logger.info(f"Ambiente: {app.config['FLASK_ENV']}")
     
-    # Patch para o problema de bytes/string
-    if not hasattr(app, 'session_cookie_name'):
-        app.session_cookie_name = app.config['SESSION_COOKIE_NAME']
-    
+    # Verificação crítica das configurações
+    required_keys = ['SECRET_KEY', 'GOOGLE_API_KEY', 'MAP_ID']
+    missing = [key for key in required_keys if not app.config.get(key)]
+    if missing:
+        app.logger.error(f"Configurações faltando: {', '.join(missing)}")
+        raise ValueError(f"Variáveis de ambiente obrigatórias faltando: {', '.join(missing)}")
+
     # Configuração do diretório de sessão
     if app.config['SESSION_TYPE'] == 'filesystem':
         try:
@@ -28,26 +32,15 @@ def create_app():
             app.logger.error(f"Erro ao criar diretório de sessão: {str(e)}")
             raise
     
-    # Inicialização da sessão com tratamento de erro
+    # Inicialização robusta da sessão
     try:
         sess = Session()
         sess.init_app(app)
         
-        # Patch adicional para garantir que o session_id seja string
-        original_save_session = sess.save_session
-        
-        def patched_save_session(*args, **kwargs):
-            try:
-                # Garante que o session_id seja string
-                if 'session_id' in kwargs and isinstance(kwargs['session_id'], bytes):
-                    kwargs['session_id'] = kwargs['session_id'].decode('utf-8')
-                return original_save_session(*args, **kwargs)
-            except Exception as e:
-                app.logger.error(f"Erro ao salvar sessão: {str(e)}")
-                raise
-                
-        sess.save_session = patched_save_session
-        
+        # Garante que o session_cookie_name está definido
+        if not hasattr(app, 'session_cookie_name'):
+            app.session_cookie_name = app.config['SESSION_COOKIE_NAME']
+            
         app.logger.info("Sessão configurada com sucesso")
     except Exception as e:
         app.logger.error(f"Falha ao configurar sessão: {str(e)}")
