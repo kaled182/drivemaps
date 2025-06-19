@@ -1,69 +1,224 @@
-/* style.css - estilo principal da aplicação MapsDrive */
+/* ===== VARIÁVEIS DE CORES ===== */
+:root {
+  --primary: #1e88e5;
+  --primary-dark: #1565c0;
+  --primary-light: #64b5f6;
+  --secondary: #ff9800;
+  --success: #4caf50;
+  --danger: #f44336;
+  --warning: #ffc107;
+  --info: #2196f3;
+  --light: #f8f9fa;
+  --dark: #212529;
+  --gray: #6c757d;
+  --gray-light: #e9ecef;
+}
+
+/* ===== RESET E ESTILOS BASE ===== */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
 
 body {
-    background-color: #f9f9f9;
-    font-family: 'Segoe UI', sans-serif;
-    font-size: 14px;
-    color: #333;
+  font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  line-height: 1.6;
+  color: #333;
+  background-color: #f8fafd;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-.navbar {
-    margin-bottom: 20px;
+/* ===== TIPOGRAFIA ===== */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  line-height: 1.2;
+  margin-bottom: 0.75rem;
 }
 
-textarea.form-control {
-    font-family: monospace;
-    font-size: 13px;
+a {
+  color: var(--primary);
+  text-decoration: none;
+  transition: color 0.2s ease;
 }
 
+a:hover {
+  color: var(--primary-dark);
+}
+
+/* ===== COMPONENTES COMUNS ===== */
+/* Botões */
+.btn {
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.btn-primary {
+  background-color: var(--primary);
+  border-color: var(--primary);
+}
+
+.btn-primary:hover {
+  background-color: var(--primary-dark);
+  border-color: var(--primary-dark);
+}
+
+.btn-outline-primary {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.btn-outline-primary:hover {
+  background-color: var(--primary);
+  border-color: var(--primary);
+}
+
+/* Cards */
 .card {
-    border-radius: 8px;
+  border: none;
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.filter-badge {
-    display: inline-block;
-    padding: 3px 8px;
-    border-radius: 12px;
-    font-size: 12px;
-    margin-right: 5px;
-    background-color: #0074D9;
-    color: white;
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
 }
 
-.progress-sm {
-    height: 22px;
-    font-size: 12px;
+.card-header {
+  background-color: var(--primary);
+  color: white;
+  border-bottom: none;
 }
 
-#map {
+/* Formulários */
+.form-control {
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.375rem;
+  border: 1px solid #ced4da;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.form-control:focus {
+  border-color: var(--primary-light);
+  box-shadow: 0 0 0 0.25rem rgba(30, 136, 229, 0.25);
+}
+
+.form-label {
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+/* Alertas */
+.alert {
+  border-radius: 0.375rem;
+  padding: 0.75rem 1.25rem;
+}
+
+/* Badges */
+.badge {
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  padding: 0.35em 0.65em;
+}
+
+/* ===== LAYOUT ESPECÍFICO ===== */
+/* Barra de navegação */
+.navbar {
+  padding: 0.75rem 0;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.navbar-brand {
+  font-weight: 700;
+  font-size: 1.25rem;
+}
+
+/* Rodapé */
+.footer {
+  background-color: var(--dark);
+  color: white;
+  padding: 2rem 0;
+}
+
+/* Mapa */
+.map-container {
+  position: relative;
+  height: 50vh;
+  min-height: 300px;
+  background-color: #f8fafd;
+  border-radius: 0 0 0.75rem 0.75rem;
+  overflow: hidden;
+}
+
+/* Tabelas */
+.table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table {
+  --bs-table-bg: transparent;
+  --bs-table-striped-bg: rgba(0, 0, 0, 0.02);
+  --bs-table-hover-bg: rgba(0, 0, 0, 0.05);
+}
+
+/* ===== UTILITÁRIOS ===== */
+.rounded-lg {
+  border-radius: 0.75rem;
+}
+
+.shadow-sm {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* ===== ANIMAÇÕES ===== */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+/* ===== RESPONSIVIDADE ===== */
+@media (max-width: 768px) {
+  .map-container {
+    height: 40vh;
+  }
+  
+  .btn {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+  }
+  
+  .table-responsive {
+    display: block;
     width: 100%;
-    height: 420px;
-    border-radius: 12px;
-    border: 1px solid #ddd;
+    overflow-x: auto;
+  }
 }
 
-#map-top-sticky {
-    position: sticky;
-    top: 0;
-    z-index: 100;
-    background: #f8fafd;
-    box-shadow: 0 4px 18px #0001;
-    border-radius: 0 0 14px 14px;
-}
-
-@media (max-width: 600px) {
-    #map-top-sticky {
-        height: 240px !important;
-        max-height: 45vh;
-    }
-    .mobile-hidden {
-        display: none;
-    }
-}
-
-@media (min-width: 601px) {
-    #map-top-sticky {
-        height: 420px !important;
-        max-height: 55vh;
-    }
+@media (max-width: 576px) {
+  .map-container {
+    height: 35vh;
+  }
+  
+  .card-body {
+    padding: 1rem;
+  }
 }
