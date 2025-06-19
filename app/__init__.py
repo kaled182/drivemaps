@@ -3,9 +3,9 @@ from flask_session import Session
 from .routes import register_routes
 import os
 import logging
+from werkzeug.http import dump_cookie
 
 def create_app():
-    # Inicializa o aplicativo Flask
     app = Flask(__name__)
     
     # Configuração do logger
@@ -14,12 +14,10 @@ def create_app():
     
     # Carrega configurações
     app.config.from_object('config.Config')
-    app.logger.info("Configurações carregadas")
     
-    # Verificação crítica das configurações
-    if not app.config.get('SESSION_COOKIE_NAME'):
-        app.logger.error("SESSION_COOKIE_NAME não configurado!")
-        raise RuntimeError("Configuração de sessão incompleta")
+    # Patch para o problema de bytes/string
+    if not hasattr(app, 'session_cookie_name'):
+        app.session_cookie_name = app.config['SESSION_COOKIE_NAME']
     
     # Configuração do diretório de sessão
     if app.config['SESSION_TYPE'] == 'filesystem':
@@ -30,15 +28,26 @@ def create_app():
             app.logger.error(f"Erro ao criar diretório de sessão: {str(e)}")
             raise
     
-    # Inicialização robusta da sessão
+    # Inicialização da sessão com tratamento de erro
     try:
         sess = Session()
         sess.init_app(app)
         
-        # Garantia adicional para o session_cookie_name
-        if not hasattr(app, 'session_cookie_name'):
-            app.session_cookie_name = app.config['SESSION_COOKIE_NAME']
-            
+        # Patch adicional para garantir que o session_id seja string
+        original_save_session = sess.save_session
+        
+        def patched_save_session(*args, **kwargs):
+            try:
+                # Garante que o session_id seja string
+                if 'session_id' in kwargs and isinstance(kwargs['session_id'], bytes):
+                    kwargs['session_id'] = kwargs['session_id'].decode('utf-8')
+                return original_save_session(*args, **kwargs)
+            except Exception as e:
+                app.logger.error(f"Erro ao salvar sessão: {str(e)}")
+                raise
+                
+        sess.save_session = patched_save_session
+        
         app.logger.info("Sessão configurada com sucesso")
     except Exception as e:
         app.logger.error(f"Falha ao configurar sessão: {str(e)}")
