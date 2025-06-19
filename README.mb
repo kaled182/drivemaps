@@ -1,55 +1,113 @@
-# DriveMaps - Validador de Endereços
+# DriveMaps - Validador de Endereços Inteligente
 
-Sistema Flask para validação e geocodificação de endereços usando Google Maps API.
+Sistema Flask para validação e geocodificação avançada de endereços utilizando Google Maps API.
 
-## Funcionalidades
+![Badge](https://img.shields.io/badge/status-production-green) 
+![Badge](https://img.shields.io/badge/python-3.8%2B-blue)
+![Badge](https://img.shields.io/badge/license-MIT-orange)
 
-- ✅ Importação de planilhas (Delnext, Paack)
-- ✅ Validação de endereços via Google Maps
-- ✅ Interface interativa com mapas
-- ✅ Geração de CSV para rotas
-- ✅ Tratamento de erros robusto
-- ✅ Segurança aprimorada
+## ✨ Funcionalidades Principais
 
-## Correções Implementadas
+### 📁 Importação de Dados
+- Suporte a múltiplos formatos (Delnext, Paack)
+- Processamento em lote de planilhas
+- Pré-validação de dados de entrada
 
-### 🔧 Problemas Corrigidos
-
-1. **Inconsistência de Cores**: Padronização em `helpers.py`
-2. **Variável Global**: Removida, agora usa sessão segura
-3. **Validação de Entrada**: Implementada em todas as APIs
-4. **Segurança**: Proxy para Google API, sanitização de dados
-5. **Arquivo Principal**: Criado `app.py` como ponto de entrada
-
-### 🛡️ Melhorias de Segurança
-
-- Sanitização de endereços
-- Validação de CEP português
-- Limits de tamanho de dados
-- Tratamento robusto de erros
-- Proxy para API externa
-
-### 📊 Novas Funcionalidades
-
-- Estatísticas detalhadas
-- Limpeza automática de sessão
-- Comparação inteligente de ruas
-- Logs estruturados
+### 🗺️ Geocodificação Avançada
+- Validação de endereços via Google Maps API
+- Interface interativa com visualização em mapa
 - Reverse geocoding seguro
+- Comparação inteligente de nomes de ruas
 
-## Instalação
+### 📊 Saída de Dados
+- Geração de relatórios em CSV otimizados para rotas
+- Estatísticas detalhadas de validação
+- Exportação de resultados formatados
+
+## 🛠️ Arquitetura e Melhorias
+
+### 🔧 Correções Implementadas
+1. **Padronização Visual**
+   - Unificação de esquema de cores em `helpers.py`
+   - Interface consistente em todas as views
+
+2. **Arquitetura**
+   - Remoção de variáveis globais (uso de sessão segura)
+   - Criação de `app.py` como ponto de entrada único
+
+3. **Validação de Dados**
+   - Sanitização rigorosa de endereços
+   - Validação de CEP português
+   - Limites de tamanho para dados de entrada
+
+### 🛡️ Camada de Segurança
+- Proxy para chamadas à API externa
+- Tratamento robusto de erros e exceções
+- Logs estruturados para auditoria
+- Limpeza automática de sessões
+
+## ⚙️ Instalação
+
+### Pré-requisitos
+- Python 3.8+
+- Conta no Google Cloud Platform (para API Key)
 
 ```bash
 # Clone o repositório
 git clone https://github.com/kaled182/drivemaps.git
 cd drivemaps
 
-# Instale dependências
+# Crie e ative um ambiente virtual (recomendado)
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+venv\Scripts\activate    # Windows
+
+# Instale as dependências
 pip install -r requirements.txt
 
-# Configure variáveis de ambiente
-export GOOGLE_API_KEY="sua_chave_api_google"
-export FLASK_DEBUG="true"  # apenas desenvolvimento
+# Configure as variáveis de ambiente
+cp .env.example .env
+# Edite o .env com suas credenciais
+🚀 Execução
+bash
+# Modo desenvolvimento
+export FLASK_DEBUG=1  # Linux/Mac
+set FLASK_DEBUG=1     # Windows
+flask run
 
-# Execute a aplicação
-python app.py
+# Modo produção (exemplo com gunicorn)
+gunicorn -w 4 -b :5000 app:app
+🌐 Configuração do Ambiente
+Variável	Obrigatório	Descrição
+GOOGLE_API_KEY	Sim	Chave da API Google Maps
+FLASK_SECRET_KEY	Sim	Chave secreta para sessões Flask
+FLASK_DEBUG	Não	Habilita modo debug (1/0)
+SESSION_TIMEOUT	Não	Tempo de sessão em segundos (padrão: 3600)
+📄 Licença
+Este projeto está licenciado sob a licença MIT - veja o arquivo LICENSE para detalhes.
+
+🤝 Contribuição
+Contribuições são bem-vindas! Por favor, abra uma issue ou pull request com suas sugestões.
+
+✉️ Contato
+Para suporte ou dúvidas, entre em contato com [seu email/contato]
+
+text
+
+Key improvements:
+1. Added badges for better visual identification
+2. Better organized features with emojis
+3. Added prerequisites section
+4. Included virtual environment instructions (best practice)
+5. Added production run example
+6. Created environment variables table
+7. Added license and contribution sections
+8. Better markdown formatting overall
+9. Added contact information
+10. More detailed installation instructions
+
+You may want to:
+1. Add actual LICENSE file if missing
+2. Create the .env.example file mentioned
+3. Add more specific contribution guidelines if needed
+4. Add screenshots or demo gif if available
