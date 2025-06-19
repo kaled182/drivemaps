@@ -1,0 +1,133 @@
+/* Estilos específicos para o mapa e seus componentes */
+
+/* Container do mapa */
+.map-container {
+  position: relative;
+  height: 50vh;
+  min-height: 300px;
+  background-color: #e9ecef;
+  border-radius: 0 0 0.75rem 0.75rem;
+  overflow: hidden;
+}
+
+/* Estilo para os marcadores do mapa */
+.map-marker {
+  position: relative;
+}
+
+.map-marker::after {
+  content: '';
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-top: 8px solid var(--marker-color, #4285F4);
+}
+
+/* InfoWindow customizado */
+.gm-style .gm-style-iw-c {
+  padding: 0;
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+.gm-style .gm-style-iw-d {
+  overflow: hidden !important;
+}
+
+.gm-style .gm-style-iw-t::after {
+  background: white;
+}
+
+.map-infowindow {
+  padding: 1rem;
+  font-family: 'Segoe UI', Roboto, sans-serif;
+}
+
+.map-infowindow h6 {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: var(--primary);
+}
+
+.map-infowindow p {
+  margin-bottom: 0.25rem;
+  font-size: 0.9rem;
+}
+
+/* Controles do mapa */
+.map-controls {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.map-control-btn {
+  width: 36px;
+  height: 36px;
+  background: white;
+  border: none;
+  border-radius: 50%;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.map-control-btn:hover {
+  background: #f1f1f1;
+  transform: scale(1.05);
+}
+
+/* Cluster de marcadores */
+.marker-cluster {
+  background-clip: padding-box;
+  border-radius: 50%;
+}
+
+.marker-cluster div {
+  width: 30px;
+  height: 30px;
+  margin-left: 5px;
+  margin-top: 5px;
+  background-color: var(--primary);
+  color: white;
+  font-weight: bold;
+  font-size: 12px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.marker-cluster span {
+  line-height: 30px;
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+  .map-container {
+    height: 40vh;
+  }
+  
+  .map-infowindow {
+    max-width: 200px;
+    padding: 0.75rem;
+  }
+}
+
+@media (max-width: 576px) {
+  .map-container {
+    height: 35vh;
+  }
+}
