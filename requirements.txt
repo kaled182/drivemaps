@@ -1,20 +1,10 @@
-# Dependências principais
 flask==2.3.3
 Flask-Session==0.4.0
 gunicorn==21.2.0
 python-dotenv==1.0.1
-
-# Dependências para Redis (opcional - só adicione se for usar Redis no Render)
-redis==4.5.5
-
-# Dependências para processamento de dados
 requests==2.31.0
 numpy==1.23.5
 pandas==1.5.3
 openpyxl==3.1.2
-
-# Dependências para desenvolvimento (opcional)
-blinker==1.7.0  # Para signals do Flask
-python-dateutil==2.8.2  # Necessário para pandas
-pytz==2023.3  # Necessário para pandas
-six==1.16.0  # Necessário para algumas dependências
+redis==4.5.5
+Werkzeug==2.3.7
