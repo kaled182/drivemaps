@@ -4,7 +4,6 @@
 
 {% block styles %}
 <style>
-    /* Estilos otimizados */
     #map-container {
         position: sticky;
         top: 0;
@@ -12,39 +11,44 @@
         background: #f8fafd;
         box-shadow: 0 4px 18px rgba(0,0,0,0.1);
         border-radius: 0 0 14px 14px;
-        height: 55vh;
+        height: 50vh;
         min-height: 300px;
     }
     
-    #map { 
-        width: 100%;
-        height: 100%;
+    .address-row {
+        transition: background-color 0.2s ease;
+    }
+    .address-row:hover {
+        background-color: rgba(0,0,0,0.03) !important;
     }
     
     .filter-badge {
-        display: inline-block;
-        padding: 3px 8px;
-        border-radius: 12px;
-        font-size: 12px;
-        margin-right: 5px;
+        --badge-color: #6c757d;
         background-color: var(--badge-color);
-        color: #fff;
+        color: white;
+        font-size: 0.75rem;
     }
     
-    .progress-sm { height: 24px; }
-    
-    .address-row:hover {
-        background-color: rgba(0, 0, 0, 0.02);
+    .action-btn {
+        width: 100%;
+        min-width: 80px;
     }
     
-    .validation-status {
-        min-width: 110px;
+    .cep-input {
+        max-width: 120px;
     }
     
     @media (max-width: 768px) {
-        #map-container { height: 40vh; }
-        .mobile-hidden { display: none; }
-        .table-responsive { overflow-x: auto; }
+        #map-container {
+            height: 35vh;
+        }
+        .mobile-hidden {
+            display: none;
+        }
+        .table-responsive {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
     }
 </style>
 {% endblock %}
@@ -54,11 +58,10 @@
     <div id="map"></div>
 </div>
 
-<div class="container-fluid mt-3">
-    <!-- Barra de Controles -->
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4 p-3 bg-light rounded">
+<div class="container-fluid py-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3 p-3 bg-light rounded">
         <div class="d-flex flex-wrap gap-2 align-items-center">
-            <select id="filtro-origem" class="form-select form-select-sm" style="width: 180px;">
+            <select id="filtro-origem" class="form-select form-select-sm" style="min-width: 180px;">
                 <option value="">Todas as origens</option>
                 {% for origem in origens %}
                     <option value="{{ origem }}">{{ origem|capitalize }}</option>
@@ -70,22 +73,20 @@
         </div>
         
         <div class="d-flex flex-wrap gap-2 align-items-center">
-            <button type="button" class="btn btn-outline-primary btn-sm" id="btn-adicionar">
+            <button type="button" class="btn btn-primary btn-sm" id="btn-adicionar" data-bs-toggle="modal" data-bs-target="#modalAdicionar">
                 <i class="fas fa-plus me-1"></i> Adicionar
             </button>
-            <button type="submit" form="form-enderecos" class="btn btn-success btn-sm" id="btn-exportar">
+            <button type="submit" form="form-enderecos" class="btn btn-success btn-sm">
                 <i class="fas fa-file-export me-1"></i> Exportar
             </button>
         </div>
     </div>
 
-    <!-- Barra de Progresso -->
     <div id="progresso-validacao" class="progress progress-sm mb-3 d-none">
         <div id="progresso-barra" class="progress-bar progress-bar-striped progress-bar-animated" 
              role="progressbar" style="width: 0%">0%</div>
     </div>
 
-    <!-- Tabela de Endereços -->
     <div class="table-responsive">
         <form id="form-enderecos" action="{{ url_for('main.generate') }}" method="post">
             <table class="table table-hover table-bordered align-middle" id="tabela-enderecos">
@@ -95,9 +96,9 @@
                         <th>Endereço</th>
                         <th width="120">CEP</th>
                         <th width="120">CEP Google</th>
-                        <th class="mobile-hidden validation-status">Status</th>
+                        <th class="mobile-hidden" width="120">Status</th>
                         <th class="mobile-hidden" width="120">Origem</th>
-                        <th width="120">Ações</th>
+                        <th width="100">Ações</th>
                     </tr>
                 </thead>
                 <tbody id="corpo-tabela">
@@ -114,7 +115,7 @@
                         </td>
                         <td>
                             <input type="text" class="form-control form-control-sm cep-input" name="cep_{{ loop.index0 }}" 
-                                   value="{{ item.cep }}" pattern="\d{5}-?\d{3}" title="Formato: 00000-000">
+                                   value="{{ item.cep }}" pattern="\d{5}-?\d{3}">
                         </td>
                         <td class="cep-encontrado">{{ item.postal_code_encontrado or '-' }}</td>
                         <td class="mobile-hidden">
@@ -133,7 +134,7 @@
                             </span>
                         </td>
                         <td class="text-center">
-                            <button type="button" class="btn btn-sm btn-outline-warning" 
+                            <button type="button" class="btn btn-sm btn-outline-warning action-btn" 
                                     onclick="validarEndereco({{ loop.index0 }})">
                                 <i class="fas fa-check"></i>
                             </button>
@@ -148,28 +149,36 @@
 </div>
 
 <!-- Modal de Adição -->
-<div class="modal fade" id="modal-adicionar" tabindex="-1">
+<div class="modal fade" id="modalAdicionar" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header bg-primary text-white">
                 <h5 class="modal-title">Adicionar Endereço</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <form id="form-adicionar">
+                <form id="formAdicionar">
                     <div class="mb-3">
                         <label class="form-label">Endereço Completo</label>
-                        <textarea class="form-control" rows="3" required></textarea>
+                        <textarea class="form-control" rows="3" required id="novoEndereco"></textarea>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">CEP</label>
-                        <input type="text" class="form-control cep-input" pattern="\d{5}-?\d{3}">
+                        <input type="text" class="form-control cep-input" id="novoCep" pattern="\d{5}-?\d{3}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Origem</label>
+                        <select class="form-select" id="novaOrigem">
+                            {% for origem in origens %}
+                                <option value="{{ origem }}">{{ origem|capitalize }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-primary" id="btn-confirmar-adicao">Adicionar</button>
+                <button type="button" class="btn btn-primary" id="btnConfirmarAdicao">Adicionar</button>
             </div>
         </div>
     </div>
@@ -179,11 +188,10 @@
 {% block scripts %}
 <script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
 <script>
-// Dados e configurações
-const enderecosData = {{ lista|tojson|safe }};
+// Configuração do Mapa
 let map, markers = [], markerCluster;
+const enderecosData = {{ lista|tojson|safe }};
 
-// Inicialização do mapa
 function initMap() {
     const validCoords = enderecosData.filter(e => e.latitude && e.longitude);
     
@@ -197,11 +205,14 @@ function initMap() {
 
     map = new google.maps.Map(document.getElementById('map'), {
         zoom: 12,
-        center: {
-            lat: parseFloat(validCoords[0].latitude),
-            lng: parseFloat(validCoords[0].longitude)
-        },
-        gestureHandling: 'greedy'
+        center: new google.maps.LatLng(
+            parseFloat(validCoords[0].latitude),
+            parseFloat(validCoords[0].longitude)
+        ),
+        gestureHandling: 'greedy',
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: true
     });
 
     // Configuração do cluster
@@ -239,7 +250,6 @@ function initMap() {
     map.fitBounds(bounds);
 }
 
-// Criação de marcadores
 function createMarker(idx, data) {
     if (!data.latitude || !data.longitude) return null;
     
@@ -253,7 +263,7 @@ function createMarker(idx, data) {
         map,
         title: `${data.order_number || (idx + 1)} - ${data.address}`,
         icon: createPinIcon(idx, data),
-        draggable: true
+        draggable: false
     });
     
     // InfoWindow com detalhes
@@ -282,7 +292,6 @@ function createMarker(idx, data) {
     return marker;
 }
 
-// Cria ícone personalizado
 function createPinIcon(idx, data) {
     const num = data.order_number ? String(data.order_number).substr(0, 3) : idx + 1;
     const color = data.cor || '#4285F4';
@@ -372,6 +381,8 @@ function updateRowUI(idx, item) {
     
     // Atualiza classes da linha
     row.className = `address-row ${item.cep_ok ? 'table-success' : 'table-danger'}`;
+    row.dataset.lat = item.latitude || '';
+    row.dataset.lng = item.longitude || '';
     
     // Atualiza CEP encontrado
     const cepCell = row.querySelector('.cep-encontrado');
@@ -420,40 +431,84 @@ function showToast(message, type = 'info') {
     setTimeout(() => toast.remove(), 3000);
 }
 
+// Adicionar novo endereço
+document.getElementById('btnConfirmarAdicao').addEventListener('click', async function() {
+    const endereco = document.getElementById('novoEndereco').value.trim();
+    const cep = document.getElementById('novoCep').value.trim();
+    const origem = document.getElementById('novaOrigem').value;
+    
+    if (!endereco) {
+        showToast('Por favor, insira um endereço válido', 'warning');
+        return;
+    }
+    
+    const btn = this;
+    const originalHTML = btn.innerHTML;
+    
+    try {
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        btn.disabled = true;
+        
+        const response = await fetch('/api/adicionar-endereco', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                endereco,
+                cep,
+                origem
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            window.location.reload();
+        } else {
+            showToast(data.msg || 'Erro ao adicionar endereço', 'danger');
+        }
+    } catch (error) {
+        showToast('Erro ao conectar com o servidor', 'danger');
+    } finally {
+        btn.innerHTML = originalHTML;
+        btn.disabled = false;
+        bootstrap.Modal.getInstance(document.getElementById('modalAdicionar')).hide();
+    }
+});
+
 // Event Listeners
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', function() {
     // Filtro por origem
     document.getElementById('filtro-origem').addEventListener('change', filtrarPorOrigem);
     
     // Validação em massa
     document.getElementById('btn-validar-tudo').addEventListener('click', validarTudo);
     
-    // Adicionar novo endereço
-    document.getElementById('btn-adicionar').addEventListener('click', () => {
-        new bootstrap.Modal('#modal-adicionar').show();
-    });
-    
     // Máscara para CEP
     document.querySelectorAll('.cep-input').forEach(input => {
         input.addEventListener('input', function(e) {
             this.value = this.value.replace(/\D/g, '')
-                                   .replace(/^(\d{5})(\d)/, '$1-$2')
-                                   .substr(0, 9);
+                                 .replace(/^(\d{5})(\d)/, '$1-$2')
+                                 .substr(0, 9);
         });
     });
 });
 
 // Carrega API do Google Maps
 function loadGoogleMaps() {
-    const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&libraries=places&callback=initMap`;
-    script.async = true;
-    script.defer = true;
-    document.head.appendChild(script);
+    if (typeof google === 'undefined' || typeof google.maps === 'undefined') {
+        const script = document.createElement('script');
+        script.src = `https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&libraries=places&callback=initMap`;
+        script.async = true;
+        script.defer = true;
+        document.head.appendChild(script);
+    } else {
+        initMap();
+    }
 }
 
 // Inicialização
-window.initMap = initMap;
-loadGoogleMaps();
+if (document.getElementById('map')) {
+    loadGoogleMaps();
+}
 </script>
 {% endblock %}
