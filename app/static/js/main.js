@@ -1,93 +1,249 @@
-let map, markers = [], markerCluster;
-let enderecosData = window.enderecosData || [];
+/**
+ * MapsDrive - Main JavaScript File
+ * Contém funções utilitárias e inicialização comum
+ */
 
-function makeSvgPin(numero, corHex) {
-    let n = String(numero).substring(0, 3);
-    let svg = `<svg width="44" height="54" viewBox="0 0 44 54" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <ellipse cx="22" cy="22" rx="21" ry="21" fill="${corHex}"/>
-      <rect x="18" y="37" width="8" height="13" rx="4" fill="${corHex}"/>
-      <text x="22" y="31" text-anchor="middle" font-size="20" fill="#fff" font-family="Arial" font-weight="bold" alignment-baseline="middle" dominant-baseline="middle">${n}</text>
-    </svg>`;
-    return "data:image/svg+xml;base64," + btoa(svg);
+// ===== FUNÇÕES UTILITÁRIAS =====
+
+/**
+ * Mostra uma notificação toast
+ * @param {string} message - Mensagem a ser exibida
+ * @param {string} type - Tipo de alerta (success, danger, warning, info)
+ * @param {number} duration - Duração em milissegundos (opcional)
+ */
+function showToast(message, type = 'info', duration = 3000) {
+  const toastContainer = document.getElementById('toast-container') || createToastContainer();
+  const toast = document.createElement('div');
+  
+  toast.className = `toast show fade-in bg-${type} text-white`;
+  toast.innerHTML = `
+    <div class="d-flex align-items-center">
+      <div class="toast-body">${message}</div>
+      <button type="button" class="btn-close btn-close-white me-2" data-bs-dismiss="toast"></button>
+    </div>
+  `;
+  
+  toastContainer.appendChild(toast);
+  
+  // Remove o toast após o tempo especificado
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 150);
+  }, duration);
 }
 
-function criarMarker(idx, data) {
-    if (markers[idx]) {
-        markers[idx].setMap(null);
-        if (markerCluster) markerCluster.removeMarker(markers[idx]);
+/**
+ * Cria um container para toasts se não existir
+ * @returns {HTMLElement} O container de toasts
+ */
+function createToastContainer() {
+  const container = document.createElement('div');
+  container.id = 'toast-container';
+  container.className = 'position-fixed bottom-0 end-0 p-3';
+  container.style.zIndex = '1100';
+  document.body.appendChild(container);
+  return container;
+}
+
+/**
+ * Formata um CEP (adiciona hífen)
+ * @param {string} cep - CEP a ser formatado
+ * @returns {string} CEP formatado
+ */
+function formatCEP(cep) {
+  if (!cep) return '';
+  return cep.replace(/\D/g, '')
+            .replace(/^(\d{5})(\d)/, '$1-$2')
+            .substr(0, 9);
+}
+
+/**
+ * Valida um CEP
+ * @param {string} cep - CEP a ser validado
+ * @returns {boolean} Verdadeiro se o CEP for válido
+ */
+function isValidCEP(cep) {
+  return /^\d{5}-?\d{3}$/.test(cep);
+}
+
+/**
+ * Inicializa máscaras para campos de CEP
+ */
+function initCEPMasks() {
+  document.querySelectorAll('.cep-input').forEach(input => {
+    input.addEventListener('input', function(e) {
+      this.value = formatCEP(this.value);
+    });
+  });
+}
+
+/**
+ * Alterna o tema claro/escuro
+ */
+function toggleDarkMode() {
+  const html = document.documentElement;
+  const currentTheme = html.getAttribute('data-bs-theme');
+  const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+  
+  html.setAttribute('data-bs-theme', newTheme);
+  localStorage.setItem('theme', newTheme);
+  
+  showToast(`Tema ${newTheme === 'dark' ? 'escuro' : 'claro'} ativado`);
+}
+
+// ===== MANIPULAÇÃO DE FORMULÁRIOS =====
+
+/**
+ * Valida um formulário com Bootstrap
+ * @param {string} formId - ID do formulário
+ */
+function initFormValidation(formId) {
+  const form = document.getElementById(formId);
+  if (!form) return;
+
+  form.addEventListener('submit', function(event) {
+    if (!form.checkValidity()) {
+      event.preventDefault();
+      event.stopPropagation();
     }
-    if (!data.latitude || !data.longitude || isNaN(data.latitude) || isNaN(data.longitude)) return null;
-    const position = {lat: parseFloat(data.latitude), lng: parseFloat(data.longitude)};
-    const cor = data.cor || "#0074D9";
-    const pinUrl = makeSvgPin(data.numero_pacote || (idx+1), cor);
-
-    let marker = new google.maps.Marker({
-        position: position,
-        map: map,
-        title: `${data.numero_pacote || (idx+1)} - ${data.address}`,
-        icon: { url: pinUrl, scaledSize: new google.maps.Size(22, 27) },
-        draggable: true,
-        visible: true
-    });
-
-    markers[idx] = marker;
-    if (markerCluster) markerCluster.addMarker(marker);
-    return marker;
+    form.classList.add('was-validated');
+  }, false);
 }
 
-function initMap() {
-    const coordenadasValidas = enderecosData.filter(e =>
-        e.latitude !== null && e.longitude !== null && !isNaN(e.latitude) && !isNaN(e.longitude)
-    );
-    if (coordenadasValidas.length === 0) return;
-    map = new google.maps.Map(document.getElementById('map'), {
-        zoom: 12,
-        center: {
-            lat: parseFloat(coordenadasValidas[0].latitude),
-            lng: parseFloat(coordenadasValidas[0].longitude)
-        }
-    });
-    markerCluster = new markerClusterer.MarkerClusterer({ map, markers: [] });
-    coordenadasValidas.forEach(e => criarMarker(e.idx, e));
-    const bounds = new google.maps.LatLngBounds();
-    coordenadasValidas.forEach(e => bounds.extend({lat: parseFloat(e.latitude), lng: parseFloat(e.longitude)}));
-    if (!bounds.isEmpty()) map.fitBounds(bounds);
-}
+/**
+ * Habilita o envio de formulários via AJAX
+ * @param {string} formId - ID do formulário
+ * @param {function} callback - Função de callback após sucesso
+ */
+function initAjaxForm(formId, callback) {
+  const form = document.getElementById(formId);
+  if (!form) return;
 
-async function validarLinha(idx) {
-    const linha = enderecosData[idx];
+  form.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const submitBtn = form.querySelector('[type="submit"]');
+    const originalText = submitBtn.innerHTML;
+    
     try {
-        const response = await fetch('/api/validar-linha', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                idx: idx,
-                endereco: linha.address,
-                cep: linha.cep,
-                importacao_tipo: linha.importacao_tipo,
-                numero_pacote: linha.order_number
-            })
-        });
-        const data = await response.json();
-        if (data.success) {
-            enderecosData[idx] = data.item;
-            criarMarker(idx, data.item);
-            window.location.reload(); // Ou melhore com DOM diff
-        } else {
-            alert(data.msg || "Erro na validação");
+      // Mostra estado de carregamento
+      submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Processando...';
+      submitBtn.disabled = true;
+      
+      const formData = new FormData(form);
+      const response = await fetch(form.action, {
+        method: form.method,
+        body: form.enctype === 'multipart/form-data' ? formData : new URLSearchParams(formData),
+        headers: {
+          'Accept': 'application/json'
         }
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        if (typeof callback === 'function') {
+          callback(data);
+        } else {
+          showToast(data.message || 'Operação realizada com sucesso!', 'success');
+          if (data.redirect) {
+            setTimeout(() => window.location.href = data.redirect, 1500);
+          }
+        }
+      } else {
+        showToast(data.message || 'Erro ao processar requisição', 'danger');
+      }
     } catch (error) {
-        alert("Erro ao conectar com o servidor");
+      showToast('Erro de conexão com o servidor', 'danger');
+      console.error('Error:', error);
+    } finally {
+      submitBtn.innerHTML = originalText;
+      submitBtn.disabled = false;
     }
+  });
 }
 
-async function validarTudo() {
-    const progressBar = document.getElementById('progresso-barra');
-    const progressContainer = document.getElementById('progresso-validacao');
-    progressContainer.style.display = 'block';
-    for (let i = 0; i < enderecosData.length; i++) {
-        await validarLinha(i);
-        progressBar.style.width = `${((i + 1) / enderecosData.length) * 100}%`;
-        progressBar.textContent = `${Math.round(((i + 1) / enderecosData.length) * 100)}%`;
+// ===== INICIALIZAÇÃO =====
+
+document.addEventListener('DOMContentLoaded', function() {
+  // Inicializa máscaras de CEP
+  initCEPMasks();
+  
+  // Configura tooltips
+  const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+  tooltipTriggerList.map(function(tooltipTriggerEl) {
+    return new bootstrap.Tooltip(tooltipTriggerEl);
+  });
+  
+  // Configura popovers
+  const popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'));
+  popoverTriggerList.map(function(popoverTriggerEl) {
+    return new bootstrap.Popover(popoverTriggerEl);
+  });
+  
+  // Botão de tema escuro/claro
+  const themeToggle = document.getElementById('theme-toggle');
+  if (themeToggle) {
+    themeToggle.addEventListener('click', toggleDarkMode);
+  }
+  
+  // Verifica tema salvo no localStorage
+  const savedTheme = localStorage.getItem('theme') || 'light';
+  document.documentElement.setAttribute('data-bs-theme', savedTheme);
+  
+  // Inicializa todos os formulários com classe 'needs-validation'
+  document.querySelectorAll('.needs-validation').forEach(form => {
+    initFormValidation(form.id);
+  });
+  
+  // Configura listeners para elementos dinâmicos
+  document.body.addEventListener('click', function(e) {
+    // Exemplo: Fechar toasts ao clicar
+    if (e.target.classList.contains('btn-close')) {
+      const toast = e.target.closest('.toast');
+      if (toast) {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 150);
+      }
     }
+  });
+});
+
+// ===== FUNÇÕES PARA O MAPA =====
+
+/**
+ * Inicializa o mapa (será sobrescrito pelas páginas específicas)
+ */
+window.initMap = function() {
+  console.log('Map initialization function not overridden');
+};
+
+/**
+ * Carrega a API do Google Maps
+ * @param {string} apiKey - Chave da API do Google Maps
+ * @param {function} callback - Função de callback quando carregado
+ */
+function loadGoogleMapsAPI(apiKey, callback) {
+  if (typeof google === 'undefined' || typeof google.maps === 'undefined') {
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=${callback}`;
+    script.async = true;
+    script.defer = true;
+    document.head.appendChild(script);
+  } else {
+    if (typeof window[callback] === 'function') {
+      window[callback]();
+    }
+  }
 }
+
+// Exporta funções para uso global (se necessário)
+window.MapsDrive = {
+  showToast,
+  formatCEP,
+  isValidCEP,
+  initCEPMasks,
+  initFormValidation,
+  initAjaxForm,
+  loadGoogleMapsAPI
+};
