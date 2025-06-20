@@ -55,7 +55,7 @@
                                 <i class="fas fa-keyboard me-2"></i>Inserção Manual
                             </h2>
                             
-                            <form method="post" action="{{ url_for('main.preview') }}">
+                            <form method="post" action="{{ url_for('preview.preview') }}">
                                 <div class="mb-3">
                                     <label for="enderecos" class="form-label fw-semibold">
                                         Cole os endereços (um por linha):
@@ -81,7 +81,7 @@
                             </h2>
                             
                             <form id="uploadForm" enctype="multipart/form-data" method="post" 
-                                  action="{{ url_for('main.import_planilha') }}" class="needs-validation" novalidate>
+                                  action="{{ url_for('importacao.import_planilha') }}" class="needs-validation" novalidate>
                                 <div class="mb-3">
                                     <label for="empresa" class="form-label small fw-semibold">Formato do Arquivo</label>
                                     <select name="empresa" id="empresa" class="form-select" required>
@@ -156,7 +156,6 @@ Prioridade (opcional)</pre>
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Validação de formulário
     const forms = document.querySelectorAll('.needs-validation');
     Array.from(forms).forEach(form => {
         form.addEventListener('submit', function(event) {
@@ -168,7 +167,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }, false);
     });
 
-    // Feedback durante upload
     const uploadForm = document.getElementById('uploadForm');
     if (uploadForm) {
         uploadForm.addEventListener('submit', function() {
@@ -178,11 +176,9 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Drag and drop para upload
     const fileUpload = document.querySelector('.file-upload-container');
     if (fileUpload) {
         const fileInput = document.getElementById('planilha');
-        
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
             fileUpload.addEventListener(eventName, preventDefaults, false);
         });
