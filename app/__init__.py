@@ -9,10 +9,12 @@ def create_app():
     """Factory function para criar e configurar a aplicação Flask"""
 
     # Inicializa o app Flask com configurações de templates e arquivos estáticos
-    app = Flask(__name__,
-                template_folder='templates',
-                static_folder='static',
-                static_url_path='')
+    app = Flask(
+        __name__,
+        template_folder='templates',
+        static_folder='static',
+        static_url_path=''
+    )
 
     # Configuração avançada do logger
     logging.basicConfig(
@@ -95,16 +97,16 @@ def create_app():
     def inject_now():
         return {'now': datetime.now}
 
-    # --- CSP Corrigido para liberar tudo necessário ---
+    # --- CSP Corrigido para liberar Google Maps, Bootstrap, CDNs ---
     @app.after_request
     def set_csp(response):
         response.headers['Content-Security-Policy'] = (
             "default-src 'self'; "
-            "script-src 'self' https://maps.googleapis.com https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com 'unsafe-inline' 'unsafe-eval'; "
+            "script-src 'self' https://maps.googleapis.com https://maps.gstatic.com https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com 'unsafe-inline' 'unsafe-eval'; "
             "style-src 'self' https://fonts.googleapis.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net 'unsafe-inline'; "
             "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; "
             "img-src * data:; "
-            "connect-src 'self' https://maps.googleapis.com https://maps.gstatic.com https://unpkg.com; "
+            "connect-src 'self' https://maps.googleapis.com https://maps.gstatic.com https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
         )
         return response
 
