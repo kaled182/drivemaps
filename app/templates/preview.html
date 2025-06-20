@@ -1,9 +1,18 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container-fluid py-3">
-    <div id="map" style="min-height: 500px; height: 60vh; width: 100%; border-radius: 14px; box-shadow: 0 2px 16px #0001;"></div>
+<div class="container my-4">
+    <h2 class="mb-3"><i class="fas fa-map-marked-alt me-2"></i> Visualização de Endereços</h2>
+    <div class="map-container mb-4">
+        <div id="map"></div>
+    </div>
+    <!-- Se quiser mostrar uma tabela/lista de endereços, coloque aqui -->
 </div>
+{% endblock %}
+
+{% block styles %}
+    <!-- Aplica o CSS do mapa, pode garantir aqui também -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='map.css') }}">
 {% endblock %}
 
 {% block scripts %}
@@ -13,28 +22,13 @@
 const enderecosData = {{ lista|tojson|safe }};
 let map, markers = [], markerCluster;
 
-// Garantir altura do div do mapa
-document.addEventListener('DOMContentLoaded', function() {
-    const mapDiv = document.getElementById('map');
-    if (mapDiv) {
-        mapDiv.style.minHeight = '300px';
-        mapDiv.style.height = '100%';
-        mapDiv.style.width = '100%';
-    }
-});
-
-// --- Função principal ---
+// Função principal chamada pelo callback do Google
 function initMap() {
     const validCoords = enderecosData.filter(e => e.latitude && e.longitude);
-
     if (validCoords.length === 0) {
-        const mapDiv = document.getElementById('map');
-        if (mapDiv) {
-            mapDiv.innerHTML = `<div class="alert alert-warning m-3">Nenhuma localização válida para exibir</div>`;
-        }
+        document.getElementById('map').innerHTML = '<div class="alert alert-warning m-3">Nenhuma localização válida para exibir</div>';
         return;
     }
-
     map = new google.maps.Map(document.getElementById('map'), {
         zoom: 12,
         center: new google.maps.LatLng(
@@ -46,31 +40,18 @@ function initMap() {
         streetViewControl: false,
         fullscreenControl: true
     });
-
     markerCluster = new markerClusterer.MarkerClusterer({ map, markers: [] });
-
     enderecosData.forEach((item, idx) => {
-        if (item.latitude && item.longitude) {
-            createMarker(idx, item);
-        }
+        if (item.latitude && item.longitude) createMarker(idx, item);
     });
-
     const bounds = new google.maps.LatLngBounds();
-    validCoords.forEach(e => bounds.extend(new google.maps.LatLng(
-        parseFloat(e.latitude), 
-        parseFloat(e.longitude)
-    )));
+    validCoords.forEach(e => bounds.extend(new google.maps.LatLng(parseFloat(e.latitude), parseFloat(e.longitude))));
     map.fitBounds(bounds);
 }
 
 function createMarker(idx, data) {
     if (!data.latitude || !data.longitude) return null;
-
-    const position = new google.maps.LatLng(
-        parseFloat(data.latitude),
-        parseFloat(data.longitude)
-    );
-
+    const position = new google.maps.LatLng(parseFloat(data.latitude), parseFloat(data.longitude));
     const marker = new google.maps.Marker({
         position,
         map,
@@ -78,26 +59,10 @@ function createMarker(idx, data) {
         icon: createPinIcon(idx, data),
         draggable: false
     });
-
     const infoWindow = new google.maps.InfoWindow({
-        content: `
-            <div class="map-infowindow">
-                <h6>${data.order_number || 'Sem ID'}</h6>
-                <p>${data.address}</p>
-                <p>CEP: ${data.cep || 'Não informado'}</p>
-                ${data.status_google === 'OK' ? 
-                    '<p class="text-success">✓ Validado</p>' : 
-                    `<p class="text-danger">${data.status_google || 'Não validado'}</p>`}
-            </div>
-        `
+        content: `<div class="map-infowindow"><h6>${data.order_number || 'Sem ID'}</h6><p>${data.address}</p><p>CEP: ${data.cep || 'Não informado'}</p>${data.status_google === 'OK' ? '<p class="text-success">✓ Validado</p>' : `<p class="text-danger">${data.status_google || 'Não validado'}</p>`}</div>`
     });
-
-    marker.addListener('click', () => {
-        infoWindow.open(map, marker);
-        const linha = document.getElementById(`linha-${idx}`);
-        if (linha) linha.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    });
-
+    marker.addListener('click', () => infoWindow.open(map, marker));
     markers[idx] = marker;
     markerCluster.addMarker(marker);
     return marker;
@@ -106,7 +71,6 @@ function createMarker(idx, data) {
 function createPinIcon(idx, data) {
     const num = data.order_number ? String(data.order_number).substr(0, 3) : idx + 1;
     const color = data.cor || '#4285F4';
-
     return {
         path: google.maps.SymbolPath.CIRCLE,
         fillColor: color,
@@ -114,90 +78,20 @@ function createPinIcon(idx, data) {
         strokeColor: '#fff',
         strokeWeight: 2,
         scale: 10,
-        label: {
-            text: num,
-            color: '#fff',
-            fontSize: '12px'
-        }
+        label: { text: num, color: '#fff', fontSize: '12px' }
     };
 }
 
-// Torna initMap global (ESSENCIAL!)
+// Torna initMap global (ESSENCIAL para o callback funcionar)
 window.initMap = initMap;
 
-// Carregamento dinâmico da API Google Maps (callback correto)
-function loadGoogleMaps() {
-    if (typeof google === 'undefined' || typeof google.maps === 'undefined') {
-        const script = document.createElement('script');
-        script.src = "https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&libraries=places&callback=initMap";
-        script.async = true;
-        script.defer = true;
-        document.head.appendChild(script);
-    } else {
-        initMap();
-    }
+// Carregamento dinâmico do Google Maps (callback = initMap)
+if (document.getElementById('map')) {
+    const script = document.createElement('script');
+    script.src = "https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&libraries=places&callback=initMap";
+    script.async = true;
+    script.defer = true;
+    document.head.appendChild(script);
 }
-if (document.getElementById('map')) loadGoogleMaps();
-
-// ----------- DEMAIS LISTENERS E FUNÇÕES (SEU CÓDIGO) -----------
-document.addEventListener('DOMContentLoaded', function() {
-    // Filtro por origem
-    const filtroOrigem = document.getElementById('filtro-origem');
-    if (filtroOrigem) filtroOrigem.addEventListener('change', filtrarPorOrigem);
-
-    // Validação em massa
-    const btnValidaTudo = document.getElementById('btn-validar-tudo');
-    if (btnValidaTudo) btnValidaTudo.addEventListener('click', validarTudo);
-
-    // Máscara para CEP
-    document.querySelectorAll('.cep-input').forEach(input => {
-        input.addEventListener('input', function(e) {
-            this.value = this.value.replace(/\D/g, '')
-                                 .replace(/^(\d{5})(\d)/, '$1-$2')
-                                 .substr(0, 9);
-        });
-    });
-
-    // Adicionar novo endereço
-    const btnConfirmarAdicao = document.getElementById('btnConfirmarAdicao');
-    if (btnConfirmarAdicao) {
-        btnConfirmarAdicao.addEventListener('click', async function() {
-            const endereco = document.getElementById('novoEndereco').value.trim();
-            const cep = document.getElementById('novoCep').value.trim();
-            const origem = document.getElementById('novaOrigem').value;
-            if (!endereco) {
-                showToast('Por favor, insira um endereço válido', 'warning');
-                return;
-            }
-            const btn = this;
-            const originalHTML = btn.innerHTML;
-            try {
-                btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-                btn.disabled = true;
-                const response = await fetch('/api/adicionar-endereco', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ endereco, cep, origem })
-                });
-                const data = await response.json();
-                if (data.success) {
-                    window.location.reload();
-                } else {
-                    showToast(data.msg || 'Erro ao adicionar endereço', 'danger');
-                }
-            } catch (error) {
-                showToast('Erro ao conectar com o servidor', 'danger');
-            } finally {
-                btn.innerHTML = originalHTML;
-                btn.disabled = false;
-                bootstrap.Modal.getInstance(document.getElementById('modalAdicionar')).hide();
-            }
-        });
-    }
-});
-
-// --- Debug para ajudar ---
-console.log("GOOGLE_API_KEY:", "{{ GOOGLE_API_KEY }}");
-console.log("initMap disponível?", typeof window.initMap);
 </script>
 {% endblock %}
