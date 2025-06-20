@@ -1,20 +1,28 @@
 {% block scripts %}
 <script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
 <script>
-// Dados de endereços para o mapa
+// ========== CONFIG MAPA ==========
 const enderecosData = {{ lista|tojson|safe }};
 let map, markers = [], markerCluster;
 
+// Garantir altura do div do mapa
+document.addEventListener('DOMContentLoaded', function() {
+    const mapDiv = document.getElementById('map');
+    if (mapDiv) {
+        mapDiv.style.minHeight = '300px';
+        mapDiv.style.height = '100%';
+        mapDiv.style.width = '100%';
+    }
+});
+
+// --- Função principal ---
 function initMap() {
     const validCoords = enderecosData.filter(e => e.latitude && e.longitude);
 
     if (validCoords.length === 0) {
         const mapDiv = document.getElementById('map');
         if (mapDiv) {
-            mapDiv.innerHTML = `
-                <div class="alert alert-warning m-3">
-                    Nenhuma localização válida para exibir
-                </div>`;
+            mapDiv.innerHTML = `<div class="alert alert-warning m-3">Nenhuma localização válida para exibir</div>`;
         }
         return;
     }
@@ -106,7 +114,24 @@ function createPinIcon(idx, data) {
     };
 }
 
-// --- Protege Event Listeners ---
+// Torna initMap global (ESSENCIAL!)
+window.initMap = initMap;
+
+// Carregamento dinâmico da API Google Maps (callback correto)
+function loadGoogleMaps() {
+    if (typeof google === 'undefined' || typeof google.maps === 'undefined') {
+        const script = document.createElement('script');
+        script.src = "https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&libraries=places&callback=initMap";
+        script.async = true;
+        script.defer = true;
+        document.head.appendChild(script);
+    } else {
+        initMap();
+    }
+}
+if (document.getElementById('map')) loadGoogleMaps();
+
+// ----------- DEMAIS LISTENERS E FUNÇÕES (SEU CÓDIGO) -----------
 document.addEventListener('DOMContentLoaded', function() {
     // Filtro por origem
     const filtroOrigem = document.getElementById('filtro-origem');
@@ -132,27 +157,21 @@ document.addEventListener('DOMContentLoaded', function() {
             const endereco = document.getElementById('novoEndereco').value.trim();
             const cep = document.getElementById('novoCep').value.trim();
             const origem = document.getElementById('novaOrigem').value;
-
             if (!endereco) {
                 showToast('Por favor, insira um endereço válido', 'warning');
                 return;
             }
-
             const btn = this;
             const originalHTML = btn.innerHTML;
-
             try {
                 btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
                 btn.disabled = true;
-
                 const response = await fetch('/api/adicionar-endereco', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ endereco, cep, origem })
                 });
-
                 const data = await response.json();
-
                 if (data.success) {
                     window.location.reload();
                 } else {
@@ -168,26 +187,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
-
-// --- callback do Google Maps ---
-function loadGoogleMaps() {
-    if (typeof google === 'undefined' || typeof google.maps === 'undefined') {
-        const script = document.createElement('script');
-        script.src = `https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&libraries=places&callback=initMap`;
-        script.async = true;
-        script.defer = true;
-        document.head.appendChild(script);
-    } else {
-        initMap();
-    }
-}
-
-// Torna initMap global (ESSENCIAL!)
-window.initMap = initMap;
-
-if (document.getElementById('map')) {
-    loadGoogleMaps();
-}
 
 // --- Debug para ajudar ---
 console.log("GOOGLE_API_KEY:", "{{ GOOGLE_API_KEY }}");
