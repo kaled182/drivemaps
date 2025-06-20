@@ -34,6 +34,7 @@ def preview():
         if not enderecos:
             raise ValueError("Nenhum endereço extraído do texto fornecido. Verifique o formato de entrada (mínimo 4 linhas por pacote Paack).")
 
+        importacao_tipo = "paack"
         lista_preview = []
         for endereco, cep, numero_pacote in zip(enderecos, ceps, order_numbers):
             res_google = valida_rua_google(endereco, cep)
@@ -57,8 +58,8 @@ def preview():
                 "cep_ok": cep_ok,
                 "rua_bate": rua_bate,
                 "freguesia": res_google.get('sublocality', ''),
-                "importacao_tipo": "paack",
-                "cor": CORES_IMPORTACAO[0]
+                "importacao_tipo": importacao_tipo,
+                "cor": CORES_IMPORTACAO.get(importacao_tipo, "#4285F4")
             })
 
         lista_atual = session.get('lista', [])
