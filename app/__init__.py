@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, render_template  # Adicionei render_template aqui
 from flask_session import Session
 from .routes import register_routes
 import os
@@ -46,37 +46,35 @@ def create_app():
 
     # Configuração de sessão com tratamento robusto
     try:
-        # Configuração do diretório para filesystem
         if app.config['SESSION_TYPE'] == 'filesystem':
             session_dir = app.config['SESSION_FILE_DIR']
             os.makedirs(session_dir, exist_ok=True)
             app.logger.info(f"📂 Sessões serão armazenadas em: {session_dir}")
             
-            # Limpeza de sessões antigas (opcional)
             if app.config.get('CLEAN_OLD_SESSIONS', True):
                 clean_old_sessions(session_dir)
         
-        # Inicialização da sessão
         Session().init_app(app)
-        
-        # Garantia adicional para o nome do cookie
         app.session_cookie_name = app.config['SESSION_COOKIE_NAME']
-        
         app.logger.info("🔒 Sessão configurada com sucesso")
     except Exception as e:
         app.logger.error(f"❌ Falha crítica na configuração de sessão: {str(e)}")
         raise
     
-    # Registro de rotas com tratamento de erro
+    # Rota para favicon (ajustada para o caminho correto)
+    @app.route('/favicon.ico')
+    def favicon():
+        return app.send_static_file('images/favicon.ico')
+    
+    # Error handler 404 deve ser registrado ANTES das outras rotas
+    @app.errorhandler(404)
+    def page_not_found(e):
+        return render_template('404.html'), 404
+    
+    # Registro de rotas principais
     try:
         register_routes(app)
         app.logger.info("🛣️ Rotas registradas com sucesso")
-        
-        # Rota de fallback para erro 404 personalizado
-        @app.errorhandler(404)
-        def page_not_found(e):
-            return render_template('404.html'), 404
-            
     except Exception as e:
         app.logger.error(f"❌ Falha ao registrar rotas: {str(e)}")
         raise
