@@ -24,7 +24,7 @@ def preview():
             raise ValueError("Nenhum endereço fornecido")
 
         # Utiliza o parser centralizado para entrada manual no formato Paack
-        enderecos, ceps, order_numbers = parser.parse_paack_manual(enderecos_brutos)
+        enderecos, ceps, order_numbers = parser.parse_paack(enderecos_brutos)
 
         lista_preview = []
         for endereco, cep, numero_pacote in zip(enderecos, ceps, order_numbers):
