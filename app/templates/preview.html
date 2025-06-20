@@ -188,5 +188,9 @@ window.initMap = initMap;
 if (document.getElementById('map')) {
     loadGoogleMaps();
 }
+
+// --- Debug para ajudar ---
+console.log("GOOGLE_API_KEY:", "{{ GOOGLE_API_KEY }}");
+console.log("initMap disponível?", typeof window.initMap);
 </script>
 {% endblock %}
