@@ -1,110 +1,97 @@
-<!DOCTYPE html>
-<html lang="pt-BR" data-bs-theme="light">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title>{% block title %}MapsDrive - Sistema de Roteirização{% endblock %}</title>
-    
-    <!-- Meta Tags SEO -->
-    <meta name="description" content="Sistema avançado de validação e roteirização de endereços para entregas com integração ao Google Maps">
-    <meta name="keywords" content="roteirização, entregas, maps, logística, endereços">
-    <meta name="author" content="MapsDrive Team">
-    <meta name="theme-color" content="#1e88e5">
-    <meta name="robots" content="index, follow">
-    
-    <!-- Favicon -->
-    <link rel="icon" href="{{ url_for('static', filename='images/favicon.ico') }}" type="image/x-icon">
-    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/apple-touch-icon.png') }}">
-    
-    <!-- Bootstrap (removido preload/onload para evitar bloqueio CSP) -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
-    
-    <!-- Font Awesome (versão atual e CDN confiável) -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+{% extends "base.html" %}
 
-    <!-- CSS Customizado -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
-    {% block styles %}{% endblock %}
-    
-    <!-- Pré-conexão para APIs externas -->
-    <link rel="preconnect" href="https://maps.googleapis.com">
-    <link rel="dns-prefetch" href="https://maps.googleapis.com">
-</head>
-<body class="d-flex flex-column min-vh-100">
-    <!-- Barra de Navegação -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm sticky-top">
-        <div class="container">
-            <a class="navbar-brand fw-bold" href="{{ url_for('preview.home') }}">
-                <i class="fas fa-map-marked-alt me-2"></i>MapsDrive
-            </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMain">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarMain">
-                <ul class="navbar-nav ms-auto">
-                    <li class="nav-item">
-                        <a class="nav-link {{ 'active' if request.path == url_for('preview.home') }}" href="{{ url_for('preview.home') }}">
-                            <i class="fas fa-home me-1"></i> Início
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {{ 'active' if request.path == url_for('preview.preview') }}" href="{{ url_for('preview.preview') }}">
-                            <i class="fas fa-map me-1"></i> Visualização
-                        </a>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </nav>
+{% block content %}
+<div class="container my-4">
+    <h2 class="mb-3"><i class="fas fa-map-marked-alt me-2"></i> Visualização de Endereços</h2>
+    <div class="map-container mb-4">
+        <div id="map"></div>
+    </div>
+    <!-- Se quiser mostrar uma tabela/lista de endereços, coloque aqui -->
+</div>
+{% endblock %}
 
-    <!-- Conteúdo Principal -->
-    <main class="container-fluid px-0 flex-grow-1">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                <div class="container mt-3">
-                    {% for category, message in messages %}
-                        <div class="alert alert-{{ category }} alert-dismissible fade show">
-                            {{ message }}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                        </div>
-                    {% endfor %}
-                </div>
-            {% endif %}
-        {% endwith %}
-        
-        {% block content %}{% endblock %}
-    </main>
+{% block styles %}
+    <!-- Aplica o CSS do mapa, pode garantir aqui também -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='map.css') }}">
+{% endblock %}
 
-    <!-- Rodapé -->
-    <footer class="bg-dark text-white py-4 mt-auto">
-        <div class="container">
-            <div class="row align-items-center">
-                <div class="col-md-6 mb-3 mb-md-0">
-                    <h5 class="mb-3">MapsDrive</h5>
-                    <p class="text-muted mb-0">Solução inteligente para roteirização e validação de endereços.</p>
-                </div>
-                <div class="col-md-6 text-md-end">
-                    <div class="mb-3">
-                        <a href="#" class="text-white me-3" aria-label="Facebook"><i class="fab fa-facebook-f"></i></a>
-                        <a href="#" class="text-white me-3" aria-label="Twitter"><i class="fab fa-twitter"></i></a>
-                        <a href="#" class="text-white" aria-label="LinkedIn"><i class="fab fa-linkedin-in"></i></a>
-                    </div>
-                    <small>&copy; {{ now().year }} MapsDrive. Todos os direitos reservados.</small>
-                </div>
-            </div>
-        </div>
-    </footer>
+{% block scripts %}
+<script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
+<script>
+// ========== CONFIG MAPA ==========
+const enderecosData = {{ lista|tojson|safe }};
+let map, markers = [], markerCluster;
 
-    <!-- Scripts -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"
-            integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL"
-            crossorigin="anonymous"></script>
-    
-    <!-- Google Maps API será carregada apenas nas páginas necessárias -->
-    {% block scripts %}{% endblock %}
-    
-    <!-- Scripts Customizados -->
-    <script src="{{ url_for('static', filename='js/main.js') }}" defer></script>
-</body>
-</html>
+// Função principal chamada pelo callback do Google
+function initMap() {
+    const validCoords = enderecosData.filter(e => e.latitude && e.longitude);
+    if (validCoords.length === 0) {
+        document.getElementById('map').innerHTML = '<div class="alert alert-warning m-3">Nenhuma localização válida para exibir</div>';
+        return;
+    }
+    map = new google.maps.Map(document.getElementById('map'), {
+        zoom: 12,
+        center: new google.maps.LatLng(
+            parseFloat(validCoords[0].latitude),
+            parseFloat(validCoords[0].longitude)
+        ),
+        gestureHandling: 'greedy',
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: true
+    });
+    markerCluster = new markerClusterer.MarkerClusterer({ map, markers: [] });
+    enderecosData.forEach((item, idx) => {
+        if (item.latitude && item.longitude) createMarker(idx, item);
+    });
+    const bounds = new google.maps.LatLngBounds();
+    validCoords.forEach(e => bounds.extend(new google.maps.LatLng(parseFloat(e.latitude), parseFloat(e.longitude))));
+    map.fitBounds(bounds);
+}
+
+function createMarker(idx, data) {
+    if (!data.latitude || !data.longitude) return null;
+    const position = new google.maps.LatLng(parseFloat(data.latitude), parseFloat(data.longitude));
+    const marker = new google.maps.Marker({
+        position,
+        map,
+        title: `${data.order_number || (idx + 1)} - ${data.address}`,
+        icon: createPinIcon(idx, data),
+        draggable: false
+    });
+    const infoWindow = new google.maps.InfoWindow({
+        content: `<div class="map-infowindow"><h6>${data.order_number || 'Sem ID'}</h6><p>${data.address}</p><p>CEP: ${data.cep || 'Não informado'}</p>${data.status_google === 'OK' ? '<p class="text-success">✓ Validado</p>' : `<p class="text-danger">${data.status_google || 'Não validado'}</p>`}</div>`
+    });
+    marker.addListener('click', () => infoWindow.open(map, marker));
+    markers[idx] = marker;
+    markerCluster.addMarker(marker);
+    return marker;
+}
+
+function createPinIcon(idx, data) {
+    const num = data.order_number ? String(data.order_number).substr(0, 3) : idx + 1;
+    const color = data.cor || '#4285F4';
+    return {
+        path: google.maps.SymbolPath.CIRCLE,
+        fillColor: color,
+        fillOpacity: 1,
+        strokeColor: '#fff',
+        strokeWeight: 2,
+        scale: 10,
+        label: { text: num, color: '#fff', fontSize: '12px' }
+    };
+}
+
+// Torna initMap global (ESSENCIAL para o callback funcionar)
+window.initMap = initMap;
+
+// Carregamento dinâmico do Google Maps (callback = initMap)
+if (document.getElementById('map')) {
+    const script = document.createElement('script');
+    script.src = "https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_API_KEY }}&libraries=places&callback=initMap";
+    script.async = true;
+    script.defer = true;
+    document.head.appendChild(script);
+}
+</script>
+{% endblock %}
