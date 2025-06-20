@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Página Não Encontrada - DriveMaps</title>
+    <style>
+        :root {
+            --primary-color: #4285F4;
+            --error-color: #EA4335;
+            --background-color: #f8f9fa;
+            --text-color: #202124;
+        }
+        
+        body {
+            font-family: 'Roboto', Arial, sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            text-align: center;
+        }
+        
+        .container {
+            max-width: 600px;
+            padding: 2rem;
+        }
+        
+        .error-code {
+            font-size: 5rem;
+            font-weight: bold;
+            color: var(--error-color);
+            margin-bottom: 1rem;
+        }
+        
+        .error-title {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        .error-message {
+            font-size: 1.1rem;
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+        
+        .home-button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 0.8rem 1.5rem;
+            font-size: 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background-color 0.3s;
+        }
+        
+        .home-button:hover {
+            background-color: #3367D6;
+        }
+        
+        .logo {
+            width: 150px;
+            margin-bottom: 2rem;
+        }
+        
+        @media (max-width: 600px) {
+            .container {
+                padding: 1rem;
+            }
+            
+            .error-code {
+                font-size: 3rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Substitua pelo caminho correto do seu logo -->
+        <img src="{{ url_for('static', filename='images/apple-touch-icon.png') }}" alt="DriveMaps Logo" class="logo">
+        
+        <div class="error-code">404</div>
+        <h1 class="error-title">Página não encontrada</h1>
+        <p class="error-message">
+            A página que você está procurando pode ter sido removida, ter seu nome alterado ou está temporariamente indisponível.
+        </p>
+        <a href="{{ url_for('home') }}" class="home-button">Voltar para a página inicial</a>
+    </div>
+</body>
+</html>
