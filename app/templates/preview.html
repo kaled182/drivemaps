@@ -1,16 +1,16 @@
 {% block scripts %}
+<!-- MarkerClusterer CDN -->
 <script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
 <script>
 // ========== CONFIG MAPA ==========
 const enderecosData = {{ lista|tojson|safe }};
 let map, markers = [], markerCluster;
 
-// Garantir altura do div do mapa
+// Força altura do div do mapa via JS
 document.addEventListener('DOMContentLoaded', function() {
     const mapDiv = document.getElementById('map');
     if (mapDiv) {
-        mapDiv.style.minHeight = '300px';
-        mapDiv.style.height = '100%';
+        mapDiv.style.minHeight = '400px';
         mapDiv.style.width = '100%';
     }
 });
@@ -131,7 +131,7 @@ function loadGoogleMaps() {
 }
 if (document.getElementById('map')) loadGoogleMaps();
 
-// ----------- DEMAIS LISTENERS E FUNÇÕES (SEU CÓDIGO) -----------
+// ----------- DEMAIS LISTENERS E FUNÇÕES -----------
 document.addEventListener('DOMContentLoaded', function() {
     // Filtro por origem
     const filtroOrigem = document.getElementById('filtro-origem');
