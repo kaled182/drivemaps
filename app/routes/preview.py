@@ -1,8 +1,8 @@
 from flask import Blueprint, render_template, request, session, jsonify
 from app.utils.google import valida_rua_google
 from app.utils.helpers import normalizar, registro_unico, CORES_IMPORTACAO
+from app.utils import parser  # NOVO: importa o parser central
 import os
-import re
 
 preview_bp = Blueprint('preview', __name__)
 
@@ -23,22 +23,11 @@ def preview():
         if not enderecos_brutos.strip():
             raise ValueError("Nenhum endereço fornecido")
 
-        linhas = [
-            linha.strip()
-            for linha in enderecos_brutos.split('\n')
-            if linha.strip()
-        ]
+        # Utiliza o parser centralizado para entrada manual no formato Paack
+        enderecos, ceps, order_numbers = parser.parse_paack_manual(enderecos_brutos)
+
         lista_preview = []
-        i = 0
-        regex_cep = r'(\d{4}-\d{3})'  # padrão CEP Portugal
-
-        # Percorre blocos de 4 linhas (Paack)
-        while i + 3 < len(linhas):
-            endereco = linhas[i]           # 1ª linha: endereço
-            numero_pacote = linhas[i+3]    # 4ª linha: número do pacote
-
-            cep_match = re.search(regex_cep, endereco)
-            cep = cep_match.group(1) if cep_match else ''
+        for endereco, cep, numero_pacote in zip(enderecos, ceps, order_numbers):
             res_google = valida_rua_google(endereco, cep)
             rua_digitada = endereco.split(',')[0] if endereco else ''
             rua_google = res_google.get('route_encontrada', '')
@@ -63,7 +52,6 @@ def preview():
                 "importacao_tipo": "paack",
                 "cor": CORES_IMPORTACAO[0]
             })
-            i += 4  # Próximo bloco de 4 linhas
 
         lista_atual = session.get('lista', [])
         for novo in lista_preview:
