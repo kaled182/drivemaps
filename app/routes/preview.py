@@ -3,6 +3,7 @@ from app.utils.google import valida_rua_google
 from app.utils.helpers import normalizar, registro_unico, CORES_IMPORTACAO
 from app.utils import parser  # NOVO: importa o parser central
 import os
+import logging
 
 preview_bp = Blueprint('preview', __name__)
 
@@ -23,8 +24,15 @@ def preview():
         if not enderecos_brutos.strip():
             raise ValueError("Nenhum endereço fornecido")
 
-        # Utiliza o parser centralizado para entrada manual no formato Paack
+        # Usa o parser centralizado para o formato Paack manual (entrada por textarea)
         enderecos, ceps, order_numbers = parser.parse_paack(enderecos_brutos)
+
+        # DEBUG: Mostra o que foi extraído (vai para o log do Render)
+        logging.warning(f"[preview] Entradas extraídas: {len(enderecos)} endereços, {len(ceps)} ceps, {len(order_numbers)} ids")
+        logging.warning(f"[preview] Dados exemplo: {enderecos[:2]}, {ceps[:2]}, {order_numbers[:2]}")
+
+        if not enderecos:
+            raise ValueError("Nenhum endereço extraído do texto fornecido. Verifique o formato de entrada (mínimo 4 linhas por pacote Paack).")
 
         lista_preview = []
         for endereco, cep, numero_pacote in zip(enderecos, ceps, order_numbers):
@@ -77,4 +85,5 @@ def preview():
         )
 
     except Exception as e:
+        logging.error(f"[preview] Erro ao processar preview: {str(e)}", exc_info=True)
         return jsonify({"success": False, "msg": str(e)}), 500
