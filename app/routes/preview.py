@@ -6,6 +6,9 @@ import re
 
 preview_bp = Blueprint('preview', __name__)
 
+@preview_bp.route("/", methods=["GET"], endpoint="home")
+def index():
+    return render_template("index.html")
 
 @preview_bp.route('/preview', methods=['POST'])
 def preview():
