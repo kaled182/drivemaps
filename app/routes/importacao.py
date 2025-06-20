@@ -10,13 +10,11 @@ importacao_bp = Blueprint('importacao', __name__)
 
 ALLOWED_EXTENSIONS = {'csv', 'xls', 'xlsx', 'txt'}
 
-
 def extensao_permitida(filename):
     return (
         '.' in filename and
         filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
     )
-
 
 @importacao_bp.route('/import_planilha', methods=['POST'])
 def import_planilha():
@@ -63,21 +61,19 @@ def import_planilha():
             file.seek(0)
             if file.filename.lower().endswith(('.csv', '.txt')):
                 conteudo = file.read().decode("utf-8")
-                linhas = conteudo.splitlines()
+                linhas = [linha.strip() for linha in conteudo.splitlines() if linha.strip()]
                 regex_cep = re.compile(r'(\d{4}-\d{3})')
                 i = 0
-                while i < len(linhas) - 3:
-                    linha = linhas[i].strip()
-                    if linhas[i+2].strip() == linha:
-                        order = linhas[i+3].strip()
-                        cep_match = regex_cep.search(linha)
-                        cep = cep_match.group(1) if cep_match else ""
-                        enderecos.append(linha)
-                        ceps.append(cep)
-                        order_numbers.append(order)
-                        i += 4
-                    else:
-                        i += 1
+                # NOVO: Pega sempre blocos de 4 linhas: 1=endereço, 2/3=ignorar, 4=ID
+                while i + 3 < len(linhas):
+                    endereco = linhas[i]
+                    order = linhas[i+3]
+                    cep_match = regex_cep.search(endereco)
+                    cep = cep_match.group(1) if cep_match else ""
+                    enderecos.append(endereco)
+                    ceps.append(cep)
+                    order_numbers.append(order)
+                    i += 4
             else:
                 df = pd.read_excel(file, header=0)
                 col_end = [
@@ -95,6 +91,7 @@ def import_planilha():
                     }), 400
                 enderecos = df[col_end[0]].astype(str).tolist()
                 ceps = df[col_cep[0]].astype(str).tolist()
+                # Se tiver ID do pacote em coluna, acrescente aqui
 
         else:
             return jsonify({
@@ -122,9 +119,7 @@ def import_planilha():
                 "address": endereco,
                 "cep": cep,
                 "status_google": res_google.get('status'),
-                "postal_code_encontrado": res_google.get(
-                    'postal_code_encontrado', ''
-                ),
+                "postal_code_encontrado": res_google.get('postal_code_encontrado', ''),
                 "endereco_formatado": res_google.get('endereco_formatado', ''),
                 "latitude": res_google.get('coordenadas', {}).get('lat', ''),
                 "longitude": res_google.get('coordenadas', {}).get('lng', ''),
