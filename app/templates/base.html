@@ -27,7 +27,7 @@
           crossorigin="anonymous" referrerpolicy="no-referrer" />
     
     <!-- CSS Customizado -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
     {% block styles %}{% endblock %}
     
     <!-- Pré-conexão para APIs externas -->
@@ -108,6 +108,6 @@
     {% block scripts %}{% endblock %}
     
     <!-- Scripts Customizados -->
-    <script src="{{ url_for('static', filename='js/main.min.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}" defer></script>
 </body>
 </html>
