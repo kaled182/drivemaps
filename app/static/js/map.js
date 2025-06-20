@@ -185,27 +185,43 @@ class MapManager {
   }
 }
 
-// Exporta a classe para uso global
 window.MapManager = MapManager;
 
-/**
- * Inicialização padrão do mapa
- */
+// ========== Integração MapsDrive ==========
 function initDefaultMap() {
+  if (!window.enderecosData || !Array.isArray(window.enderecosData) || window.enderecosData.length === 0) {
+    console.warn('Nenhum dado de endereço para exibir no mapa.');
+    return;
+  }
+  const first = window.enderecosData.find(e => e.latitude && e.longitude);
+  if (!first) {
+    document.getElementById('map').innerHTML = '<div class="alert alert-warning m-3">Nenhuma localização válida para exibir</div>';
+    return;
+  }
   const mapManager = new MapManager('map');
-  mapManager.init().then(() => {
-    console.log('Map initialized');
+  mapManager.init({ lat: parseFloat(first.latitude), lng: parseFloat(first.longitude) }).then(() => {
+    // Cria marcadores
+    window.enderecosData.forEach((item, idx) => {
+      if (item.latitude && item.longitude) {
+        mapManager.addMarker(
+          { lat: parseFloat(item.latitude), lng: parseFloat(item.longitude) },
+          {
+            title: `${item.order_number || (idx + 1)} - ${item.address}`,
+            icon: MapManager.createPinIcon(item.order_number || idx + 1, item.cor || "#4285F4", 40),
+            content: `<div class="map-infowindow">
+                <h6>${item.order_number || 'Sem ID'}</h6>
+                <p>${item.address}</p>
+                <p>CEP: ${item.cep || 'Não informado'}</p>
+                ${item.status_google === 'OK' ? 
+                  '<p class="text-success">✓ Validado</p>' : 
+                  `<p class="text-danger">${item.status_google || 'Não validado'}</p>`}
+              </div>`
+          }
+        );
+      }
+    });
+    mapManager.updateCluster();
+    mapManager.fitToMarkers();
   });
 }
-
-// Carrega a API do Google Maps se necessário
-if (typeof google === 'undefined') {
-  const apiKey = document.querySelector('meta[name="google-maps-key"]')?.content || '';
-  if (apiKey) {
-    const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=initDefaultMap`;
-    script.async = true;
-    script.defer = true;
-    document.head.appendChild(script);
-  }
-}
+window.initDefaultMap = initDefaultMap;
