@@ -95,6 +95,18 @@ def create_app():
     def inject_now():
         return {'now': datetime.now}
 
+    # --- Ajuste de CSP para liberar Google Maps ---
+    @app.after_request
+    def set_csp(response):
+        response.headers['Content-Security-Policy'] = (
+            "default-src 'self'; "
+            "script-src 'self' https://maps.googleapis.com https://unpkg.com 'unsafe-inline' 'unsafe-eval'; "
+            "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; "
+            "font-src 'self' https://fonts.gstatic.com; "
+            "img-src * data:;"
+        )
+        return response
+
     return app
 
 
