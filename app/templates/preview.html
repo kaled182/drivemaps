@@ -1,85 +1,21 @@
-{% extends "base.html" %}
-
-{% block title %}Pré-visualização | MapsDrive{% endblock %}
-
-{% block styles %}
-<style>
-    #map-container {
-        position: sticky;
-        top: 0;
-        z-index: 100;
-        background: #f8fafd;
-        box-shadow: 0 4px 18px rgba(0,0,0,0.1);
-        border-radius: 0 0 14px 14px;
-        height: 50vh;
-        min-height: 300px;
-    }
-    /* NOVO: Garante altura do mapa */
-    #map {
-        width: 100%;
-        height: 100%;
-        min-height: 300px;
-    }
-    .address-row {
-        transition: background-color 0.2s ease;
-    }
-    .address-row:hover {
-        background-color: rgba(0,0,0,0.03) !important;
-    }
-    .filter-badge {
-        --badge-color: #6c757d;
-        background-color: var(--badge-color);
-        color: white;
-        font-size: 0.75rem;
-    }
-    .action-btn {
-        width: 100%;
-        min-width: 80px;
-    }
-    .cep-input {
-        max-width: 120px;
-    }
-    @media (max-width: 768px) {
-        #map-container {
-            height: 35vh;
-        }
-        .mobile-hidden {
-            display: none;
-        }
-        .table-responsive {
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-        }
-    }
-</style>
-{% endblock %}
-
-{% block content %}
-<div id="map-container">
-    <div id="map"></div>
-</div>
-
-<div class="container-fluid py-3">
-    <!-- ... todo o restante do seu bloco content ... -->
-    {# ... sem alterações ... #}
-</div>
-{% endblock %}
-
 {% block scripts %}
 <script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
 <script>
-// Configuração do Mapa
-let map, markers = [], markerCluster;
+// Dados de endereços para o mapa
 const enderecosData = {{ lista|tojson|safe }};
+let map, markers = [], markerCluster;
 
 function initMap() {
     const validCoords = enderecosData.filter(e => e.latitude && e.longitude);
-    
+
     if (validCoords.length === 0) {
-        document.getElementById('map').innerHTML = `
-            <div class="alert alert-warning m-3">
-                Nenhuma localização válida para exibir
-            </div>`;
+        const mapDiv = document.getElementById('map');
+        if (mapDiv) {
+            mapDiv.innerHTML = `
+                <div class="alert alert-warning m-3">
+                    Nenhuma localização válida para exibir
+                </div>`;
+        }
         return;
     }
 
@@ -95,33 +31,14 @@ function initMap() {
         fullscreenControl: true
     });
 
-    // Configuração do cluster
-    markerCluster = new markerClusterer.MarkerClusterer({
-        map,
-        markers: [],
-        renderer: {
-            render: ({count, position}) => new google.maps.Marker({
-                position,
-                label: { text: String(count), color: 'white' },
-                icon: {
-                    path: google.maps.SymbolPath.CIRCLE,
-                    scale: 10 + Math.min(count, 10),
-                    fillColor: '#4285F4',
-                    fillOpacity: 0.8,
-                    strokeWeight: 2
-                }
-            })
-        }
-    });
+    markerCluster = new markerClusterer.MarkerClusterer({ map, markers: [] });
 
-    // Adiciona marcadores
     enderecosData.forEach((item, idx) => {
         if (item.latitude && item.longitude) {
             createMarker(idx, item);
         }
     });
 
-    // Ajusta o zoom para mostrar todos os marcadores
     const bounds = new google.maps.LatLngBounds();
     validCoords.forEach(e => bounds.extend(new google.maps.LatLng(
         parseFloat(e.latitude), 
@@ -132,12 +49,12 @@ function initMap() {
 
 function createMarker(idx, data) {
     if (!data.latitude || !data.longitude) return null;
-    
+
     const position = new google.maps.LatLng(
         parseFloat(data.latitude),
         parseFloat(data.longitude)
     );
-    
+
     const marker = new google.maps.Marker({
         position,
         map,
@@ -145,8 +62,7 @@ function createMarker(idx, data) {
         icon: createPinIcon(idx, data),
         draggable: false
     });
-    
-    // InfoWindow com detalhes
+
     const infoWindow = new google.maps.InfoWindow({
         content: `
             <div class="map-infowindow">
@@ -159,14 +75,13 @@ function createMarker(idx, data) {
             </div>
         `
     });
-    
+
     marker.addListener('click', () => {
         infoWindow.open(map, marker);
-        // Rolagem para a linha correspondente
         const linha = document.getElementById(`linha-${idx}`);
         if (linha) linha.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
-    
+
     markers[idx] = marker;
     markerCluster.addMarker(marker);
     return marker;
@@ -175,7 +90,7 @@ function createMarker(idx, data) {
 function createPinIcon(idx, data) {
     const num = data.order_number ? String(data.order_number).substr(0, 3) : idx + 1;
     const color = data.cor || '#4285F4';
-    
+
     return {
         path: google.maps.SymbolPath.CIRCLE,
         fillColor: color,
@@ -191,178 +106,16 @@ function createPinIcon(idx, data) {
     };
 }
 
-// Filtragem por origem
-function filtrarPorOrigem() {
-    const origem = document.getElementById('filtro-origem').value;
-    
-    // Filtra linhas da tabela
-    document.querySelectorAll('#corpo-tabela tr').forEach(linha => {
-        const deveMostrar = !origem || linha.dataset.origem === origem;
-        linha.style.display = deveMostrar ? '' : 'none';
-    });
-    
-    // Filtra marcadores no mapa
-    markers.forEach((marker, idx) => {
-        if (marker) {
-            const linha = document.getElementById(`linha-${idx}`);
-            marker.setVisible(!origem || (linha && linha.dataset.origem === origem));
-        }
-    });
-    
-    markerCluster.repaint();
-}
-
-// Validação de endereço
-async function validarEndereco(idx) {
-    const linha = enderecosData[idx];
-    const btn = document.querySelector(`#linha-${idx} button`);
-    const originalHTML = btn.innerHTML;
-    
-    try {
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-        btn.disabled = true;
-        
-        const response = await fetch('/api/validar-endereco', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                idx,
-                endereco: linha.address,
-                cep: linha.cep,
-                importacao_tipo: linha.importacao_tipo,
-                numero_pacote: linha.order_number
-            })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            enderecosData[idx] = data.item;
-            updateRowUI(idx, data.item);
-            if (data.item.latitude && data.item.longitude) {
-                createMarker(idx, data.item);
-            }
-            showToast('Endereço validado com sucesso!', 'success');
-        } else {
-            showToast(data.msg || 'Erro na validação', 'danger');
-        }
-    } catch (error) {
-        showToast('Erro ao conectar com o servidor', 'danger');
-    } finally {
-        btn.innerHTML = originalHTML;
-        btn.disabled = false;
-    }
-}
-
-// Atualiza a interface após validação
-function updateRowUI(idx, item) {
-    const row = document.getElementById(`linha-${idx}`);
-    if (!row) return;
-    
-    // Atualiza classes da linha
-    row.className = `address-row ${item.cep_ok ? 'table-success' : 'table-danger'}`;
-    row.dataset.lat = item.latitude || '';
-    row.dataset.lng = item.longitude || '';
-    
-    // Atualiza CEP encontrado
-    const cepCell = row.querySelector('.cep-encontrado');
-    if (cepCell) cepCell.textContent = item.postal_code_encontrado || '-';
-    
-    // Atualiza status
-    const statusCell = row.querySelector('.validation-status');
-    if (statusCell) {
-        statusCell.innerHTML = item.status_google === 'OK' ?
-            `<span class="badge bg-success">Validado</span>` :
-            `<span class="badge bg-danger">${item.status_google || 'Não encontrado'}</span>`;
-    }
-}
-
-// Validação em massa
-async function validarTudo() {
-    const progressBar = document.getElementById('progresso-barra');
-    const progressContainer = document.getElementById('progresso-validacao');
-    
-    progressContainer.classList.remove('d-none');
-    progressBar.style.width = '0%';
-    progressBar.textContent = '0%';
-    
-    for (let i = 0; i < enderecosData.length; i++) {
-        await validarEndereco(i);
-        const progress = ((i + 1) / enderecosData.length) * 100;
-        progressBar.style.width = `${progress}%`;
-        progressBar.textContent = `${Math.round(progress)}%`;
-    }
-    
-    showToast('Validação concluída!', 'success');
-}
-
-// Mostra notificação
-function showToast(message, type = 'info') {
-    const toast = document.createElement('div');
-    toast.className = `toast show position-fixed bottom-0 end-0 m-3 bg-${type} text-white`;
-    toast.style.zIndex = 1100;
-    toast.innerHTML = `
-        <div class="d-flex">
-            <div class="toast-body">${message}</div>
-            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
-        </div>
-    `;
-    document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
-}
-
-// Adicionar novo endereço
-document.getElementById('btnConfirmarAdicao').addEventListener('click', async function() {
-    const endereco = document.getElementById('novoEndereco').value.trim();
-    const cep = document.getElementById('novoCep').value.trim();
-    const origem = document.getElementById('novaOrigem').value;
-    
-    if (!endereco) {
-        showToast('Por favor, insira um endereço válido', 'warning');
-        return;
-    }
-    
-    const btn = this;
-    const originalHTML = btn.innerHTML;
-    
-    try {
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-        btn.disabled = true;
-        
-        const response = await fetch('/api/adicionar-endereco', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                endereco,
-                cep,
-                origem
-            })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            window.location.reload();
-        } else {
-            showToast(data.msg || 'Erro ao adicionar endereço', 'danger');
-        }
-    } catch (error) {
-        showToast('Erro ao conectar com o servidor', 'danger');
-    } finally {
-        btn.innerHTML = originalHTML;
-        btn.disabled = false;
-        bootstrap.Modal.getInstance(document.getElementById('modalAdicionar')).hide();
-    }
-});
-
-// Event Listeners
+// --- Protege Event Listeners ---
 document.addEventListener('DOMContentLoaded', function() {
     // Filtro por origem
-    document.getElementById('filtro-origem').addEventListener('change', filtrarPorOrigem);
-    
+    const filtroOrigem = document.getElementById('filtro-origem');
+    if (filtroOrigem) filtroOrigem.addEventListener('change', filtrarPorOrigem);
+
     // Validação em massa
-    document.getElementById('btn-validar-tudo').addEventListener('click', validarTudo);
-    
+    const btnValidaTudo = document.getElementById('btn-validar-tudo');
+    if (btnValidaTudo) btnValidaTudo.addEventListener('click', validarTudo);
+
     // Máscara para CEP
     document.querySelectorAll('.cep-input').forEach(input => {
         input.addEventListener('input', function(e) {
@@ -371,9 +124,52 @@ document.addEventListener('DOMContentLoaded', function() {
                                  .substr(0, 9);
         });
     });
+
+    // Adicionar novo endereço
+    const btnConfirmarAdicao = document.getElementById('btnConfirmarAdicao');
+    if (btnConfirmarAdicao) {
+        btnConfirmarAdicao.addEventListener('click', async function() {
+            const endereco = document.getElementById('novoEndereco').value.trim();
+            const cep = document.getElementById('novoCep').value.trim();
+            const origem = document.getElementById('novaOrigem').value;
+
+            if (!endereco) {
+                showToast('Por favor, insira um endereço válido', 'warning');
+                return;
+            }
+
+            const btn = this;
+            const originalHTML = btn.innerHTML;
+
+            try {
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+                btn.disabled = true;
+
+                const response = await fetch('/api/adicionar-endereco', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ endereco, cep, origem })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    window.location.reload();
+                } else {
+                    showToast(data.msg || 'Erro ao adicionar endereço', 'danger');
+                }
+            } catch (error) {
+                showToast('Erro ao conectar com o servidor', 'danger');
+            } finally {
+                btn.innerHTML = originalHTML;
+                btn.disabled = false;
+                bootstrap.Modal.getInstance(document.getElementById('modalAdicionar')).hide();
+            }
+        });
+    }
 });
 
-// Carrega API do Google Maps
+// --- callback do Google Maps ---
 function loadGoogleMaps() {
     if (typeof google === 'undefined' || typeof google.maps === 'undefined') {
         const script = document.createElement('script');
@@ -386,12 +182,11 @@ function loadGoogleMaps() {
     }
 }
 
-// Inicialização
+// Torna initMap global (ESSENCIAL!)
+window.initMap = initMap;
+
 if (document.getElementById('map')) {
     loadGoogleMaps();
 }
-
-// NOVO: Garante que o callback global seja visto pelo Google Maps
-window.initMap = initMap;
 </script>
 {% endblock %}
