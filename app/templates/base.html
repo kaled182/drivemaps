@@ -38,7 +38,7 @@
     <!-- Barra de Navegação -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm sticky-top">
         <div class="container">
-            <a class="navbar-brand fw-bold" href="{{ url_for('home') }}">
+            <a class="navbar-brand fw-bold" href="{{ url_for('preview.home') }}">
                 <i class="fas fa-map-marked-alt me-2"></i>MapsDrive
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMain">
@@ -47,12 +47,12 @@
             <div class="collapse navbar-collapse" id="navbarMain">
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item">
-                        <a class="nav-link {{ 'active' if request.path == url_for('home') }}" href="{{ url_for('home') }}">
+                        <a class="nav-link {{ 'active' if request.path == url_for('preview.home') }}" href="{{ url_for('preview.home') }}">
                             <i class="fas fa-home me-1"></i> Início
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {{ 'active' if request.path == url_for('preview') }}" href="{{ url_for('preview') }}">
+                        <a class="nav-link {{ 'active' if request.path == url_for('preview.preview') }}" href="{{ url_for('preview.preview') }}">
                             <i class="fas fa-map me-1"></i> Visualização
                         </a>
                     </li>
