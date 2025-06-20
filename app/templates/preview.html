@@ -2,17 +2,31 @@
 
 {% block content %}
 <div class="container my-4">
-    <h2 class="mb-3"><i class="fas fa-map-marked-alt me-2"></i> Visualização de Endereços</h2>
+    <h2 class="mb-3">
+        <i class="fas fa-map-marked-alt me-2"></i> Visualização de Endereços
+    </h2>
     <div class="map-container mb-4">
         <div id="map"></div>
     </div>
-    <!-- Se quiser mostrar uma tabela/lista de endereços, coloque aqui -->
+    <!-- Adicione aqui se quiser exibir lista/tabela de endereços -->
 </div>
 {% endblock %}
 
 {% block styles %}
-    <!-- Aplica o CSS do mapa, pode garantir aqui também -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='map.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/map.css') }}">
+    <style>
+        .map-container #map {
+            min-height: 300px;
+            height: 500px;
+            width: 100%;
+            border-radius: 20px;
+            box-shadow: 0 2px 20px #0001;
+        }
+        .map-infowindow {
+            font-size: 14px;
+            min-width: 180px;
+        }
+    </style>
 {% endblock %}
 
 {% block scripts %}
