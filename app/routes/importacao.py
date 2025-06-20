@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify, session
 import pandas as pd
 from app.utils.google import valida_rua_google
 from app.utils.helpers import normalizar, registro_unico, cor_por_tipo
-from app.utils import parser   # <<< NOVO: importa o parser centralizado
+from app.utils import parser
 import logging
 
 logger = logging.getLogger(__name__)
@@ -11,13 +11,17 @@ importacao_bp = Blueprint('importacao', __name__)
 ALLOWED_EXTENSIONS = {'csv', 'xls', 'xlsx', 'txt'}
 
 def extensao_permitida(filename):
-    return (
-        '.' in filename and
-        filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-    )
+    """Verifica se o arquivo tem extensão permitida."""
+    return ('.' in filename and 
+            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS)
 
 @importacao_bp.route('/import_planilha', methods=['POST'])
 def import_planilha():
+    """
+    Endpoint para importar uma planilha e extrair endereços, ceps e order_numbers.
+    Suporta as empresas: Delnext (xls/xlsx/csv), Paack (csv/txt).
+    Retorna lista de endereços com dados normalizados e geolocalizados.
+    """
     try:
         file = request.files.get('planilha')
         empresa = request.form.get('empresa', '').lower()
@@ -35,9 +39,14 @@ def import_planilha():
             }), 400
 
         logger.info(f"Importação iniciada para empresa: {empresa}")
-        tipo_import = empresa
+        
+        # Suporte para custom -> delnext
+        if empresa == "custom":
+            empresa = "delnext"
+
         enderecos, ceps, order_numbers = [], [], []
 
+        # Delnext: aceita xlsx, xls, csv
         if empresa == "delnext":
             file.seek(0)
             if file.filename.lower().endswith('.csv'):
@@ -46,16 +55,17 @@ def import_planilha():
                 df = pd.read_excel(file)
             enderecos, ceps, order_numbers = parser.parse_delnext(df)
 
+        # Paack: apenas CSV ou TXT
         elif empresa == "paack":
             file.seek(0)
             if file.filename.lower().endswith(('.csv', '.txt')):
                 conteudo = file.read().decode("utf-8")
                 enderecos, ceps, order_numbers = parser.parse_paack(conteudo)
             else:
-                df = pd.read_excel(file)
-                # Se algum dia Paack aceitar xlsx estruturado, pode criar parser.parse_paack_xlsx(df)
-                # Por enquanto: não implementado, mas não quebra
-                enderecos, ceps, order_numbers = [], [], []
+                return jsonify({
+                    "success": False,
+                    "msg": "Para Paack, apenas arquivos CSV ou TXT são suportados"
+                }), 400
 
         else:
             return jsonify({
@@ -69,9 +79,11 @@ def import_planilha():
                 "msg": "Não foi possível identificar endereços na planilha enviada."
             }), 400
 
+        # Se não vier order_numbers, gera sequencial
         if not order_numbers:
             order_numbers = [str(i + 1) for i in range(len(enderecos))]
 
+        # Recupera lista atual da sessão (para não duplicar)
         lista_atual = session.get('lista', [])
 
         for endereco, cep, order_number in zip(enderecos, ceps, order_numbers):
@@ -97,16 +109,18 @@ def import_planilha():
                 "cep_ok": cep_ok,
                 "rua_bate": rua_bate,
                 "freguesia": res_google.get('sublocality', ''),
-                "importacao_tipo": tipo_import,
-                "cor": cor_por_tipo(tipo_import)
+                "importacao_tipo": empresa,
+                "cor": cor_por_tipo(empresa)
             }
 
             if registro_unico(lista_atual, novo):
                 lista_atual.append(novo)
 
+        # Atualiza order_number sequencial
         for i, item in enumerate(lista_atual, 1):
             item['order_number'] = i
 
+        # Salva na sessão
         session['lista'] = lista_atual
         session.modified = True
 
