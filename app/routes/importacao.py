@@ -1,8 +1,8 @@
 from flask import Blueprint, request, jsonify, session
 import pandas as pd
-import re
 from app.utils.google import valida_rua_google
 from app.utils.helpers import normalizar, registro_unico, cor_por_tipo
+from app.utils import parser   # <<< NOVO: importa o parser centralizado
 import logging
 
 logger = logging.getLogger(__name__)
@@ -41,62 +41,32 @@ def import_planilha():
         if empresa == "delnext":
             file.seek(0)
             if file.filename.lower().endswith('.csv'):
-                df = pd.read_csv(file, header=1)
+                df = pd.read_csv(file)
             else:
-                df = pd.read_excel(file, header=1)
-            col_end = [c for c in df.columns if 'morada' in c.lower()]
-            col_cep = [
-                c for c in df.columns
-                if 'código postal' in c.lower() or 'codigo postal' in c.lower()
-            ]
-            if not col_end or not col_cep:
-                return jsonify({
-                    "success": False,
-                    "msg": "Colunas 'Morada' e 'Código Postal' obrigatórias"
-                }), 400
-            enderecos = df[col_end[0]].astype(str).tolist()
-            ceps = df[col_cep[0]].astype(str).tolist()
+                df = pd.read_excel(file)
+            enderecos, ceps, order_numbers = parser.parse_delnext(df)
 
         elif empresa == "paack":
             file.seek(0)
             if file.filename.lower().endswith(('.csv', '.txt')):
                 conteudo = file.read().decode("utf-8")
-                linhas = [linha.strip() for linha in conteudo.splitlines() if linha.strip()]
-                regex_cep = re.compile(r'(\d{4}-\d{3})')
-                i = 0
-                # NOVO: Pega sempre blocos de 4 linhas: 1=endereço, 2/3=ignorar, 4=ID
-                while i + 3 < len(linhas):
-                    endereco = linhas[i]
-                    order = linhas[i+3]
-                    cep_match = regex_cep.search(endereco)
-                    cep = cep_match.group(1) if cep_match else ""
-                    enderecos.append(endereco)
-                    ceps.append(cep)
-                    order_numbers.append(order)
-                    i += 4
+                enderecos, ceps, order_numbers = parser.parse_paack(conteudo)
             else:
-                df = pd.read_excel(file, header=0)
-                col_end = [
-                    c for c in df.columns
-                    if 'endereco' in c.lower() or 'address' in c.lower()
-                ]
-                col_cep = [
-                    c for c in df.columns
-                    if 'cep' in c.lower() or 'postal' in c.lower()
-                ]
-                if not col_end or not col_cep:
-                    return jsonify({
-                        "success": False,
-                        "msg": "Colunas de endereço e CEP não encontradas"
-                    }), 400
-                enderecos = df[col_end[0]].astype(str).tolist()
-                ceps = df[col_cep[0]].astype(str).tolist()
-                # Se tiver ID do pacote em coluna, acrescente aqui
+                df = pd.read_excel(file)
+                # Se algum dia Paack aceitar xlsx estruturado, pode criar parser.parse_paack_xlsx(df)
+                # Por enquanto: não implementado, mas não quebra
+                enderecos, ceps, order_numbers = [], [], []
 
         else:
             return jsonify({
                 "success": False,
                 "msg": "Empresa não suportada"
+            }), 400
+
+        if not enderecos:
+            return jsonify({
+                "success": False,
+                "msg": "Não foi possível identificar endereços na planilha enviada."
             }), 400
 
         if not order_numbers:
