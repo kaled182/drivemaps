@@ -37,6 +37,10 @@ def validar_linha_endpoint():
 
         if not endereco or len(endereco) < 5:
             return jsonify({"success": False, "msg": "Endereço inválido ou muito curto."}), 400
+        
+        # Validação extra do CEP
+        if cep and not validar_cep(cep):
+            return jsonify({"success": False, "msg": "Código Postal inválido (deve ser no formato 1234-567)."}), 400
 
         lista = session.get('lista', [])
         if not (0 <= idx < len(lista)):
@@ -138,6 +142,10 @@ def add_address_endpoint():
 
         if not endereco or not cep:
             return jsonify({"success": False, "msg": "Endereço e CEP são obrigatórios."}), 400
+
+        # Validação extra do CEP
+        if not validar_cep(cep):
+            return jsonify({"success": False, "msg": "Código Postal inválido (deve ser no formato 1234-567)."}), 400
 
         lista = session.get('lista', [])
         
