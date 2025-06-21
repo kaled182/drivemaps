@@ -1,30 +1,29 @@
-# Exported from Render on 2025-06-21T16:17:51Z
 services:
 - type: web
   name: drivemaps
-  runtime: python
+  env: python
   repo: https://github.com/kaled182/drivemaps
   plan: starter
-  envVars:
-  - key: SESSION_TYPE
-    sync: false
-  - key: SESSION_COOKIE_SECURE
-    sync: false
-  - key: SESSION_COOKIE_NAME
-    sync: false
-  - key: SECRET_KEY
-    sync: false
-  - key: MAP_ID
-    sync: false
-  - key: MAPBOX_TOKEN
-    sync: false
-  - key: GOOGLE_API_KEY
-    sync: false
-  - key: FLASK_ENV
-    sync: false
-  region: frankfurt
   buildCommand: pip install -r requirements.txt
   startCommand: gunicorn app:app
   pythonVersion: 3.11.9
+  region: frankfurt
   autoDeployTrigger: commit
+  envVars:
+    - key: SESSION_TYPE
+      sync: false
+    - key: SESSION_COOKIE_SECURE
+      sync: false
+    - key: SESSION_COOKIE_NAME
+      sync: false
+    - key: SECRET_KEY
+      sync: false
+    - key: MAP_ID
+      sync: false
+    - key: MAPBOX_TOKEN
+      sync: false
+    - key: GOOGLE_API_KEY
+      sync: false
+    - key: FLASK_ENV
+      sync: false
 version: "1"
