@@ -1,4 +1,5 @@
-from flask import Blueprint, render_template, request, session, jsonify
+# app/routes/preview.py
+from flask import Blueprint, render_template, request, session, redirect, url_for, flash
 from app.utils.google import valida_rua_google
 from app.utils.helpers import normalizar, registro_unico, CORES_IMPORTACAO
 from app.utils import parser
@@ -6,87 +7,72 @@ import os
 import logging
 
 preview_bp = Blueprint('preview', __name__)
+logger = logging.getLogger(__name__)
 
-@preview_bp.route("/", methods=["GET"], endpoint="home")
-def index():
+@preview_bp.route("/", methods=["GET"])
+def home():
+    """Exibe a página inicial e limpa a sessão para um novo começo."""
+    session.clear()
     return render_template("index.html")
 
 @preview_bp.route('/preview', methods=['GET', 'POST'])
 def preview():
+    """
+    Página de visualização:
+    - POST: Processa dados do formulário, salva na sessão e redireciona (PRG).
+    - GET: Exibe os dados salvos na sessão para o usuário.
+    """
     try:
-        # POST: processa novo texto enviado, valida endereços
         if request.method == "POST":
-            if 'preview_loaded' not in session:
-                session.clear()
-                session['lista'] = []
-                session['preview_loaded'] = True
-                session.modified = True
-
-            enderecos_brutos = request.form.get('enderecos', '')
-            if not enderecos_brutos.strip():
-                raise ValueError("Nenhum endereço fornecido")
+            session.clear()  # Sempre começa limpo
+            
+            enderecos_brutos = request.form.get('enderecos', '').strip()
+            if not enderecos_brutos:
+                raise ValueError("Nenhum endereço fornecido no formulário.")
 
             enderecos, ceps, order_numbers = parser.parse_paack(enderecos_brutos)
-
-            logging.warning(f"[preview] Entradas extraídas: {len(enderecos)} endereços, {len(ceps)} ceps, {len(order_numbers)} ids")
-            logging.warning(f"[preview] Dados exemplo: {enderecos[:2]}, {ceps[:2]}, {order_numbers[:2]}")
-
             if not enderecos:
-                raise ValueError("Nenhum endereço extraído do texto fornecido. Verifique o formato de entrada (mínimo 4 linhas por pacote Paack).")
+                raise ValueError("Não foi possível extrair endereços do texto. Verifique o formato.")
 
-            importacao_tipo = "paack"
-            lista_preview = []
+            lista_processada = []
             for endereco, cep, numero_pacote in zip(enderecos, ceps, order_numbers):
                 res_google = valida_rua_google(endereco, cep)
-                rua_digitada = endereco.split(',')[0] if endereco else ''
-                rua_google = res_google.get('route_encontrada', '')
-                rua_bate = (
-                    normalizar(rua_digitada) in normalizar(rua_google)
-                    or normalizar(rua_google) in normalizar(rua_digitada)
-                )
-                cep_ok = cep == res_google.get('postal_code_encontrado', '')
-                lista_preview.append({
+                novo_item = {
                     "order_number": numero_pacote,
                     "address": endereco,
                     "cep": cep,
-                    "status_google": res_google.get('status'),
-                    "postal_code_encontrado": res_google.get('postal_code_encontrado', ''),
-                    "endereco_formatado": res_google.get('endereco_formatado', ''),
+                    "status_google": res_google.get('status', 'ERRO'),
                     "latitude": res_google.get('coordenadas', {}).get('lat', ''),
                     "longitude": res_google.get('coordenadas', {}).get('lng', ''),
-                    "rua_google": rua_google,
-                    "cep_ok": cep_ok,
-                    "rua_bate": rua_bate,
+                    "importacao_tipo": "paack",
+                    "cor": CORES_IMPORTACAO.get("paack"),
+                    "postal_code_encontrado": res_google.get('postal_code_encontrado', ''),
+                    "endereco_formatado": res_google.get('endereco_formatado', ''),
+                    "rua_google": res_google.get('route_encontrada', ''),
+                    "cep_ok": cep == res_google.get('postal_code_encontrado', ''),
+                    "rua_bate": normalizar(endereco.split(',')[0]) in normalizar(res_google.get('route_encontrada', '')),
                     "freguesia": res_google.get('sublocality', ''),
-                    "importacao_tipo": importacao_tipo,
-                    "cor": CORES_IMPORTACAO.get(importacao_tipo, "#4285F4")
-                })
+                    "locality": res_google.get('locality', '')
+                }
+                if registro_unico(lista_processada, novo_item):
+                    lista_processada.append(novo_item)
 
-            lista_atual = session.get('lista', [])
-            for novo in lista_preview:
-                if registro_unico(lista_atual, novo):
-                    lista_atual.append(novo)
-
-            # Renumera todos para garantir sequência
-            for i, item in enumerate(lista_atual, 1):
-                item['order_number'] = i
-
-            session['lista'] = lista_atual
+            session['lista'] = lista_processada
             session.modified = True
+            return redirect(url_for('preview.preview'))
 
-        # GET (ou após POST): renderiza preview com o que está na sessão
+        # GET: Renderiza a lista salva na sessão
         lista_atual = session.get('lista', [])
+        origens = list(set(item.get('importacao_tipo', 'manual') for item in lista_atual))
         return render_template(
             "preview.html",
             lista=lista_atual,
             MAPBOX_TOKEN=os.environ.get("MAPBOX_TOKEN", ""),
-            CORES_IMPORTACAO=CORES_IMPORTACAO,
-            origens=list({
-                item.get('importacao_tipo', 'manual')
-                for item in lista_atual
-            })
+            GOOGLE_API_KEY=os.environ.get("GOOGLE_API_KEY", ""),
+            origens=origens
         )
 
     except Exception as e:
-        logging.error(f"[preview] Erro ao processar preview: {str(e)}", exc_info=True)
-        return jsonify({"success": False, "msg": str(e)}), 500
+        logger.error(f"[preview] Erro ao processar: {str(e)}", exc_info=True)
+        flash(f"Houve um erro ao processar os endereços: {e}. Tente novamente.", "danger")
+        return redirect(url_for('preview.home'))
