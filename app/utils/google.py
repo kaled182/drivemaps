@@ -23,19 +23,18 @@ def valida_rua_google(endereco, cep):
     """
     Consulta a API do Google Maps e retorna os dados de geolocalização e
     validação do endereço.
-    
+
     Args:
         endereco (str): Nome da rua/avenida
         cep (str): CEP do endereço
-    
+
     Returns:
         dict: Dados do endereço formatado, coordenadas e componentes
     """
     chave = os.environ.get("GOOGLE_API_KEY")
     if not chave:
         logger.warning(
-            "Google API Key não encontrada nas variáveis de "
-            "ambiente"
+            "Google API Key não encontrada nas variáveis de ambiente"
         )
         return {"status": "API_KEY_MISSING"}
 
@@ -89,11 +88,11 @@ def obter_endereco_por_coordenadas(lat, lng):
     """
     Obtém o endereço formatado a partir de coordenadas geográficas
     usando a API do Google Maps (geocodificação reversa).
-    
+
     Args:
         lat (float): Latitude
         lng (float): Longitude
-    
+
     Returns:
         dict: {
             "status": "OK"|"ERROR",
