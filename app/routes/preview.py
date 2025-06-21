@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, session, jsonify
 from app.utils.google import valida_rua_google
 from app.utils.helpers import normalizar, registro_unico, CORES_IMPORTACAO
-from app.utils import parser  # NOVO: importa o parser central
+from app.utils import parser
 import os
 import logging
 
@@ -24,10 +24,8 @@ def preview():
         if not enderecos_brutos.strip():
             raise ValueError("Nenhum endereço fornecido")
 
-        # Usa o parser centralizado para o formato Paack manual (entrada por textarea)
         enderecos, ceps, order_numbers = parser.parse_paack(enderecos_brutos)
 
-        # DEBUG: Mostra o que foi extraído (vai para o log do Render)
         logging.warning(f"[preview] Entradas extraídas: {len(enderecos)} endereços, {len(ceps)} ceps, {len(order_numbers)} ids")
         logging.warning(f"[preview] Dados exemplo: {enderecos[:2]}, {ceps[:2]}, {order_numbers[:2]}")
 
@@ -78,6 +76,7 @@ def preview():
             "preview.html",
             lista=lista_atual,
             GOOGLE_API_KEY=os.environ.get("GOOGLE_API_KEY", ""),
+            MAPBOX_TOKEN=os.environ.get("MAPBOX_TOKEN", ""),  # <-- ADICIONA O TOKEN MAPBOX
             CORES_IMPORTACAO=CORES_IMPORTACAO,
             origens=list({
                 item.get('importacao_tipo', 'manual')
