@@ -2,151 +2,107 @@
    DriveMaps - Estilos Específicos do Mapa (map.css)
    ========================================================================== */
 
-/* ===== CONTAINER DO MAPA ===== */
+/* ===== CONTAINER PRINCIPAL DO MAPA ===== */
 .map-container {
-  position: relative;
-  height: 50vh;
-  min-height: 300px;
-  background-color: var(--bs-tertiary-bg, #e9ecef);
-  border-radius: 0 0 0.75rem 0.75rem;
-  overflow: hidden;
-  transition: background 0.2s;
+    position: relative;
+    height: 60vh; /* Altura generosa para o mapa */
+    min-height: 400px;
+    background-color: var(--bs-tertiary-bg, #e9ecef);
+    border-radius: 0.75rem;
+    overflow: hidden;
+    transition: background-color 0.2s ease-in-out;
 }
 
-/* ===== MARCADORES CUSTOMIZADOS (MAPBOX) ===== */
-.mapboxgl-marker {
-  /* O Mapbox já faz o posicionamento/z-index */
+#map {
+    width: 100%;
+    height: 100%;
+    background-color: var(--bs-tertiary-bg, #e9ecef);
+    transition: background-color 0.2s ease-in-out;
 }
 
-/* ===== INFOWINDOW (BOTH: MAPBOX E GOOGLE) ===== */
-.map-infowindow {
-  padding: 1rem;
-  font-family: 'Segoe UI', Roboto, Arial, sans-serif;
-  background: var(--bs-body-bg, #fff);
-  border-radius: 0.5rem;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.18);
-  min-width: 180px;
-  transition: background 0.2s, color 0.2s;
-}
-.map-infowindow h6 {
-  font-weight: 600;
-  margin-bottom: 0.5rem;
-  color: var(--primary, #1e88e5);
-}
-.map-infowindow p {
-  margin-bottom: 0.25rem;
-  font-size: 0.95rem;
-}
-
-/* ===== MAPBOX POPUP ===== */
+/* ===== POPUP/INFOWINDOW DO MAPBOX ===== */
 .mapboxgl-popup-content {
-  padding: 0 !important;
-  border-radius: 0.5rem !important;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.18) !important;
-  min-width: 180px;
-  background: var(--bs-body-bg, #fff) !important;
-  color: var(--bs-body-color, #222) !important;
-  transition: background 0.2s, color 0.2s;
+    padding: 1rem !important;
+    font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+    background-color: var(--bs-body-bg) !important;
+    color: var(--bs-body-color) !important;
+    border-radius: 0.5rem !important;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15) !important;
+    min-width: 220px;
+    max-width: 280px;
+    transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
 }
+
+.mapboxgl-popup-content h6 {
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--primary, #1e88e5);
+}
+
+.mapboxgl-popup-content p {
+    margin-bottom: 0.25rem;
+    font-size: 0.9rem;
+}
+
 .mapboxgl-popup-close-button {
-  top: 6px;
-  right: 8px;
+    font-size: 1.5rem;
+    padding: 0 0.5rem;
+    color: var(--bs-secondary-color);
+    transition: color 0.2s ease;
+}
+.mapboxgl-popup-close-button:hover {
+    color: var(--bs-danger);
 }
 
-/* ===== MENSAGEM DE MAPA VAZIO ===== */
+
+/* ===== MENSAGEM DE MAPA VAZIO/ERRO ===== */
 .map-empty-message {
-  position: absolute;
-  top: 45%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 2;
-  background: rgba(255,255,255,0.97);
-  border-radius: 14px;
-  padding: 24px 36px;
-  text-align: center;
-  font-size: 1.1rem;
-  box-shadow: 0 2px 12px #0001;
-  color: var(--bs-body-color, #1e88e5);
-  transition: background 0.2s, color 0.2s;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 2;
+    background-color: var(--bs-body-bg);
+    border: 1px solid var(--bs-border-color-translucent);
+    border-radius: 14px;
+    padding: 2rem;
+    text-align: center;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    color: var(--bs-body-color);
+    transition: background-color 0.2s, color 0.2s;
 }
 
-/* ===== STATUS DO MAPA ===== */
+/* ===== STATUS DO MAPA (CANTO INFERIOR) ===== */
 #map-status {
-  font-family: monospace;
-  color: var(--primary, #1e88e5);
+    font-family: monospace;
+    font-size: 0.8rem;
+    color: var(--bs-secondary-color);
+    background-color: rgba(var(--bs-body-bg-rgb), 0.8);
+    backdrop-filter: blur(2px);
+    transition: color 0.2s, background-color 0.2s;
 }
 
-/* ===== CONTROLES CUSTOMIZADOS DO MAPA ===== */
-.map-controls {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 1000;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+/* ===== CONTROLES DE NAVEGAÇÃO DO MAPBOX ===== */
+.mapboxgl-ctrl-group {
+    background-color: var(--bs-body-bg) !important;
+    border-radius: 0.5rem !important;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.13);
 }
-.map-control-btn {
-  width: 36px;
-  height: 36px;
-  background: var(--bs-body-bg, #fff);
-  border: none;
-  border-radius: 50%;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.13);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background 0.2s, transform 0.15s;
+.mapboxgl-ctrl-group button {
+    background-color: var(--bs-body-bg) !important;
+    transition: background-color 0.2s ease !important;
 }
-.map-control-btn:focus-visible {
-  outline: 2px solid var(--primary-light, #64b5f6);
-  outline-offset: 2px;
+.mapboxgl-ctrl-group button:hover {
+    background-color: var(--bs-tertiary-bg) !important;
 }
-.map-control-btn:hover {
-  background: var(--primary-light, #e3f2fd);
-  transform: scale(1.08);
-}
-
-/* ===== CLUSTER DE MARCADORES ===== */
-.marker-cluster {
-  background-clip: padding-box;
-  border-radius: 50%;
-}
-.marker-cluster div {
-  width: 30px;
-  height: 30px;
-  margin-left: 5px;
-  margin-top: 5px;
-  background-color: var(--primary, #1e88e5);
-  color: white;
-  font-weight: bold;
-  font-size: 13px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.marker-cluster span {
-  line-height: 30px;
+.mapboxgl-ctrl-group button .mapboxgl-ctrl-icon {
+    filter: invert(var(--bs-tertiary-bg) == #f4f7fa ? 0 : 1);
 }
 
 /* ===== RESPONSIVIDADE ===== */
 @media (max-width: 768px) {
-  .map-container { height: 40vh; }
-  .map-infowindow { max-width: 200px; padding: 0.75rem; }
-}
-@media (max-width: 576px) {
-  .map-container { height: 35vh; }
-}
-
-/* ===== MAPA SEMPRE VISÍVEL ===== */
-#map {
-  width: 100%;
-  height: 100%;
-  min-height: 300px;
-  border-radius: 20px;
-  background: var(--bs-tertiary-bg, #e9ecef);
-  box-shadow: 0 2px 20px #0001;
-  transition: background 0.2s;
+    .map-container {
+        height: 50vh;
+        min-height: 350px;
+    }
 }
