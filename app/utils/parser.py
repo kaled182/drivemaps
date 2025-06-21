@@ -16,8 +16,7 @@ def parse_paack(text):
     i = 0
     while i < len(linhas) - 3:
         endereco_linha = linhas[i]
-        # Exemplo esperado: 
-        # linha[i] = endereço, linha[i+1] = ignorar, linha[i+2] = endereço repetido, linha[i+3] = número sequencial
+        # Formato: linha[i] = endereço, linha[i+1] = ignorar, linha[i+2] = endereço repetido, linha[i+3] = número sequencial
         if linhas[i+2] == endereco_linha:
             order = linhas[i+3].strip()
             cep_match = regex_cep.search(endereco_linha)
@@ -37,7 +36,7 @@ def parse_delnext(df):
     Retorna listas: enderecos, ceps, order_numbers (sequenciais).
     """
     if df.shape[0] > 1:
-        df = df.iloc[1:]  # Ignora primeira linha
+        df = df.iloc[1:]  # Ignora a primeira linha, se houver cabeçalho
     col_end = [c for c in df.columns if 'morada' in c.lower()]
     col_cep = [c for c in df.columns if 'código postal' in c.lower() or 'codigo postal' in c.lower()]
     enderecos = df[col_end[0]].astype(str).tolist() if col_end else []
@@ -45,5 +44,5 @@ def parse_delnext(df):
     order_numbers = [str(i+1) for i in range(len(enderecos))]
     return enderecos, ceps, order_numbers
 
-# Se quiser adicionar outros tipos, basta criar funções neste estilo:
+# Exemplo de expansão para outros formatos:
 # def parse_nome_empresa(df): ...
