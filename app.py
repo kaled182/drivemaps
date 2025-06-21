@@ -12,7 +12,7 @@ def configure_logging():
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(),
-            logging.FileHandler('app.log')  # Log para arquivo
+            logging.FileHandler('app.log')
         ]
     )
 
@@ -25,7 +25,6 @@ def verify_config(app):
         'SESSION_TYPE': 'Tipo de armazenamento de sessão (filesystem/redis)',
         'SESSION_COOKIE_NAME': 'Nome do cookie de sessão'
     }
-    
     try:
         missing = [key for key in required_configs if not app.config.get(key)]
         if missing:
@@ -33,11 +32,9 @@ def verify_config(app):
             error_msg = f"Configurações obrigatórias faltando:\n{error_details}"
             logging.error(error_msg)
             raise ValueError("Configurações essenciais não encontradas")
-        
         # Verificação adicional da SECRET_KEY
         if 'sua-chave-secreta' in app.config['SECRET_KEY']:
-            logging.warning("AVISO: SECRET_KEY padrão em uso - INSECURO para produção!")
-        
+            logging.warning("AVISO: SECRET_KEY padrão em uso - INSEGURO para produção!")
         logging.info("✅ Configurações verificadas com sucesso")
         return True
     except Exception as e:
@@ -50,16 +47,12 @@ def start_server(app):
         host = os.getenv('HOST', '0.0.0.0')
         port = int(os.getenv('PORT', 10000))
         debug_mode = app.config.get('DEBUG', False)
-        
-        # Ajustes para ambiente de produção
         if app.config.get('FLASK_ENV') == 'production':
             debug_mode = False
             logging.info("🏭 Modo produção ativado")
-        
         logging.info(f"🔑 SECRET_KEY: {'Configurada' if app.config['SECRET_KEY'] else 'Faltando'}")
         logging.info(f"🗺️ MAP_ID: {app.config.get('MAP_ID', 'Não configurado')}")
         logging.info(f"🚀 Iniciando servidor em http://{host}:{port}")
-        
         app.run(
             host=host,
             port=port,
@@ -70,21 +63,17 @@ def start_server(app):
         logging.error(f"❌ Falha ao iniciar servidor: {str(e)}")
         raise
 
+# *** ESSENCIAL PARA DEPLOY ***
+# Isto garante que Gunicorn/Render encontrará o objeto "app"
+app = create_app()
+
 if __name__ == '__main__':
-    # Configura logging antes de qualquer operação
     configure_logging()
-    
     try:
-        # Carrega variáveis de ambiente
-        load_dotenv()  # Apenas para desenvolvimento
-        
-        # Cria e configura a aplicação
+        load_dotenv()
+        # Recria a app só para garantir variáveis de ambiente locais
         app = create_app()
-        
-        # Verifica configurações
         verify_config(app)
-        
-        # Inicia o servidor
         start_server(app)
     except Exception as e:
         logging.critical(f"⛔ Falha crítica na inicialização: {str(e)}")
