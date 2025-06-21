@@ -111,6 +111,7 @@ def create_app():
             "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; "
             "img-src * data: https://api.mapbox.com https://events.mapbox.com; "
             "connect-src 'self' https://api.mapbox.com https://events.mapbox.com https://maps.googleapis.com https://maps.gstatic.com https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
+            "worker-src 'self' blob:;"
         )
         return response
 
