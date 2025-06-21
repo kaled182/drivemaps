@@ -1,95 +1,142 @@
-# app/routes/importacao.py
-
-from flask import Blueprint, request, session, redirect, url_for
+from flask import Blueprint, request, jsonify, session
 import pandas as pd
-from app.utils.google import valida_rua_google_cache
+from app.utils.google import valida_rua_google
 from app.utils.helpers import normalizar, registro_unico, cor_por_tipo
+from app.utils import parser
 import logging
 
 logger = logging.getLogger(__name__)
 importacao_bp = Blueprint('importacao', __name__)
+
 ALLOWED_EXTENSIONS = {'csv', 'xls', 'xlsx', 'txt'}
 
 def extensao_permitida(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    """Verifica se o arquivo tem extensão permitida."""
+    return ('.' in filename and 
+            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS)
 
 @importacao_bp.route('/import_planilha', methods=['POST'])
 def import_planilha():
     """
-    Processa o upload do arquivo, salva os dados na sessão e redireciona
-    para a página de visualização.
+    Endpoint para importar uma planilha e extrair endereços, ceps e order_numbers.
+    Suporta as empresas: Delnext (xls/xlsx/csv), Paack (csv/txt).
+    Retorna lista de endereços com dados normalizados e geolocalizados.
     """
     try:
         file = request.files.get('planilha')
         empresa = request.form.get('empresa', '').lower()
 
-        if not file or not empresa or not extensao_permitida(file.filename):
-            # Idealmente, aqui se usaria flash messages para notificar o erro
-            return redirect(url_for('preview.home'))
+        if not file or not empresa:
+            return jsonify({
+                "success": False,
+                "msg": "Arquivo ou empresa não especificados"
+            }), 400
 
-        # Limpa a sessão para garantir que é uma importação nova
-        session['lista'] = []
+        if not extensao_permitida(file.filename):
+            return jsonify({
+                "success": False,
+                "msg": "Tipo de arquivo não permitido"
+            }), 400
 
-        df = None
-        try:
-            header_row = 1 if empresa == 'delnext' else 0
-            if file.filename.endswith(('.xlsx', '.xls')):
-                df = pd.read_excel(file, header=header_row)
-            else:
-                df = pd.read_csv(file, header=header_row, sep=None, engine='python', on_bad_lines='skip')
-        except Exception as e:
-            logger.error(f"Erro ao ler arquivo para {empresa}: {e}")
-            return redirect(url_for('preview.home'))
-
-        if df.empty:
-            return redirect(url_for('preview.home'))
-
-        # Mapeamento flexível de colunas
-        df.columns = [str(c).lower().strip() for c in df.columns]
-        nomes_col_end = ['endereco', 'morada', 'address']
-        nomes_col_cep = ['cep', 'código postal', 'codigo postal', 'postal_code']
+        logger.info(f"Importação iniciada para empresa: {empresa}")
         
-        col_end = next((c for c in df.columns if c in nomes_col_end), None)
-        col_cep = next((c for c in df.columns if c in nomes_col_cep), None)
+        # Suporte para custom -> delnext
+        if empresa == "custom":
+            empresa = "delnext"
 
-        if not col_end or not col_cep:
-            return redirect(url_for('preview.home'))
+        enderecos, ceps, order_numbers = [], [], []
 
-        # Processamento das linhas
-        lista_importada = []
-        for _, row in df.iterrows():
-            endereco = str(row[col_end]).strip()
-            cep = str(row[col_cep]).strip()
-            if not endereco or not cep: continue
+        # Delnext: aceita xlsx, xls, csv
+        if empresa == "delnext":
+            file.seek(0)
+            if file.filename.lower().endswith('.csv'):
+                df = pd.read_csv(file)
+            else:
+                df = pd.read_excel(file)
+            enderecos, ceps, order_numbers = parser.parse_delnext(df)
 
-            res_google = valida_rua_google_cache(endereco, cep)
+        # Paack: apenas CSV ou TXT
+        elif empresa == "paack":
+            file.seek(0)
+            if file.filename.lower().endswith(('.csv', '.txt')):
+                conteudo = file.read().decode("utf-8")
+                enderecos, ceps, order_numbers = parser.parse_paack(conteudo)
+            else:
+                return jsonify({
+                    "success": False,
+                    "msg": "Para Paack, apenas arquivos CSV ou TXT são suportados"
+                }), 400
+
+        else:
+            return jsonify({
+                "success": False,
+                "msg": "Empresa não suportada"
+            }), 400
+
+        if not enderecos:
+            return jsonify({
+                "success": False,
+                "msg": "Não foi possível identificar endereços na planilha enviada."
+            }), 400
+
+        # Se não vier order_numbers, gera sequencial
+        if not order_numbers:
+            order_numbers = [str(i + 1) for i in range(len(enderecos))]
+
+        # Recupera lista atual da sessão (para não duplicar)
+        lista_atual = session.get('lista', [])
+
+        for endereco, cep, order_number in zip(enderecos, ceps, order_numbers):
+            res_google = valida_rua_google(endereco, cep)
+            rua_digitada = endereco.split(',')[0] if endereco else ''
+            rua_google = res_google.get('route_encontrada', '')
+            rua_bate = (
+                normalizar(rua_digitada) in normalizar(rua_google)
+                or normalizar(rua_google) in normalizar(rua_digitada)
+            )
+            cep_ok = cep == res_google.get('postal_code_encontrado', '')
+
             novo = {
-                "order_number": "", "address": endereco, "cep": cep,
-                "status_google": res_google.get('status', 'NÃO VALIDADO'),
-                "latitude": res_google.get('coordenadas', {}).get('lat', ''),
-                "longitude": res_google.get('coordenadas', {}).get('lng', ''),
-                "importacao_tipo": empresa, "cor": cor_por_tipo(empresa),
+                "order_number": order_number,
+                "address": endereco,
+                "cep": cep,
+                "status_google": res_google.get('status'),
                 "postal_code_encontrado": res_google.get('postal_code_encontrado', ''),
                 "endereco_formatado": res_google.get('endereco_formatado', ''),
-                "rua_google": res_google.get('route_encontrada', ''),
-                "cep_ok": cep == res_google.get('postal_code_encontrado', ''),
-                "rua_bate": normalizar(endereco.split(',')[0]) in normalizar(res_google.get('route_encontrada', '')),
-                "freguesia": res_google.get('sublocality', '')
+                "latitude": res_google.get('coordenadas', {}).get('lat', ''),
+                "longitude": res_google.get('coordenadas', {}).get('lng', ''),
+                "rua_google": rua_google,
+                "cep_ok": cep_ok,
+                "rua_bate": rua_bate,
+                "freguesia": res_google.get('sublocality', ''),
+                "importacao_tipo": empresa,
+                "cor": cor_por_tipo(empresa)
             }
-            if registro_unico(lista_importada, novo):
-                lista_importada.append(novo)
-        
-        # Reindexação de 'order_number'
-        for i, item in enumerate(lista_importada, 1):
-            prefix = 'D' if item['importacao_tipo'] == 'delnext' else 'P'
-            item['order_number'] = f"{prefix}{i}"
 
-        session['lista'] = lista_importada
+            if registro_unico(lista_atual, novo):
+                lista_atual.append(novo)
+
+        # Atualiza order_number sequencial
+        for i, item in enumerate(lista_atual, 1):
+            item['order_number'] = i
+
+        # Salva na sessão
+        session['lista'] = lista_atual
         session.modified = True
-        
-        # --- MUDANÇA PRINCIPAL: REDIRECIONA PARA A PÁGINA DO MAPA ---
-        return redirect(url_for('preview.preview_page'))
+
+        return jsonify({
+            "success": True,
+            "lista": lista_atual,
+            "origens": list({
+                item.get('importacao_tipo', 'manual')
+                for item in lista_atual
+            }),
+            "total": len(lista_atual)
+        })
 
     except Exception as e:
-        logger.error(f"Erro crítico na importação: {str(e)}", exc_info=True)
-        return redirect(url_for('preview.home'))
+        logger.error(f"Erro na importação: {str(e)}", exc_info=True)
+        return jsonify({
+            "success": False,
+            "msg": f"Erro ao importar: {str(e)}"
+        }), 500
