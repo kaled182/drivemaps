@@ -1,110 +1,118 @@
-/* Estilos específicos para o mapa e seus componentes */
+/* ==========================================================================
+   DriveMaps - Estilos Específicos do Mapa (map.css)
+   ========================================================================== */
 
-/* Container do mapa */
+/* ===== CONTAINER DO MAPA ===== */
 .map-container {
   position: relative;
   height: 50vh;
   min-height: 300px;
-  background-color: #e9ecef;
+  background-color: var(--bs-tertiary-bg, #e9ecef);
   border-radius: 0 0 0.75rem 0.75rem;
   overflow: hidden;
+  transition: background 0.2s;
 }
 
-/* Marcadores personalizados Mapbox */
+/* ===== MARCADORES CUSTOMIZADOS (MAPBOX) ===== */
 .mapboxgl-marker {
-  /* Posição e z-index garantidos pelo próprio Mapbox */
+  /* O Mapbox já faz o posicionamento/z-index */
 }
 
-/* InfoWindow customizado (usado tanto no Mapbox quanto Google) */
+/* ===== INFOWINDOW (BOTH: MAPBOX E GOOGLE) ===== */
 .map-infowindow {
   padding: 1rem;
-  font-family: 'Segoe UI', Roboto, sans-serif;
-  background: white;
+  font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+  background: var(--bs-body-bg, #fff);
   border-radius: 0.5rem;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.18);
   min-width: 180px;
+  transition: background 0.2s, color 0.2s;
 }
-
 .map-infowindow h6 {
   font-weight: 600;
   margin-bottom: 0.5rem;
   color: var(--primary, #1e88e5);
 }
-
 .map-infowindow p {
   margin-bottom: 0.25rem;
   font-size: 0.95rem;
 }
 
-/* Mapbox Popup Custom (ajuste visual se desejar) */
+/* ===== MAPBOX POPUP ===== */
 .mapboxgl-popup-content {
   padding: 0 !important;
   border-radius: 0.5rem !important;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.2) !important;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.18) !important;
   min-width: 180px;
+  background: var(--bs-body-bg, #fff) !important;
+  color: var(--bs-body-color, #222) !important;
+  transition: background 0.2s, color 0.2s;
 }
-
 .mapboxgl-popup-close-button {
   top: 6px;
   right: 8px;
 }
 
-/* Mensagem de mapa vazio */
+/* ===== MENSAGEM DE MAPA VAZIO ===== */
 .map-empty-message {
   position: absolute;
-  top: 40%;
+  top: 45%;
   left: 50%;
   transform: translate(-50%, -50%);
   z-index: 2;
-  background: rgba(255,255,255,0.95);
-  border-radius: 12px;
+  background: rgba(255,255,255,0.97);
+  border-radius: 14px;
   padding: 24px 36px;
   text-align: center;
   font-size: 1.1rem;
-  box-shadow: 0 2px 10px #0001;
+  box-shadow: 0 2px 12px #0001;
+  color: var(--bs-body-color, #1e88e5);
+  transition: background 0.2s, color 0.2s;
 }
 
-/* Status do mapa */
+/* ===== STATUS DO MAPA ===== */
 #map-status {
   font-family: monospace;
+  color: var(--primary, #1e88e5);
 }
 
-/* Controles do mapa */
+/* ===== CONTROLES CUSTOMIZADOS DO MAPA ===== */
 .map-controls {
   position: absolute;
-  top: 10px;
-  right: 10px;
+  top: 12px;
+  right: 12px;
   z-index: 1000;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
-
 .map-control-btn {
   width: 36px;
   height: 36px;
-  background: white;
+  background: var(--bs-body-bg, #fff);
   border: none;
   border-radius: 50%;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.13);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 0.2s, transform 0.15s;
 }
-
+.map-control-btn:focus-visible {
+  outline: 2px solid var(--primary-light, #64b5f6);
+  outline-offset: 2px;
+}
 .map-control-btn:hover {
-  background: #f1f1f1;
-  transform: scale(1.05);
+  background: var(--primary-light, #e3f2fd);
+  transform: scale(1.08);
 }
 
-/* Cluster de marcadores */
+/* ===== CLUSTER DE MARCADORES ===== */
 .marker-cluster {
   background-clip: padding-box;
   border-radius: 50%;
 }
-
 .marker-cluster div {
   width: 30px;
   height: 30px;
@@ -113,40 +121,32 @@
   background-color: var(--primary, #1e88e5);
   color: white;
   font-weight: bold;
-  font-size: 12px;
+  font-size: 13px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-
 .marker-cluster span {
   line-height: 30px;
 }
 
-/* Responsividade */
+/* ===== RESPONSIVIDADE ===== */
 @media (max-width: 768px) {
-  .map-container {
-    height: 40vh;
-  }
-  .map-infowindow {
-    max-width: 200px;
-    padding: 0.75rem;
-  }
+  .map-container { height: 40vh; }
+  .map-infowindow { max-width: 200px; padding: 0.75rem; }
 }
-
 @media (max-width: 576px) {
-  .map-container {
-    height: 35vh;
-  }
+  .map-container { height: 35vh; }
 }
 
-/* GARANTIR O MAPA SEMPRE VISÍVEL */
+/* ===== MAPA SEMPRE VISÍVEL ===== */
 #map {
   width: 100%;
   height: 100%;
   min-height: 300px;
   border-radius: 20px;
-  background: #e9ecef;
+  background: var(--bs-tertiary-bg, #e9ecef);
   box-shadow: 0 2px 20px #0001;
+  transition: background 0.2s;
 }
