@@ -5,369 +5,227 @@ from app.utils.google import (
     valida_rua_google_cache,
     obter_endereco_por_coordenadas,
 )
-from app.utils.helpers import normalizar, sanitizar_endereco, validar_cep
+from app.utils.helpers import normalizar, sanitizar_endereco, validar_cep, cor_por_tipo
 import logging
 from typing import Dict, Any
 
 api_routes = Blueprint('api', __name__)
 logger = logging.getLogger(__name__)
 
+# --- ENDPOINTS PRINCIPAIS DA API ---
 
 @api_routes.route('/api/validar-linha', methods=['POST'])
-def validar_linha():
-    """Valida uma linha de endereço usando a API do Google Maps."""
+def validar_linha_endpoint():
+    """
+    Valida um endereço (novo ou existente) a partir do seu índice na lista da sessão.
+    Recebe um índice, endereço e CEP, consulta a API do Google e atualiza
+    o item na sessão com os novos dados geocodificados.
+    """
     try:
-        # Validação de entrada
-        if not request.is_json:
-            return jsonify({
-                "success": False,
-                "msg": "Content-Type deve ser application/json"
-            }), 400
         data = request.get_json()
         if not data:
-            return jsonify({
-                "success": False,
-                "msg": "Dados JSON inválidos"
-            }), 400
-        # Extração e validação de parâmetros
-        idx = data.get('idx')
-        endereco_raw = data.get('endereco', '')
+            return jsonify({"success": False, "msg": "Dados JSON inválidos."}), 400
+
+        # Conversão explícita dos tipos para maior robustez
+        try:
+            idx = int(data.get('idx'))
+        except (TypeError, ValueError):
+            return jsonify({"success": False, "msg": "Índice (idx) inválido ou faltando."}), 400
+
+        endereco = sanitizar_endereco(data.get('endereco', ''))
         cep = data.get('cep', '')
-        tipo = data.get('importacao_tipo', 'manual')
-        numero = data.get('numero_pacote')
 
-        # Validações específicas
-        if not endereco_raw or not isinstance(endereco_raw, str):
-            return jsonify({
-                "success": False,
-                "msg": "Endereço é obrigatório"
-            }), 400
+        if not endereco or len(endereco) < 5:
+            return jsonify({"success": False, "msg": "Endereço inválido ou muito curto."}), 400
 
-        # Sanitização
-        endereco = sanitizar_endereco(endereco_raw)
-        if len(endereco) < 5:
-            return jsonify({
-                "success": False,
-                "msg": "Endereço muito curto"
-            }), 400
+        lista = session.get('lista', [])
+        if not (0 <= idx < len(lista)):
+            return jsonify({"success": False, "msg": "Índice fora do alcance da lista."}), 404
+        
+        item_para_atualizar = lista[idx]
 
-        # Validação de CEP se fornecido
-        if cep and not validar_cep(cep):
-            return jsonify({
-                "success": False,
-                "msg": "Formato de CEP inválido (deve ser xxxx-xxx)"
-            }), 400
-
-        # Validação de tipo
-        tipos_validos = ['manual', 'delnext', 'paack']
-        if tipo not in tipos_validos:
-            tipo = 'manual'
-
-        # Geração de número automático se não fornecido
-        if numero is None:
-            numero = str(
-                idx + 1
-                if idx is not None
-                else len(session.get('lista', [])) + 1
-            )
-
-        # Validação com Google Maps
-        resultado = valida_rua_google_cache(endereco, cep)
-        rua_digitada = endereco.split(',')[0] if endereco else ''
-        rua_google = resultado.get('route_encontrada', '')
-        cep_ok = (
-            cep == resultado.get('postal_code_encontrado', '')
-            if cep else True
-        )
-        rua_bate = _comparar_ruas(rua_digitada, rua_google)
-        cores_tipo = {
-            'manual': "#0074D9",
-            'delnext': "#FF851B",
-            'paack': "#2ECC40"
-        }
-        cor = cores_tipo.get(tipo, "#B10DC9")
-        novo = {
-            "order_number": str(numero),
+        resultado_google = valida_rua_google_cache(endereco, cep)
+        
+        item_para_atualizar.update({
             "address": endereco,
             "cep": cep,
-            "status_google": resultado.get('status', 'ERROR'),
-            "postal_code_encontrado": resultado.get(
-                'postal_code_encontrado', ''
-            ),
-            "endereco_formatado": resultado.get('endereco_formatado', ''),
-            "latitude": resultado.get('coordenadas', {}).get('lat'),
-            "longitude": resultado.get('coordenadas', {}).get('lng'),
-            "rua_google": rua_google,
-            "cep_ok": cep_ok,
-            "rua_bate": rua_bate,
-            "freguesia": resultado.get('sublocality', ''),
-            "locality": resultado.get('locality', ''),
-            "importacao_tipo": tipo,
-            "cor": cor,
-            "error": (
-                resultado.get('error', '')
-                if resultado.get('status') != 'OK' else ''
-            )
-        }
+            "status_google": resultado_google.get('status', 'ERRO'),
+            "postal_code_encontrado": resultado_google.get('postal_code_encontrado', ''),
+            "endereco_formatado": resultado_google.get('endereco_formatado', ''),
+            "latitude": resultado_google.get('coordenadas', {}).get('lat'),
+            "longitude": resultado_google.get('coordenadas', {}).get('lng'),
+            "rua_google": resultado_google.get('route_encontrada', ''),
+            "cep_ok": cep == resultado_google.get('postal_code_encontrado', ''),
+            "rua_bate": _comparar_ruas(endereco.split(',')[0], resultado_google.get('route_encontrada', '')),
+            "freguesia": resultado_google.get('sublocality', ''),
+            "locality": resultado_google.get('locality', '')
+        })
+        
+        session['lista'] = lista
+        session.modified = True
 
-        # Atualização da sessão
+        return jsonify({"success": True, "item": item_para_atualizar})
+
+    except Exception as e:
+        logger.error(f"Erro ao validar linha: {str(e)}", exc_info=True)
+        return jsonify({"success": False, "msg": "Erro interno do servidor ao validar."}), 500
+
+
+@api_routes.route('/api/reverse-geocode', methods=['POST'])
+def reverse_geocode_endpoint():
+    """
+    Recebe coordenadas (lat, lng) e um índice, encontra o endereço correspondente
+    e atualiza o item na sessão. Essencial para a funcionalidade de arrastar o PIN.
+    """
+    try:
+        data = request.get_json()
+        try:
+            idx = int(data.get('idx'))
+            lat = float(data.get('lat'))
+            lng = float(data.get('lng'))
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'msg': 'Parâmetros idx, lat e lng são obrigatórios e devem ser numéricos.'}), 400
+
         lista = session.get('lista', [])
-        if idx is not None and 0 <= idx < len(lista):
-            lista[idx] = novo
-            indice_retorno = idx
-        else:
-            lista.append(novo)
-            indice_retorno = len(lista) - 1
+        if not (0 <= idx < len(lista)):
+            return jsonify({'success': False, 'msg': 'Índice fora do alcance.'}), 404
+
+        resultado = obter_endereco_por_coordenadas(lat, lng)
+        if resultado.get('status') != 'OK':
+            return jsonify({'success': False, 'msg': resultado.get('error', 'Endereço não encontrado para estas coordenadas.')}), 404
+        
+        item_atualizado = lista[idx]
+        novo_endereco = resultado.get('address', '')
+        novo_cep = resultado.get('postal_code', '')
+
+        item_atualizado.update({
+            "latitude": lat,
+            "longitude": lng,
+            "address": novo_endereco,
+            "cep": novo_cep,
+            "status_google": "OK",
+            "postal_code_encontrado": novo_cep,
+            "endereco_formatado": novo_endereco,
+            "cep_ok": True,
+            "rua_bate": True,
+            "freguesia": resultado.get('sublocality', ''),
+            "locality": resultado.get('locality', '')
+        })
 
         session['lista'] = lista
         session.modified = True
 
-        return jsonify({
-            "success": True,
-            "item": novo,
-            "idx": indice_retorno,
-            "total": len(lista)
-        })
-
-    except Exception as e:
-        logger.error(f"Erro ao validar linha: {str(e)}", exc_info=True)
-        return jsonify({
-            "success": False,
-            "msg": "Erro interno do servidor"
-        }), 500
-
-
-@api_routes.route('/api/session-data', methods=['GET'])
-def session_data():
-    """Retorna dados da sessão atual."""
-    try:
-        lista = session.get('lista', [])
-
-        # Estatísticas
-        estatisticas = _calcular_estatisticas(lista)
-
-        return jsonify({
-            "success": True,
-            "lista": lista,
-            "total": len(lista),
-            "origens": list({
-                item.get("importacao_tipo", "manual")
-                for item in lista
-            }),
-            "estatisticas": estatisticas
-        })
-
-    except Exception as e:
-        logger.error(f"Erro ao obter dados da sessão: {str(e)}")
-        return jsonify({
-            "success": False,
-            "msg": "Erro ao carregar dados"
-        }), 500
-
-
-@api_routes.route('/api/reverse-geocode', methods=['POST'])
-def reverse_geocode():
-    """Proxy seguro para reverse geocoding do Google Maps."""
-    try:
-        if not request.is_json:
-            return jsonify({
-                'success': False,
-                'msg': 'Content-Type deve ser application/json'
-            }), 400
-        data = request.get_json()
-        if not data:
-            return jsonify({
-                'success': False,
-                'msg': 'Dados JSON inválidos'
-            }), 400
-
-        # Validação de parâmetros
-        idx = data.get('idx')
-        lat = data.get('lat')
-        lng = data.get('lng')
-
-        if any(param is None for param in [idx, lat, lng]):
-            return jsonify({
-                'success': False,
-                'msg': 'Parâmetros idx, lat e lng são obrigatórios'
-            }), 400
-
-        # Validação de tipos e ranges
-        try:
-            idx = int(idx)
-            lat = float(lat)
-            lng = float(lng)
-            if not (-90 <= lat <= 90) or not (-180 <= lng <= 180):
-                return jsonify({
-                    'success': False,
-                    'msg': 'Coordenadas fora do range válido'
-                }), 400
-        except (ValueError, TypeError):
-            return jsonify({
-                'success': False,
-                'msg': 'Coordenadas devem ser numéricas válidas'
-            }), 400
-
-        # Chamada para a API do Google
-        resultado = obter_endereco_por_coordenadas(lat, lng)
-        if resultado.get('status') != 'OK':
-            error_msg = resultado.get('error', 'Endereço não encontrado')
-            return jsonify({'success': False, 'msg': error_msg}), 404
-
-        # Atualização da sessão
-        lista = session.get('lista', [])
-        if 0 <= idx < len(lista):
-            lista[idx].update({
-                "latitude": lat,
-                "longitude": lng,
-                "endereco_formatado": resultado.get('address', ''),
-                "postal_code_encontrado": resultado.get('postal_code', '')
-            })
-            session['lista'] = lista
-            session.modified = True
-
-        return jsonify({
-            "success": True,
-            "address": resultado.get('address', ''),
-            "cep": resultado.get('postal_code', ''),
-            "coordinates": {"lat": lat, "lng": lng}
-        })
+        return jsonify({"success": True, "item": item_atualizado})
 
     except Exception as e:
         logger.error(f"Erro no reverse-geocode: {str(e)}", exc_info=True)
-        return jsonify({
-            'success': False,
-            'msg': 'Erro interno do servidor'
-        }), 500
+        return jsonify({'success': False, 'msg': 'Erro interno do servidor.'}), 500
+
+
+@api_routes.route('/api/add-address', methods=['POST'])
+def add_address_endpoint():
+    """
+    Adiciona um novo endereço à lista na sessão. O 'order_number' é gerado automaticamente.
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "msg": "Dados JSON inválidos."}), 400
+
+        endereco = sanitizar_endereco(data.get('endereco', ''))
+        cep = data.get('cep', '')
+        id_fornecido = data.get('id')
+
+        if not endereco or not cep:
+            return jsonify({"success": False, "msg": "Endereço e CEP são obrigatórios."}), 400
+
+        lista = session.get('lista', [])
+        
+        max_id = 0
+        for item in lista:
+            if item.get('importacao_tipo') == 'manual' and str(item.get('order_number')).isdigit():
+                max_id = max(max_id, int(item['order_number']))
+        
+        novo_order_number = str(max_id + 1)
+        
+        novo_item = {
+            "order_number": id_fornecido or novo_order_number,
+            "address": endereco, "cep": cep, "status_google": "Pendente",
+            "latitude": None, "longitude": None, "cor": cor_por_tipo("manual"),
+            "importacao_tipo": "manual", "rua_google": "", "postal_code_encontrado": "",
+            "endereco_formatado": "", "cep_ok": False, "rua_bate": False, "freguesia": "", "locality": ""
+        }
+        
+        lista.append(novo_item)
+        session['lista'] = lista
+        session.modified = True
+
+        return jsonify({"success": True, "item": novo_item, "total": len(lista)})
+    except Exception as e:
+        logger.error(f"Erro ao adicionar novo endereço: {str(e)}", exc_info=True)
+        return jsonify({"success": False, "msg": "Erro interno ao adicionar endereço."}), 500
 
 
 @api_routes.route('/api/limpar-sessao', methods=['POST'])
 def limpar_sessao():
-    """Limpa dados da sessão atual."""
-    try:
-        # Preserva dados importantes como configurações de usuário
-        chaves_preservar = ['user_preferences', 'csrf_token']
-        dados_preservados = {
-            k: session.get(k)
-            for k in chaves_preservar
-            if k in session
-        }
-
-        session.clear()
-
-        # Restaura dados preservados
-        for k, v in dados_preservados.items():
-            session[k] = v
-
-        session['lista'] = []
-        session.modified = True
-
-        return jsonify({"success": True, "msg": "Sessão limpa com sucesso"})
-
-    except Exception as e:
-        logger.error(f"Erro ao limpar sessão: {str(e)}")
-        return jsonify({"success": False, "msg": "Erro ao limpar sessão"}), 500
+    """Limpa todos os endereços da sessão atual."""
+    session['lista'] = []
+    session.modified = True
+    return jsonify({"success": True, "msg": "Sessão limpa com sucesso"})
 
 
-@api_routes.route('/api/estatisticas', methods=['GET'])
-def estatisticas():
-    """Retorna estatísticas detalhadas dos dados na sessão."""
+@api_routes.route('/api/session-data', methods=['GET'])
+def get_session_data():
+    """Retorna todos os dados da sessão, incluindo a lista e estatísticas."""
     try:
         lista = session.get('lista', [])
         stats = _calcular_estatisticas(lista)
-
         return jsonify({
             "success": True,
+            "lista": lista,
             "estatisticas": stats
         })
-
     except Exception as e:
-        logger.error(f"Erro ao calcular estatísticas: {str(e)}")
-        return jsonify({
-            "success": False,
-            "msg": "Erro ao calcular estatísticas"
-        }), 500
+        logger.error(f"Erro ao obter dados da sessão: {str(e)}", exc_info=True)
+        return jsonify({"success": False, "msg": "Erro ao carregar dados da sessão."}), 500
 
+@api_routes.route('/api/estatisticas', methods=['GET'])
+def estatisticas():
+    """Retorna estatísticas detalhadas dos dados na sessão (para dashboards ou uso futuro)."""
+    try:
+        lista = session.get('lista', [])
+        stats = _calcular_estatisticas(lista)
+        return jsonify({"success": True, "estatisticas": stats})
+    except Exception as e:
+        logger.error(f"Erro ao calcular estatísticas: {str(e)}", exc_info=True)
+        return jsonify({"success": False, "msg": "Erro ao calcular estatísticas"}), 500
+
+# --- FUNÇÕES AUXILIARES ---
 
 def _comparar_ruas(rua1: str, rua2: str) -> bool:
-    """Compara duas ruas de forma inteligente."""
+    """Compara duas strings de rua de forma flexível."""
     if not rua1 or not rua2:
         return False
-    norm1 = normalizar(rua1)
-    norm2 = normalizar(rua2)
-
-    # Comparação direta
-    if norm1 == norm2:
-        return True
-
-    # Comparação por inclusão
-    if norm1 in norm2 or norm2 in norm1:
-        return True
-
-    # Comparação por palavras-chave
-    palavras1 = set(norm1.split())
-    palavras2 = set(norm2.split())
-
-    # Remove palavras comuns que não são significativas
-    palavras_ignorar = {
-        'rua', 'avenida', 'av', 'r', 'travessa', 'largo', 'praca', 'pc'
-    }
-    palavras1 -= palavras_ignorar
-    palavras2 -= palavras_ignorar
-
-    if palavras1 and palavras2:
-        # Se pelo menos 50% das palavras coincidem
-        intersecao = palavras1 & palavras2
-        return len(intersecao) >= min(len(palavras1), len(palavras2)) * 0.5
-
-    return False
-
+    norm1, norm2 = normalizar(rua1), normalizar(rua2)
+    return norm1 in norm2 or norm2 in norm1
 
 def _calcular_estatisticas(lista: list) -> Dict[str, Any]:
-    """Calcula estatísticas dos dados na lista."""
-    if not lista:
-        return {
-            "total": 0,
-            "por_tipo": {},
-            "por_status": {},
-            "validacao": {
-                "cep_ok": 0,
-                "rua_ok": 0,
-                "completos": 0
-            }
-        }
-    # Contadores
+    """Calcula e retorna um resumo estatístico da lista de endereços."""
+    if not lista: return {"total": 0, "por_tipo": {}, "completos": 0, "percentual_validados": 0}
+    
+    total = len(lista)
     por_tipo = {}
-    por_status = {}
-    cep_ok = 0
-    rua_ok = 0
     completos = 0
+    
     for item in lista:
-        # Por tipo
         tipo = item.get('importacao_tipo', 'manual')
         por_tipo[tipo] = por_tipo.get(tipo, 0) + 1
-
-        status = item.get('status_google', 'UNKNOWN')
-        por_status[status] = por_status.get(status, 0) + 1
-
-        # Validações
-        if item.get('cep_ok', False):
-            cep_ok += 1
-        if item.get('rua_bate', False):
-            rua_ok += 1
         if item.get('latitude') and item.get('longitude'):
             completos += 1
+            
     return {
-        "total": len(lista),
+        "total": total,
         "por_tipo": por_tipo,
-        "por_status": por_status,
-        "validacao": {
-            "cep_ok": cep_ok,
-            "rua_ok": rua_ok,
-            "completos": completos,
-            "percentual_validados": (
-                round((completos / len(lista)) * 100, 1)
-                if lista else 0
-            )
-        }
+        "completos": completos,
+        "percentual_validados": round((completos / total) * 100, 1) if total > 0 else 0
     }
