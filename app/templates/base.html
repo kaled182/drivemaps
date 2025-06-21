@@ -7,107 +7,202 @@
     <title>{% block title %}MapsDrive - Sistema de Roteirização{% endblock %}</title>
     
     <!-- Meta Tags SEO -->
-    <meta name="description" content="Sistema avançado de validação e roteirização de endereços para entregas com integração ao Mapbox">
+    <meta name="description" content="Sistema avançado de validação e roteirização de endereços para entregas com integração ao Mapbox.">
     <meta name="keywords" content="roteirização, entregas, maps, logística, endereços, Mapbox">
     <meta name="author" content="MapsDrive Team">
     <meta name="theme-color" content="#1e88e5">
     <meta name="robots" content="index, follow">
     
-    <!-- Favicon -->
-    <link rel="icon" href="{{ url_for('static', filename='images/favicon.ico') }}" type="image/x-icon">
+    <!-- Favicon e Apple Touch Icon -->
+    <link rel="icon" href="{{ url_for('static', filename='images/favicon.ico') }}">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/apple-touch-icon.png') }}">
 
-    <!-- Preload de recursos críticos -->
+    <!-- Preload de recursos para performance -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+    <link rel="preconnect" href="https://api.mapbox.com">
+    <link rel="dns-prefetch" href="https://api.mapbox.com">
     <link rel="preload" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"></noscript>
-    
-    <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
-          integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" 
-          crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <noscript>
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+    </noscript>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
     
     <!-- CSS Customizado -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
     {% block styles %}{% endblock %}
 
-    <!-- Pré-conexão para Mapbox ou APIs externas utilizadas -->
-    <link rel="preconnect" href="https://api.mapbox.com">
-    <link rel="dns-prefetch" href="https://api.mapbox.com">
+    <style>
+        /* Sidebar e Tema */
+        .sidebar-nav {
+            min-width: 220px; max-width: 220px;
+            background: var(--bs-tertiary-bg);
+            border-right: 1px solid var(--bs-border-color-translucent);
+            transition: transform 0.25s ease-in-out;
+        }
+        .sidebar-nav .nav-link.active {
+            background-color: var(--bs-primary);
+            color: var(--bs-white) !important;
+            border-radius: .375rem;
+        }
+        .sidebar-nav .nav-link {
+            color: var(--bs-body-color);
+            margin-bottom: .25rem;
+        }
+        .main-content-wrapper {
+            display: flex;
+            flex-grow: 1;
+        }
+        @media (max-width: 991.98px) {
+            .sidebar-nav {
+                position: fixed;
+                top: 0;
+                bottom: 0;
+                z-index: 1050;
+                transform: translateX(-100%);
+            }
+            .sidebar-nav.open {
+                transform: translateX(0);
+            }
+            #sidebar-backdrop {
+                display: none;
+                position: fixed;
+                z-index: 1049;
+                top: 0; left: 0; width: 100vw; height: 100vh;
+                background: rgba(0,0,0,0.4);
+            }
+            #sidebar-backdrop.show { display: block; }
+        }
+    </style>
 </head>
-<body class="d-flex flex-column min-vh-100">
-    <!-- Barra de Navegação -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm sticky-top">
-        <div class="container">
-            <a class="navbar-brand fw-bold" href="{{ url_for('preview.home') }}">
-                <i class="fas fa-map-marked-alt me-2"></i>MapsDrive
-            </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMain">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarMain">
-                <ul class="navbar-nav ms-auto">
-                    <li class="nav-item">
-                        <a class="nav-link {{ 'active' if request.path == url_for('preview.home') }}" href="{{ url_for('preview.home') }}">
-                            <i class="fas fa-home me-1"></i> Início
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {{ 'active' if request.path == url_for('preview.preview') }}" href="{{ url_for('preview.preview') }}">
-                            <i class="fas fa-map me-1"></i> Visualização
-                        </a>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </nav>
+<body class="d-flex flex-column">
 
-    <!-- Conteúdo Principal -->
-    <main class="container-fluid px-0 flex-grow-1">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                <div class="container mt-3">
+    <!-- =============================================== -->
+    <!-- ============== BARRA DE NAVEGAÇÃO ============= -->
+    <!-- =============================================== -->
+    <header class="sticky-top">
+        <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm" aria-label="Menu principal">
+            <div class="container-fluid">
+                <button class="navbar-toggler me-2" type="button" aria-label="Abrir menu lateral" onclick="toggleSidebar()" aria-controls="sidebar">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                <a class="navbar-brand fw-bold d-flex align-items-center" href="{{ url_for('preview.home') }}">
+                    <img src="{{ url_for('static', filename='images/logo.svg') }}" alt="Logo MapsDrive" height="30" class="me-2" style="filter: brightness(0) invert(1);">
+                    MapsDrive
+                </a>
+                
+                <div class="d-flex align-items-center ms-auto">
+                    <button class="btn btn-outline-light" id="toggle-theme-btn" type="button" aria-label="Alternar tema">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                </div>
+            </div>
+        </nav>
+    </header>
+    
+    <div class="main-content-wrapper">
+        <!-- =============================================== -->
+        <!-- ============== MENU LATERAL (SIDEBAR) ========= -->
+        <!-- =============================================== -->
+        <div id="sidebar-backdrop" onclick="toggleSidebar()"></div>
+        <nav id="sidebar" class="sidebar-nav d-flex flex-column p-3" aria-label="Menu lateral" tabindex="-1">
+            <h6 class="text-uppercase text-muted fw-bold mb-3 mt-2">Menu</h6>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint == 'preview.home' %}active{% endif %}" href="{{ url_for('preview.home') }}" {% if request.endpoint == 'preview.home' %}aria-current="page"{% endif %}>
+                        <i class="fas fa-home fa-fw me-2"></i> Início
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint == 'preview.preview' %}active{% endif %}" href="{{ url_for('preview.preview') }}" {% if request.endpoint == 'preview.preview' %}aria-current="page"{% endif %}>
+                        <i class="fas fa-map fa-fw me-2"></i> Visualização
+                    </a>
+                </li>
+                <!-- Outros links de exemplo -->
+            </ul>
+            <div class="mt-auto p-2 text-center text-muted small">
+                <p class="mb-1">&copy; {{ now().year if now else '2025' }} MapsDrive</p>
+            </div>
+        </nav>
+
+        <!-- =============================================== -->
+        <!-- ============== CONTEÚDO PRINCIPAL ============= -->
+        <!-- =============================================== -->
+        <main id="main-content" class="flex-grow-1 p-4" style="overflow-y: auto;">
+            <!-- Breadcrumbs -->
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    {% block breadcrumbs %}
+                        <li class="breadcrumb-item"><a href="{{ url_for('preview.home') }}">Início</a></li>
+                        {% if request.endpoint == 'preview.preview' %}<li class="breadcrumb-item active" aria-current="page">Visualização</li>{% endif %}
+                    {% endblock %}
+                </ol>
+            </nav>
+            <!-- Mensagens Flash -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
                     {% for category, message in messages %}
-                        <div class="alert alert-{{ category }} alert-dismissible fade show">
+                        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
                             {{ message }}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
                         </div>
                     {% endfor %}
-                </div>
-            {% endif %}
-        {% endwith %}
-        
-        {% block content %}{% endblock %}
-    </main>
+                {% endif %}
+            {% endwith %}
+            <!-- Conteúdo da página -->
+            {% block content %}{% endblock %}
+        </main>
+    </div>
 
-    <!-- Rodapé -->
-    <footer class="bg-dark text-white py-4 mt-auto">
-        <div class="container">
-            <div class="row align-items-center">
-                <div class="col-md-6 mb-3 mb-md-0">
-                    <h5 class="mb-3">MapsDrive</h5>
-                    <p class="text-muted mb-0">Solução inteligente para roteirização e validação de endereços.</p>
-                </div>
-                <div class="col-md-6 text-md-end">
-                    <div class="mb-3">
-                        <a href="#" class="text-white me-3" aria-label="Facebook"><i class="fab fa-facebook-f"></i></a>
-                        <a href="#" class="text-white me-3" aria-label="Twitter"><i class="fab fa-twitter"></i></a>
-                        <a href="#" class="text-white" aria-label="LinkedIn"><i class="fab fa-linkedin-in"></i></a>
-                    </div>
-                    <small>&copy; {{ now().year }} MapsDrive. Todos os direitos reservados.</small>
-                </div>
-            </div>
-        </div>
-    </footer>
-
-    <!-- Scripts -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" 
-            integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" 
-            crossorigin="anonymous"></script>
-    
-    <!-- Mapbox API e scripts customizados serão carregados apenas nas páginas necessárias -->
+    <!-- =============================================== -->
+    <!-- ================== SCRIPTS ================== -->
+    <!-- =============================================== -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous" defer></script>
     {% block scripts %}{% endblock %}
-    
-    <!-- Scripts Customizados -->
     <script src="{{ url_for('static', filename='js/main.js') }}" defer></script>
+    <script>
+        // Lógica de UI (Sidebar, Tema e Alertas). Em um projeto maior, moveria para main.js.
+        document.addEventListener('DOMContentLoaded', () => {
+            const themeToggleBtn = document.getElementById('toggle-theme-btn');
+            const sidebarBackdrop = document.getElementById('sidebar-backdrop');
+            
+            if (themeToggleBtn) {
+                // Função para definir o tema e persistir a escolha
+                const setTheme = (mode) => {
+                    document.documentElement.setAttribute('data-bs-theme', mode);
+                    localStorage.setItem('theme', mode);
+                    const icon = themeToggleBtn.querySelector('i');
+                    icon.className = mode === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+                };
+
+                themeToggleBtn.addEventListener('click', () => {
+                    const currentTheme = document.documentElement.getAttribute('data-bs-theme');
+                    setTheme(currentTheme === 'dark' ? 'light' : 'dark');
+                });
+                
+                // Aplicar tema salvo ou preferido pelo sistema ao carregar
+                const savedTheme = localStorage.getItem('theme');
+                const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                setTheme(savedTheme || (prefersDark ? 'dark' : 'light'));
+            }
+
+            if (sidebarBackdrop) {
+                sidebarBackdrop.addEventListener('click', toggleSidebar);
+            }
+            
+            // Lógica para auto-fechar mensagens flash
+            setTimeout(() => {
+                document.querySelectorAll('.alert-dismissible.fade.show').forEach(alertEl => {
+                    new bootstrap.Alert(alertEl).close();
+                });
+            }, 5000);
+        });
+
+        // Função para alternar a visibilidade da sidebar em ecrãs menores
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('sidebar-backdrop').classList.toggle('show');
+        }
+    </script>
 </body>
 </html>
