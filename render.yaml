@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: drivemaps
+    env: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app.main:app
+    envVars:
+      - key: MAPBOX_TOKEN
+        value: seu_token_aqui
+      - key: SECRET_KEY
+        value: sua_secret_key
+      # adicione outras variáveis de ambiente aqui
