@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 from werkzeug.serving import is_running_from_reloader
 
 def configure_logging():
-    """Configura o sistema de logging para a aplicação"""
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
@@ -17,7 +16,6 @@ def configure_logging():
     )
 
 def verify_config(app):
-    """Verificação completa das configurações com tratamento de erros"""
     required_configs = {
         'SECRET_KEY': 'Chave secreta para segurança da aplicação',
         'GOOGLE_API_KEY': 'Chave da API do Google Maps',
@@ -32,7 +30,6 @@ def verify_config(app):
             error_msg = f"Configurações obrigatórias faltando:\n{error_details}"
             logging.error(error_msg)
             raise ValueError("Configurações essenciais não encontradas")
-        # Verificação adicional da SECRET_KEY
         if 'sua-chave-secreta' in app.config['SECRET_KEY']:
             logging.warning("AVISO: SECRET_KEY padrão em uso - INSEGURO para produção!")
         logging.info("✅ Configurações verificadas com sucesso")
@@ -42,7 +39,6 @@ def verify_config(app):
         raise
 
 def start_server(app):
-    """Inicia o servidor Flask com configurações apropriadas"""
     try:
         host = os.getenv('HOST', '0.0.0.0')
         port = int(os.getenv('PORT', 10000))
@@ -63,16 +59,13 @@ def start_server(app):
         logging.error(f"❌ Falha ao iniciar servidor: {str(e)}")
         raise
 
-# *** ESSENCIAL PARA DEPLOY ***
-# Isto garante que Gunicorn/Render encontrará o objeto "app"
+# ESTA É A LINHA IMPORTANTE PARA O GUNICORN FUNCIONAR!
 app = create_app()
 
 if __name__ == '__main__':
     configure_logging()
     try:
         load_dotenv()
-        # Recria a app só para garantir variáveis de ambiente locais
-        app = create_app()
         verify_config(app)
         start_server(app)
     except Exception as e:
