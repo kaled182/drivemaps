@@ -33,7 +33,7 @@ def verify_config(app):
             logging.error(error_msg)
             raise ValueError("Configurações essenciais não encontradas")
         if 'sua-chave-secreta' in app.config['SECRET_KEY']:
-            logging.warning("AVISO: SECRET_KEY padrão em uso - INSECURO para produção!")
+            logging.warning("AVISO: SECRET_KEY padrão em uso - INSEGURO para produção!")
         logging.info("✅ Configurações verificadas com sucesso")
         return True
     except Exception as e:
@@ -45,28 +45,28 @@ def start_server(app):
     try:
         host = os.getenv('HOST', '127.0.0.1')
         port = int(os.getenv('PORT', 5000))
-        debug_mode = app.config.get('DEBUG', True)
         
         logging.info(f"🚀 Iniciando servidor de DESENVOLVIMENTO em http://{host}:{port}")
         app.run(
             host=host,
             port=port,
-            debug=debug_mode
+            debug=True
         )
     except Exception as e:
         logging.error(f"❌ Falha ao iniciar servidor: {str(e)}")
         raise
 
 # --- INICIALIZAÇÃO GLOBAL ---
-# Estas linhas são executadas tanto pelo Gunicorn (na Render) quanto localmente.
+# Estas linhas são executadas quando o Gunicorn importa o arquivo.
 
-# 1. Configura o logging
+# 1. Configura o logging primeiro para capturar todas as mensagens.
 configure_logging()
 
-# 2. Carrega variáveis de ambiente do arquivo .env (importante para create_app)
+# 2. Carrega as variáveis de ambiente do arquivo .env (se existir).
 load_dotenv()
 
-# 3. Cria a instância da aplicação Flask, que agora pode ser encontrada pelo Gunicorn
+# 3. CRIA A INSTÂNCIA DA APLICAÇÃO.
+#    Agora a variável 'app' existe no escopo global e pode ser encontrada pelo Gunicorn.
 app = create_app()
 
 # -----------------------------
@@ -76,9 +76,10 @@ if __name__ == '__main__':
     # Este bloco é executado APENAS quando você roda `python app.py` na sua máquina.
     # O Gunicorn na Render IGNORA esta parte.
     try:
-        # A verificação de config já acontece dentro de create_app, mas podemos fazer de novo se quisermos.
+        # A verificação de config já acontece dentro de create_app, 
+        # mas podemos verificar novamente por segurança.
         verify_config(app)
-        # Inicia o servidor de desenvolvimento.
+        # Inicia o servidor de desenvolvimento para testes locais.
         start_server(app)
     except Exception as e:
         logging.critical(f"⛔ Falha crítica na inicialização local: {str(e)}")
