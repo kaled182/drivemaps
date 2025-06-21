@@ -18,15 +18,13 @@ logger = logging.getLogger(__name__)
 def validar_linha_endpoint():
     """
     Valida um endereço (novo ou existente) a partir do seu índice na lista da sessão.
-    Recebe um índice, endereço e CEP, consulta a API do Google e atualiza
-    o item na sessão com os novos dados geocodificados.
+    Recebe um índice, endereço e CEP, consulta a API do Google e atualiza o item na sessão com os novos dados geocodificados.
     """
     try:
         data = request.get_json()
         if not data:
             return jsonify({"success": False, "msg": "Dados JSON inválidos."}), 400
 
-        # Conversão explícita dos tipos para maior robustez
         try:
             idx = int(data.get('idx'))
         except (TypeError, ValueError):
@@ -38,7 +36,6 @@ def validar_linha_endpoint():
         if not endereco or len(endereco) < 5:
             return jsonify({"success": False, "msg": "Endereço inválido ou muito curto."}), 400
         
-        # Validação extra do CEP
         if cep and not validar_cep(cep):
             return jsonify({"success": False, "msg": "Código Postal inválido (deve ser no formato 1234-567)."}), 400
 
@@ -75,6 +72,52 @@ def validar_linha_endpoint():
         return jsonify({"success": False, "msg": "Erro interno do servidor ao validar."}), 500
 
 
+@api_routes.route('/api/validar-por-id', methods=['POST'])
+def validar_por_id():
+    """
+    Valida um endereço a partir do seu order_number (ID), útil para AJAX dinâmico.
+    Recebe order_number, endereço e cep.
+    """
+    try:
+        data = request.get_json()
+        order_number = str(data.get('order_number', '')).strip()
+        endereco = sanitizar_endereco(data.get('endereco', ''))
+        cep = data.get('cep', '')
+
+        if not order_number or not endereco:
+            return jsonify({"success": False, "msg": "ID e endereço obrigatórios."}), 400
+        if cep and not validar_cep(cep):
+            return jsonify({"success": False, "msg": "Código Postal inválido (deve ser no formato 1234-567)."}), 400
+
+        lista = session.get('lista', [])
+        idx = next((i for i, item in enumerate(lista) if str(item.get('order_number')) == order_number), None)
+        if idx is None:
+            return jsonify({"success": False, "msg": "Endereço não encontrado."}), 404
+
+        resultado_google = valida_rua_google_cache(endereco, cep)
+        lista[idx].update({
+            "address": endereco,
+            "cep": cep,
+            "status_google": resultado_google.get('status', 'ERRO'),
+            "postal_code_encontrado": resultado_google.get('postal_code_encontrado', ''),
+            "endereco_formatado": resultado_google.get('endereco_formatado', ''),
+            "latitude": resultado_google.get('coordenadas', {}).get('lat'),
+            "longitude": resultado_google.get('coordenadas', {}).get('lng'),
+            "rua_google": resultado_google.get('route_encontrada', ''),
+            "cep_ok": cep == resultado_google.get('postal_code_encontrado', ''),
+            "rua_bate": _comparar_ruas(endereco.split(',')[0], resultado_google.get('route_encontrada', '')),
+            "freguesia": resultado_google.get('sublocality', ''),
+            "locality": resultado_google.get('locality', '')
+        })
+        session['lista'] = lista
+        session.modified = True
+        return jsonify({"success": True, "item": lista[idx]})
+
+    except Exception as e:
+        logger.error(f"Erro ao validar por ID: {str(e)}", exc_info=True)
+        return jsonify({"success": False, "msg": "Erro interno ao validar por ID."}), 500
+
+
 @api_routes.route('/api/reverse-geocode', methods=['POST'])
 def reverse_geocode_endpoint():
     """
@@ -96,7 +139,7 @@ def reverse_geocode_endpoint():
 
         resultado = obter_endereco_por_coordenadas(lat, lng)
         if resultado.get('status') != 'OK':
-            return jsonify({'success': False, 'msg': resultado.get('error', 'Endereço não encontrado para estas coordenadas.')}), 404
+            return jsonify({'success': False, 'msg': resultado.get('msg', 'Endereço não encontrado para estas coordenadas.')}), 404
         
         item_atualizado = lista[idx]
         novo_endereco = resultado.get('address', '')
@@ -143,7 +186,6 @@ def add_address_endpoint():
         if not endereco or not cep:
             return jsonify({"success": False, "msg": "Endereço e CEP são obrigatórios."}), 400
 
-        # Validação extra do CEP
         if not validar_cep(cep):
             return jsonify({"success": False, "msg": "Código Postal inválido (deve ser no formato 1234-567)."}), 400
 
@@ -173,6 +215,31 @@ def add_address_endpoint():
         logger.error(f"Erro ao adicionar novo endereço: {str(e)}", exc_info=True)
         return jsonify({"success": False, "msg": "Erro interno ao adicionar endereço."}), 500
 
+
+@api_routes.route('/api/remover-endereco', methods=['POST'])
+def remover_endereco():
+    """
+    Remove um endereço da lista na sessão pelo order_number (ID).
+    """
+    try:
+        data = request.get_json()
+        id_remover = str(data.get('order_number', '')).strip()
+        if not id_remover:
+            return jsonify({"success": False, "msg": "ID não informado."}), 400
+
+        lista = session.get('lista', [])
+        nova_lista = [item for item in lista if str(item.get('order_number')) != id_remover]
+
+        if len(nova_lista) == len(lista):
+            return jsonify({"success": False, "msg": "Endereço não encontrado."}), 404
+
+        session['lista'] = nova_lista
+        session.modified = True
+        return jsonify({"success": True, "msg": "Endereço removido com sucesso.", "total": len(nova_lista)})
+
+    except Exception as e:
+        logger.error(f"Erro ao remover endereço: {str(e)}", exc_info=True)
+        return jsonify({"success": False, "msg": "Erro interno ao remover endereço."}), 500
 
 @api_routes.route('/api/limpar-sessao', methods=['POST'])
 def limpar_sessao():
