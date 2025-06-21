@@ -1,4 +1,3 @@
-
 {% extends "base.html" %}
 
 {% block title %}Importar Endereços | MapsDrive{% endblock %}
@@ -6,149 +5,146 @@
 {% block styles %}
 <style>
     .form-section {
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
-        border: 1px solid rgba(0,0,0,0.1);
+        transition: transform 0.2s, box-shadow 0.2s;
+        border: 1px solid var(--bs-border-color-translucent);
+        border-radius: 0.7rem;
+        background: var(--bs-body-bg);
     }
     .form-section:hover {
         transform: translateY(-2px);
-        box-shadow: 0 6px 12px rgba(0,0,0,0.1);
+        box-shadow: 0 8px 20px rgba(0,0,0,0.08);
     }
     .address-textarea {
         font-family: 'Courier New', monospace;
-        font-size: 0.9rem;
-        min-height: 180px;
+        font-size: 0.95rem;
+        min-height: 200px;
+        background: var(--bs-tertiary-bg);
+        color: var(--bs-body-color);
     }
     .file-upload-container {
-        border: 2px dashed #dee2e6;
+        border: 2px dashed var(--bs-border-color);
         border-radius: 0.5rem;
-        transition: border-color 0.3s ease;
+        transition: all 0.3s ease;
+        background: var(--bs-tertiary-bg);
+        cursor: pointer;
     }
-    .file-upload-container:hover {
-        border-color: #0d6efd;
+    .file-upload-container.is-dragging {
+        border-color: var(--bs-primary);
+        background: var(--bs-primary-bg-subtle);
     }
     .format-guide-link {
         text-decoration: underline dotted;
+        cursor: pointer;
     }
-    @media (max-width: 768px) {
-        .card-body {
-            padding: 1rem;
-        }
+    #filename-display {
+        font-size: 0.95em;
+        min-height: 1.5em;
+        margin-top: 0.5em;
+        color: var(--bs-primary);
+        font-weight: 500;
     }
 </style>
+{% endblock %}
+
+{% block breadcrumbs %}
+<li class="breadcrumb-item active" aria-current="page">Importar Endereços</li>
 {% endblock %}
 
 {% block content %}
 <div class="container py-4">
     <div class="row justify-content-center">
         <div class="col-lg-10">
-            <div class="card shadow-sm border-0 overflow-hidden">
-                <div class="card-header bg-primary text-white py-3">
-                    <h1 class="h5 mb-0">
-                        <i class="fas fa-map-marked-alt me-2"></i>Importar Endereços
-                    </h1>
-                </div>
-                
+            <article class="card shadow-sm border-0 overflow-hidden">
+                <header class="card-header bg-primary text-white py-3 d-flex align-items-center">
+                    <i class="fas fa-route fa-fw me-2"></i>
+                    <h1 class="h5 mb-0">Iniciar Roteirização</h1>
+                </header>
                 <div class="card-body p-0">
                     <div class="row g-0">
-                        <!-- Seção Manual -->
-                        <div class="col-md-6 p-4 form-section">
-                            <h2 class="h6 mb-3 text-primary fw-bold">
-                                <i class="fas fa-keyboard me-2"></i>Inserção Manual
-                            </h2>
-                            
-                            <form method="post" action="{{ url_for('preview.preview') }}">
-                                <div class="mb-3">
-                                    <label for="enderecos" class="form-label fw-semibold">
-                                        Cole os endereços (um por linha):
-                                    </label>
-                                    <textarea id="enderecos" name="enderecos" class="form-control address-textarea" 
-                                              placeholder="Exemplo de formato (Paack):&#10;Rua Exemplo, 123, 4900-000 Cidade&#10;#COD12345&#10;Avenida Teste, 456, 4900-001 Cidade&#10;1" 
-                                              required></textarea>
-                                    <div class="form-text small mt-2">
-                                        Formato esperado: <code>Endereço Completo</code> seguido opcionalmente por <code>#Código</code>
-                                    </div>
-                                </div>
-                                
-                                <button type="submit" class="btn btn-success w-100 py-2">
-                                    <i class="fas fa-check-circle me-2"></i>Validar Endereços
-                                </button>
-                            </form>
-                        </div>
-                        
                         <!-- Seção Upload -->
-                        <div class="col-md-6 p-4 form-section bg-light">
-                            <h2 class="h6 mb-3 text-primary fw-bold">
-                                <i class="fas fa-file-upload me-2"></i>Importar Arquivo
+                        <section class="col-md-6 p-4 form-section" aria-labelledby="upload-heading">
+                            <h2 id="upload-heading" class="h6 mb-3 text-primary fw-bold">
+                                <i class="fas fa-file-upload me-2"></i>1. Importar a partir de Ficheiro (Recomendado)
                             </h2>
-                            
-                            <form id="uploadForm" enctype="multipart/form-data" method="post" 
-                                  action="{{ url_for('importacao.import_planilha') }}" class="needs-validation" novalidate>
+                            <form id="uploadForm" enctype="multipart/form-data" method="post" action="{{ url_for('importacao.import_planilha') }}" novalidate>
                                 <div class="mb-3">
-                                    <label for="empresa" class="form-label small fw-semibold">Formato do Arquivo</label>
+                                    <label for="empresa" class="form-label small fw-semibold">Formato do Ficheiro</label>
                                     <select name="empresa" id="empresa" class="form-select" required>
-                                        <option value="" disabled selected>Selecione...</option>
+                                        <option value="" disabled selected>Selecione a origem...</option>
                                         <option value="delnext">Delnext</option>
-                                        <option value="paack">Paack (Padrão)</option>
-                                        <option value="custom">Personalizado</option>
+                                        <option value="paack">Paack</option>
                                     </select>
+                                    <div class="invalid-feedback">Por favor, selecione a empresa.</div>
                                 </div>
-                                
                                 <div class="mb-3">
-                                    <label for="planilha" class="form-label small fw-semibold">Selecione o arquivo</label>
-                                    <div class="file-upload-container p-3 text-center mb-2">
-                                        <i class="fas fa-cloud-upload-alt fa-2x text-muted mb-2"></i>
-                                        <p class="small text-muted mb-2">Arraste e solte ou clique para selecionar</p>
-                                        <input type="file" name="planilha" id="planilha" 
-                                               accept=".xlsx,.xls,.csv,.txt" required 
-                                               class="d-none">
-                                        <label for="planilha" class="btn btn-sm btn-outline-primary">
-                                            <i class="fas fa-folder-open me-1"></i>Selecionar Arquivo
+                                    <label for="planilha" class="form-label small fw-semibold">Selecione o ficheiro</label>
+                                    <div id="file-upload-container" class="file-upload-container p-4 text-center" tabindex="0" aria-describedby="filename-display">
+                                        <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-2"></i>
+                                        <p class="mb-2">Arraste e solte o ficheiro aqui</p>
+                                        <p class="text-muted small mb-2">ou</p>
+                                        <label for="planilha" class="btn btn-sm btn-outline-primary mb-0">
+                                            <i class="fas fa-folder-open me-1"></i>Procurar Ficheiro
                                         </label>
+                                        <input type="file" name="planilha" id="planilha" accept=".xlsx,.xls,.csv,.txt" required class="d-none">
+                                        <span id="filename-display" aria-live="polite"></span>
                                     </div>
-                                    <div class="form-text small">Formatos suportados: .xlsx, .xls, .csv</div>
+                                    <div class="form-text small">Formatos suportados: .xlsx, .xls, .csv, .txt</div>
                                 </div>
-                                
-                                <button type="submit" class="btn btn-primary w-100 py-2" id="uploadBtn">
-                                    <i class="fas fa-upload me-2"></i>Importar
+                                <button type="submit" class="btn btn-primary w-100 py-2 fw-bold shadow-sm" id="uploadBtn">
+                                    <span id="uploadBtnText"><i class="fas fa-upload me-2"></i>Importar e Visualizar</span>
+                                    <span id="uploadBtnSpinner" class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
                                 </button>
                             </form>
-                            
-                            <div class="mt-3 alert alert-info small">
-                                <i class="fas fa-info-circle me-2"></i>
-                                Para formatos personalizados, consulte nosso 
-                                <a href="#" class="format-guide-link" data-bs-toggle="modal" data-bs-target="#formatosModal">guia de formatação</a>.
-                            </div>
-                        </div>
+                        </section>
+                        <!-- Seção Manual -->
+                        <section class="col-md-6 p-4 form-section" aria-labelledby="manual-heading">
+                            <h2 id="manual-heading" class="h6 mb-3 text-primary fw-bold">
+                                <i class="fas fa-keyboard me-2"></i>2. Inserção Manual (Texto)
+                            </h2>
+                            <form method="post" action="{{ url_for('preview.preview') }}" novalidate>
+                                <div class="mb-3">
+                                    <label for="enderecos" class="form-label fw-semibold">Cole os endereços:</label>
+                                    <textarea id="enderecos" name="enderecos" class="form-control address-textarea"
+                                              placeholder="Cole aqui os dados no formato Paack..." required></textarea>
+                                    <div class="form-text small mt-2">
+                                        Veja os exemplos no <a href="#" class="format-guide-link" data-bs-toggle="modal" data-bs-target="#formatosModal">guia de formatação</a>.
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-success w-100 py-2 fw-bold shadow-sm">
+                                    <i class="fas fa-check-circle me-2"></i>Validar Texto
+                                </button>
+                            </form>
+                        </section>
                     </div>
                 </div>
-            </div>
+            </article>
         </div>
     </div>
 </div>
 
 <!-- Modal de Formatos -->
-<div class="modal fade" id="formatosModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
+<div class="modal fade" id="formatosModal" tabindex="-1" aria-labelledby="formatosModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
-            <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title">Formatos Suportados</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
+            <header class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="formatosModalLabel">Formatos Suportados</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </header>
+            <section class="modal-body">
                 <div class="row">
                     <div class="col-md-6">
                         <h6 class="fw-bold">Formato Paack</h6>
-                        <pre class="bg-light p-3 small">Endereço Completo, Código Postal, Localidade
-#CódigoDeEncomenda
-Endereço Completo, Código Postal, Localidade
-Prioridade (opcional)</pre>
+                        <pre class="bg-light p-3 small rounded">Rua Exemplo, 123, 4900-000 Cidade
+#COD12345
+Rua Exemplo, 123, 4900-000 Cidade
+1</pre>
                     </div>
                     <div class="col-md-6">
                         <h6 class="fw-bold">Formato Delnext</h6>
-                        <pre class="bg-light p-3 small">Nome;Morada;Código Postal;Localidade;Número</pre>
+                        <pre class="bg-light p-3 small rounded">Nome;Morada;Código Postal;Localidade;Número</pre>
                     </div>
                 </div>
-            </div>
+            </section>
         </div>
     </div>
 </div>
@@ -157,9 +153,10 @@ Prioridade (opcional)</pre>
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Bootstrap validation
     const forms = document.querySelectorAll('.needs-validation');
     Array.from(forms).forEach(form => {
-        form.addEventListener('submit', function(event) {
+        form.addEventListener('submit', event => {
             if (!form.checkValidity()) {
                 event.preventDefault();
                 event.stopPropagation();
@@ -168,50 +165,50 @@ document.addEventListener('DOMContentLoaded', function() {
         }, false);
     });
 
+    // Feedback do upload
     const uploadForm = document.getElementById('uploadForm');
     if (uploadForm) {
         uploadForm.addEventListener('submit', function() {
+            if (!uploadForm.checkValidity()) return;
             const btn = document.getElementById('uploadBtn');
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Processando...';
+            btn.querySelector('#uploadBtnText').textContent = 'A processar...';
+            btn.querySelector('#uploadBtnSpinner').classList.remove('d-none');
             btn.disabled = true;
         });
     }
 
-    const fileUpload = document.querySelector('.file-upload-container');
-    if (fileUpload) {
+    // Arraste e Solte
+    const fileUploadContainer = document.getElementById('file-upload-container');
+    if (fileUploadContainer) {
         const fileInput = document.getElementById('planilha');
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-            fileUpload.addEventListener(eventName, preventDefaults, false);
-        });
+        const filenameDisplay = document.getElementById('filename-display');
 
-        function preventDefaults(e) {
-            e.preventDefault();
-            e.stopPropagation();
-        }
+        const updateFilename = () => {
+            filenameDisplay.textContent = fileInput.files.length > 0 ? fileInput.files[0].name : '';
+        };
+
+        fileInput.addEventListener('change', updateFilename);
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            fileUploadContainer.addEventListener(eventName, e => {
+                e.preventDefault();
+                e.stopPropagation();
+            }, false);
+        });
 
         ['dragenter', 'dragover'].forEach(eventName => {
-            fileUpload.addEventListener(eventName, highlight, false);
+            fileUploadContainer.classList.add('is-dragging');
         });
-
         ['dragleave', 'drop'].forEach(eventName => {
-            fileUpload.addEventListener(eventName, unhighlight, false);
+            fileUploadContainer.classList.remove('is-dragging');
         });
 
-        function highlight() {
-            fileUpload.classList.add('bg-light');
-        }
+        fileUploadContainer.addEventListener('drop', e => {
+            fileInput.files = e.dataTransfer.files;
+            updateFilename();
+        }, false);
 
-        function unhighlight() {
-            fileUpload.classList.remove('bg-light');
-        }
-
-        fileUpload.addEventListener('drop', handleDrop, false);
-
-        function handleDrop(e) {
-            const dt = e.dataTransfer;
-            const files = dt.files;
-            fileInput.files = files;
-        }
+        fileUploadContainer.addEventListener('click', () => fileInput.click());
     }
 });
 </script>
