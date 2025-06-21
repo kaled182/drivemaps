@@ -1,4 +1,3 @@
-
 {% extends "base.html" %}
 
 {% block content %}
@@ -6,13 +5,11 @@
     <h2 class="mb-3">
         <i class="fas fa-map-marked-alt me-2"></i> Visualização de Endereços
     </h2>
-
     <div class="alert alert-info mb-3">
         <i class="fas fa-info-circle me-2"></i>
         Total de endereços: {{ lista|length }} |
         Origem: {{ origens|join(', ') }}
     </div>
-
     <div class="map-container mb-4">
         <div id="map"></div>
         <div id="map-status" class="text-muted small mt-2"></div>
@@ -21,6 +18,7 @@
 {% endblock %}
 
 {% block styles %}
+<link href='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css' rel='stylesheet' />
 <link rel="stylesheet" href="{{ url_for('static', filename='css/map.css') }}">
 <style>
     .map-container #map {
@@ -56,11 +54,11 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
+<script src='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js'></script>
 <script>
 const enderecosData = {{ lista|tojson|safe }};
-const googleApiKey = "{{ GOOGLE_API_KEY }}";
-let map, markers = [], markerCluster;
+const mapboxToken = "{{ MAPBOX_TOKEN|default('') }}";
+let map, markers = [];
 
 function updateStatus(message) {
     document.getElementById('map-status').innerText = message;
@@ -77,11 +75,15 @@ function showEmptyMapMessage(reason) {
     updateStatus(`Erro: ${reason || 'Sem coordenadas válidas'}`);
 }
 
-function initMap() {
+function initMapbox() {
     try {
-        updateStatus("Inicializando mapa...");
-        
-        // Filtra e valida coordenadas
+        updateStatus("Inicializando mapa (Mapbox)...");
+        if (!mapboxToken) {
+            showEmptyMapMessage("Mapbox Token não configurado.");
+            return;
+        }
+
+        // Filtra coordenadas válidas
         const validCoords = enderecosData.filter(e => {
             const lat = parseFloat(e.latitude);
             const lng = parseFloat(e.longitude);
@@ -89,133 +91,68 @@ function initMap() {
         });
 
         updateStatus(`Endereços válidos: ${validCoords.length}/${enderecosData.length}`);
-        
         if (validCoords.length === 0) {
             showEmptyMapMessage("Nenhuma coordenada válida encontrada");
             return;
         }
 
-        // Cria mapa centralizado no primeiro endereço
-        const firstCoord = validCoords[0];
-        map = new google.maps.Map(document.getElementById('map'), {
-            zoom: 12,
-            center: { 
-                lat: parseFloat(firstCoord.latitude), 
-                lng: parseFloat(firstCoord.longitude) 
-            },
-            gestureHandling: 'greedy',
-            mapTypeControl: false,
-            streetViewControl: false,
-            fullscreenControl: true
+        mapboxgl.accessToken = mapboxToken;
+        map = new mapboxgl.Map({
+            container: 'map',
+            style: 'mapbox://styles/mapbox/streets-v12',
+            center: [parseFloat(validCoords[0].longitude), parseFloat(validCoords[0].latitude)],
+            zoom: 12
         });
 
-        // Configura cluster de marcadores
-        markerCluster = new markerClusterer.MarkerClusterer({ map, markers: [] });
-
-        // Cria marcadores
+        // Adiciona marcadores
         validCoords.forEach((item, idx) => {
-            try {
-                createMarker(idx, item);
-            } catch (markerError) {
-                console.error(`Erro ao criar marcador ${idx}:`, markerError);
-            }
+            const marker = new mapboxgl.Marker({ color: item.cor || '#4285F4' })
+                .setLngLat([parseFloat(item.longitude), parseFloat(item.latitude)])
+                .setPopup(
+                    new mapboxgl.Popup({ offset: 25 })
+                    .setHTML(`
+                        <div class="map-infowindow">
+                            <h6>${item.order_number || 'Sem ID'}</h6>
+                            <p>${item.address}</p>
+                            <p>CEP: ${item.cep || 'Não informado'}</p>
+                            ${item.status_google === 'OK'
+                                ? '<p class="text-success">✓ Validado</p>'
+                                : `<p class="text-danger">${item.status_google || 'Não validado'}</p>`}
+                        </div>
+                    `)
+                )
+                .addTo(map);
+            markers.push(marker);
         });
 
-        // Ajusta zoom para todos marcadores
-        const bounds = new google.maps.LatLngBounds();
-        validCoords.forEach(e => bounds.extend({
-            lat: parseFloat(e.latitude),
-            lng: parseFloat(e.longitude)
-        }));
-        map.fitBounds(bounds);
-        
-        updateStatus(`Mapa carregado com ${validCoords.length} marcadores`);
+        // Ajusta o mapa para mostrar todos os marcadores
+        if (validCoords.length > 1) {
+            const bounds = new mapboxgl.LngLatBounds();
+            validCoords.forEach(e => bounds.extend([parseFloat(e.longitude), parseFloat(e.latitude)]));
+            map.fitBounds(bounds, { padding: 60, animate: true });
+        }
+
+        updateStatus(`Mapa carregado com ${validCoords.length} marcadores (Mapbox)`);
 
     } catch (error) {
-        console.error("Erro ao inicializar mapa:", error);
+        console.error("Erro ao inicializar Mapbox:", error);
         showEmptyMapMessage(`Erro técnico: ${error.message}`);
     }
 }
 
-function createMarker(idx, data) {
-    const position = { 
-        lat: parseFloat(data.latitude), 
-        lng: parseFloat(data.longitude) 
-    };
-    
-    const marker = new google.maps.Marker({
-        position,
-        map,
-        title: `${data.order_number || (idx + 1)} - ${data.address}`,
-        icon: createPinIcon(idx, data),
-        draggable: false
-    });
-    
-    const infoWindow = new google.maps.InfoWindow({
-        content: `
-            <div class="map-infowindow">
-                <h6>${data.order_number || 'Sem ID'}</h6>
-                <p>${data.address}</p>
-                <p>CEP: ${data.cep || 'Não informado'}</p>
-                ${data.status_google === 'OK'
-                    ? '<p class="text-success">✓ Validado</p>'
-                    : `<p class="text-danger">${data.status_google || 'Não validado'}</p>`}
-            </div>
-        `
-    });
-    
-    marker.addListener('click', () => infoWindow.open(map, marker));
-    markers[idx] = marker;
-    markerCluster.addMarker(marker);
-    
-    return marker;
-}
-
-function createPinIcon(idx, data) {
-    const num = data.order_number ? String(data.order_number).substr(-3) : idx + 1;
-    const color = data.cor || '#4285F4';
-    return {
-        path: google.maps.SymbolPath.CIRCLE,
-        fillColor: color,
-        fillOpacity: 1,
-        strokeColor: '#fff',
-        strokeWeight: 2,
-        scale: 10,
-        label: { 
-            text: String(num).substr(0, 3), 
-            color: '#fff', 
-            fontSize: '12px' 
-        }
-    };
-}
-
-// Torna initMap global
-window.initMap = initMap;
-
-// Inicialização
 document.addEventListener('DOMContentLoaded', () => {
     if (document.getElementById('map')) {
         updateStatus("Verificando dados...");
-        
-        const hasValidData = enderecosData.some(e => 
+        const hasValidData = enderecosData.some(e =>
             e.latitude && e.longitude &&
-            !isNaN(parseFloat(e.latitude)) && 
+            !isNaN(parseFloat(e.latitude)) &&
             !isNaN(parseFloat(e.longitude))
         );
-
-        if (hasValidData && googleApiKey) {
-            updateStatus("Carregando API do Google Maps...");
-            
-            const script = document.createElement('script');
-            script.src = `https://maps.googleapis.com/maps/api/js?key=${googleApiKey}&libraries=places&callback=initMap`;
-            script.async = true;
-            script.defer = true;
-            script.onerror = () => {
-                showEmptyMapMessage("Falha ao carregar API do Google Maps");
-            };
-            document.head.appendChild(script);
+        if (hasValidData && mapboxToken) {
+            updateStatus("Carregando mapa Mapbox...");
+            initMapbox();
         } else {
-            const reason = !hasValidData ? "Sem dados válidos" : "Chave da API não configurada";
+            const reason = !hasValidData ? "Sem dados válidos" : "Mapbox Token não configurado";
             showEmptyMapMessage(reason);
         }
     }
