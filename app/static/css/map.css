@@ -10,53 +10,63 @@
   overflow: hidden;
 }
 
-/* Estilo para os marcadores do mapa */
-.map-marker {
-  position: relative;
+/* Marcadores personalizados Mapbox */
+.mapboxgl-marker {
+  /* Posição e z-index garantidos pelo próprio Mapbox */
 }
 
-.map-marker::after {
-  content: '';
-  position: absolute;
-  bottom: -8px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 0;
-  height: 0;
-  border-left: 8px solid transparent;
-  border-right: 8px solid transparent;
-  border-top: 8px solid var(--marker-color, #4285F4);
-}
-
-/* InfoWindow customizado */
-.gm-style .gm-style-iw-c {
-  padding: 0;
-  border-radius: 0.5rem;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-}
-
-.gm-style .gm-style-iw-d {
-  overflow: hidden !important;
-}
-
-.gm-style .gm-style-iw-t::after {
-  background: white;
-}
-
+/* InfoWindow customizado (usado tanto no Mapbox quanto Google) */
 .map-infowindow {
   padding: 1rem;
   font-family: 'Segoe UI', Roboto, sans-serif;
+  background: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  min-width: 180px;
 }
 
 .map-infowindow h6 {
   font-weight: 600;
   margin-bottom: 0.5rem;
-  color: var(--primary);
+  color: var(--primary, #1e88e5);
 }
 
 .map-infowindow p {
   margin-bottom: 0.25rem;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
+}
+
+/* Mapbox Popup Custom (ajuste visual se desejar) */
+.mapboxgl-popup-content {
+  padding: 0 !important;
+  border-radius: 0.5rem !important;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.2) !important;
+  min-width: 180px;
+}
+
+.mapboxgl-popup-close-button {
+  top: 6px;
+  right: 8px;
+}
+
+/* Mensagem de mapa vazio */
+.map-empty-message {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  background: rgba(255,255,255,0.95);
+  border-radius: 12px;
+  padding: 24px 36px;
+  text-align: center;
+  font-size: 1.1rem;
+  box-shadow: 0 2px 10px #0001;
+}
+
+/* Status do mapa */
+#map-status {
+  font-family: monospace;
 }
 
 /* Controles do mapa */
@@ -100,7 +110,7 @@
   height: 30px;
   margin-left: 5px;
   margin-top: 5px;
-  background-color: var(--primary);
+  background-color: var(--primary, #1e88e5);
   color: white;
   font-weight: bold;
   font-size: 12px;
@@ -119,7 +129,6 @@
   .map-container {
     height: 40vh;
   }
-  
   .map-infowindow {
     max-width: 200px;
     padding: 0.75rem;
