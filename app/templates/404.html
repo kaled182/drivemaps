@@ -1,97 +1,91 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Página Não Encontrada - DriveMaps</title>
-    <style>
-        :root {
-            --primary-color: #4285F4;
-            --error-color: #EA4335;
-            --background-color: #f8f9fa;
-            --text-color: #202124;
-        }
-        
-        body {
-            font-family: 'Roboto', Arial, sans-serif;
-            background-color: var(--background-color);
-            color: var(--text-color);
-            margin: 0;
-            padding: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            text-align: center;
-        }
-        
-        .container {
-            max-width: 600px;
-            padding: 2rem;
-        }
-        
-        .error-code {
-            font-size: 5rem;
-            font-weight: bold;
-            color: var(--error-color);
-            margin-bottom: 1rem;
-        }
-        
-        .error-title {
-            font-size: 1.5rem;
-            margin-bottom: 1rem;
-        }
-        
-        .error-message {
-            font-size: 1.1rem;
-            margin-bottom: 2rem;
-            line-height: 1.6;
-        }
-        
-        .home-button {
-            background-color: var(--primary-color);
-            color: white;
-            border: none;
-            padding: 0.8rem 1.5rem;
-            font-size: 1rem;
-            border-radius: 4px;
-            cursor: pointer;
-            text-decoration: none;
-            transition: background-color 0.3s;
-        }
-        
-        .home-button:hover {
-            background-color: #3367D6;
-        }
-        
-        .logo {
-            width: 150px;
-            margin-bottom: 2rem;
-        }
-        
-        @media (max-width: 600px) {
-            .container {
-                padding: 1rem;
-            }
-            
-            .error-code {
-                font-size: 3rem;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <!-- Substitua pelo caminho correto do seu logo -->
-        <img src="{{ url_for('static', filename='images/apple-touch-icon.png') }}" alt="DriveMaps Logo" class="logo">
-        
-        <div class="error-code">404</div>
-        <h1 class="error-title">Página não encontrada</h1>
-        <p class="error-message">
-            A página que você está procurando pode ter sido removida, ter seu nome alterado ou está temporariamente indisponível.
-        </p>
-        <a href="{{ url_for('preview.home') }}" class="home-button">Voltar para a página inicial</a>
+{% extends "base.html" %}
+
+{% block title %}Página Não Encontrada | MapsDrive{% endblock %}
+
+{% block styles %}
+<style>
+    .error-wrapper {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 70vh;
+        padding: 2.5rem 0;
+    }
+    .error-logo {
+        width: 120px;
+        margin-bottom: 2rem;
+        filter: drop-shadow(0 2px 6px rgba(66,133,244,0.09));
+    }
+    .error-code {
+        font-size: 5rem;
+        font-weight: bold;
+        color: var(--bs-danger, #EA4335);
+        margin-bottom: 0.6rem;
+        letter-spacing: 2px;
+        animation: bounceIn 0.9s;
+    }
+    @keyframes bounceIn {
+        0% { transform: scale(0.8); opacity: 0.3; }
+        65% { transform: scale(1.1); opacity: 1; }
+        100% { transform: scale(1.0); }
+    }
+    .error-title {
+        font-size: 2rem;
+        font-weight: 600;
+        color: var(--bs-body-color);
+    }
+    .error-message {
+        color: var(--bs-secondary-color, #606168);
+        margin-bottom: 2rem;
+        font-size: 1.2rem;
+        line-height: 1.5;
+    }
+    .error-nav {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    .error-home-btn, .error-contact-btn {
+        background: var(--bs-primary, #4285F4);
+        color: #fff !important;
+        border: none;
+        padding: 0.7rem 2rem;
+        font-size: 1.08rem;
+        border-radius: 4px;
+        box-shadow: 0 1px 10px rgba(66,133,244,0.06);
+        transition: background 0.2s;
+        text-decoration: none;
+    }
+    .error-home-btn:hover, .error-contact-btn:hover {
+        background: var(--bs-primary-dark, #3367D6);
+        color: #fff;
+    }
+    @media (max-width: 700px) {
+        .error-code { font-size: 3rem; }
+        .error-title { font-size: 1.3rem; }
+    }
+</style>
+{% endblock %}
+
+{% block breadcrumbs %}
+<li class="breadcrumb-item active" aria-current="page">Página não encontrada</li>
+{% endblock %}
+
+{% block content %}
+<div class="container error-wrapper">
+    <img src="{{ url_for('static', filename='images/logo.svg') }}" alt="Logo MapsDrive" class="error-logo" loading="lazy">
+    <div class="error-code" aria-label="Código do erro">404</div>
+    <h1 class="error-title" tabindex="0">Página não encontrada</h1>
+    <div class="error-message" tabindex="0">
+        A página que procura não existe, mudou de nome ou está temporariamente indisponível.<br>
+        Se acha que isso é um erro, por favor <a href="mailto:suporte@mapsdrive.com" class="text-primary text-decoration-underline error-contact-btn" aria-label="Enviar email para o suporte">contacte o suporte</a>.
     </div>
-</body>
-</html>
+    <div class="error-nav">
+        <a href="{{ url_for('preview.home') }}" class="error-home-btn" aria-label="Voltar para a página inicial">
+            <i class="fas fa-home me-1"></i> Página inicial
+        </a>
+    </div>
+</div>
+{% endblock %}
