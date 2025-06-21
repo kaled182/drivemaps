@@ -97,16 +97,20 @@ def create_app():
     def inject_now():
         return {'now': datetime.now}
 
-    # --- CSP Corrigido para liberar Google Maps, Bootstrap, CDNs ---
+    # --- CSP Corrigido para liberar Mapbox, Google, Bootstrap, CDNs ---
     @app.after_request
     def set_csp(response):
         response.headers['Content-Security-Policy'] = (
             "default-src 'self'; "
-            "script-src 'self' https://maps.googleapis.com https://maps.gstatic.com https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com 'unsafe-inline' 'unsafe-eval'; "
-            "style-src 'self' https://fonts.googleapis.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net 'unsafe-inline'; "
+            "script-src 'self' "
+                "https://maps.googleapis.com https://maps.gstatic.com "
+                "https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com "
+                "https://api.mapbox.com 'unsafe-inline' 'unsafe-eval'; "
+            "style-src 'self' https://fonts.googleapis.com "
+                "https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://api.mapbox.com 'unsafe-inline'; "
             "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; "
-            "img-src * data:; "
-            "connect-src 'self' https://maps.googleapis.com https://maps.gstatic.com https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
+            "img-src * data: https://api.mapbox.com https://events.mapbox.com; "
+            "connect-src 'self' https://api.mapbox.com https://events.mapbox.com https://maps.googleapis.com https://maps.gstatic.com https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
         )
         return response
 
