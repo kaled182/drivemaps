@@ -14,6 +14,7 @@
 
     <div class="map-container mb-4">
         <div id="map"></div>
+        <div id="map-status" class="text-muted small mt-2"></div>
     </div>
 </div>
 {% endblock %}
@@ -47,6 +48,9 @@
         font-size: 1.1rem;
         box-shadow: 0 2px 10px #0001;
     }
+    #map-status {
+        font-family: monospace;
+    }
 </style>
 {% endblock %}
 
@@ -54,54 +58,90 @@
 <script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
 <script>
 const enderecosData = {{ lista|tojson|safe }};
+const googleApiKey = "{{ GOOGLE_API_KEY }}";
 let map, markers = [], markerCluster;
 
-function showEmptyMapMessage() {
+function updateStatus(message) {
+    document.getElementById('map-status').innerText = message;
+    console.log("Mapa Status:", message);
+}
+
+function showEmptyMapMessage(reason) {
     const mapDiv = document.getElementById('map');
     mapDiv.innerHTML = `<div class="map-empty-message">
         <i class="fas fa-exclamation-triangle me-2"></i>
-        Nenhuma localização válida para exibir no mapa.<br>
+        ${reason || 'Nenhuma localização válida para exibir no mapa.'}<br>
         Verifique se os endereços foram validados corretamente.
     </div>`;
+    updateStatus(`Erro: ${reason || 'Sem coordenadas válidas'}`);
 }
 
 function initMap() {
-    // Filtra só endereços com latitude/longitude válida
-    const validCoords = enderecosData.filter(e => e.latitude && e.longitude);
+    try {
+        updateStatus("Inicializando mapa...");
+        
+        // Filtra e valida coordenadas
+        const validCoords = enderecosData.filter(e => {
+            const lat = parseFloat(e.latitude);
+            const lng = parseFloat(e.longitude);
+            return !isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+        });
 
-    if (validCoords.length === 0) {
-        showEmptyMapMessage();
-        return;
+        updateStatus(`Endereços válidos: ${validCoords.length}/${enderecosData.length}`);
+        
+        if (validCoords.length === 0) {
+            showEmptyMapMessage("Nenhuma coordenada válida encontrada");
+            return;
+        }
+
+        // Cria mapa centralizado no primeiro endereço
+        const firstCoord = validCoords[0];
+        map = new google.maps.Map(document.getElementById('map'), {
+            zoom: 12,
+            center: { 
+                lat: parseFloat(firstCoord.latitude), 
+                lng: parseFloat(firstCoord.longitude) 
+            },
+            gestureHandling: 'greedy',
+            mapTypeControl: false,
+            streetViewControl: false,
+            fullscreenControl: true
+        });
+
+        // Configura cluster de marcadores
+        markerCluster = new markerClusterer.MarkerClusterer({ map, markers: [] });
+
+        // Cria marcadores
+        validCoords.forEach((item, idx) => {
+            try {
+                createMarker(idx, item);
+            } catch (markerError) {
+                console.error(`Erro ao criar marcador ${idx}:`, markerError);
+            }
+        });
+
+        // Ajusta zoom para todos marcadores
+        const bounds = new google.maps.LatLngBounds();
+        validCoords.forEach(e => bounds.extend({
+            lat: parseFloat(e.latitude),
+            lng: parseFloat(e.longitude)
+        }));
+        map.fitBounds(bounds);
+        
+        updateStatus(`Mapa carregado com ${validCoords.length} marcadores`);
+
+    } catch (error) {
+        console.error("Erro ao inicializar mapa:", error);
+        showEmptyMapMessage(`Erro técnico: ${error.message}`);
     }
-
-    map = new google.maps.Map(document.getElementById('map'), {
-        zoom: 12,
-        center: new google.maps.LatLng(
-            parseFloat(validCoords[0].latitude),
-            parseFloat(validCoords[0].longitude)
-        ),
-        gestureHandling: 'greedy',
-        mapTypeControl: false,
-        streetViewControl: false,
-        fullscreenControl: true
-    });
-
-    markerCluster = new markerClusterer.MarkerClusterer({ map, markers: [] });
-
-    validCoords.forEach((item, idx) => {
-        createMarker(idx, item);
-    });
-
-    // Ajusta o mapa para todos marcadores
-    const bounds = new google.maps.LatLngBounds();
-    validCoords.forEach(e =>
-        bounds.extend(new google.maps.LatLng(parseFloat(e.latitude), parseFloat(e.longitude)))
-    );
-    map.fitBounds(bounds);
 }
 
 function createMarker(idx, data) {
-    const position = new google.maps.LatLng(parseFloat(data.latitude), parseFloat(data.longitude));
+    const position = { 
+        lat: parseFloat(data.latitude), 
+        lng: parseFloat(data.longitude) 
+    };
+    
     const marker = new google.maps.Marker({
         position,
         map,
@@ -109,6 +149,7 @@ function createMarker(idx, data) {
         icon: createPinIcon(idx, data),
         draggable: false
     });
+    
     const infoWindow = new google.maps.InfoWindow({
         content: `
             <div class="map-infowindow">
@@ -121,14 +162,16 @@ function createMarker(idx, data) {
             </div>
         `
     });
+    
     marker.addListener('click', () => infoWindow.open(map, marker));
     markers[idx] = marker;
     markerCluster.addMarker(marker);
+    
     return marker;
 }
 
 function createPinIcon(idx, data) {
-    const num = data.order_number ? String(data.order_number).substr(0, 3) : idx + 1;
+    const num = data.order_number ? String(data.order_number).substr(-3) : idx + 1;
     const color = data.cor || '#4285F4';
     return {
         path: google.maps.SymbolPath.CIRCLE,
@@ -137,26 +180,44 @@ function createPinIcon(idx, data) {
         strokeColor: '#fff',
         strokeWeight: 2,
         scale: 10,
-        label: { text: num, color: '#fff', fontSize: '12px' }
+        label: { 
+            text: String(num).substr(0, 3), 
+            color: '#fff', 
+            fontSize: '12px' 
+        }
     };
 }
 
 // Torna initMap global
 window.initMap = initMap;
 
-// Carrega Google Maps API se houver pelo menos um endereço
-const googleApiKey = "{{ GOOGLE_API_KEY }}";
-if (document.getElementById('map')) {
-    const validAny = enderecosData.some(e => e.latitude && e.longitude);
-    if (validAny && googleApiKey) {
-        const script = document.createElement('script');
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${googleApiKey}&libraries=places&callback=initMap`;
-        script.async = true;
-        script.defer = true;
-        document.head.appendChild(script);
-    } else {
-        showEmptyMapMessage();
+// Inicialização
+document.addEventListener('DOMContentLoaded', () => {
+    if (document.getElementById('map')) {
+        updateStatus("Verificando dados...");
+        
+        const hasValidData = enderecosData.some(e => 
+            e.latitude && e.longitude &&
+            !isNaN(parseFloat(e.latitude)) && 
+            !isNaN(parseFloat(e.longitude))
+        );
+
+        if (hasValidData && googleApiKey) {
+            updateStatus("Carregando API do Google Maps...");
+            
+            const script = document.createElement('script');
+            script.src = `https://maps.googleapis.com/maps/api/js?key=${googleApiKey}&libraries=places&callback=initMap`;
+            script.async = true;
+            script.defer = true;
+            script.onerror = () => {
+                showEmptyMapMessage("Falha ao carregar API do Google Maps");
+            };
+            document.head.appendChild(script);
+        } else {
+            const reason = !hasValidData ? "Sem dados válidos" : "Chave da API não configurada";
+            showEmptyMapMessage(reason);
+        }
     }
-}
+});
 </script>
 {% endblock %}
