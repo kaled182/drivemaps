@@ -5,6 +5,7 @@ import logging
 from dotenv import load_dotenv
 from werkzeug.serving import is_running_from_reloader
 
+# Suas funções originais, sem nenhuma alteração.
 def configure_logging():
     """Configura o sistema de logging para a aplicação"""
     logging.basicConfig(
@@ -43,44 +44,43 @@ def verify_config(app):
 def start_server(app):
     """Inicia o servidor Flask para desenvolvimento local"""
     try:
-        host = os.getenv('HOST', '127.0.0.1')
-        port = int(os.getenv('PORT', 5000))
-        
-        logging.info(f"🚀 Iniciando servidor de DESENVOLVIMENTO em http://{host}:{port}")
+        host = os.getenv('HOST', '0.0.0.0')
+        port = int(os.getenv('PORT', 10000))
+        debug_mode = app.config.get('DEBUG', False)
+        if app.config.get('FLASK_ENV') == 'production':
+            debug_mode = False
+            logging.info("🏭 Modo produção ativado")
+        logging.info(f"🔑 SECRET_KEY: {'Configurada' if app.config['SECRET_KEY'] else 'Faltando'}")
+        logging.info(f"🗺️ MAP_ID: {app.config.get('MAP_ID', 'Não configurado')}")
+        logging.info(f"🚀 Iniciando servidor em http://{host}:{port}")
         app.run(
             host=host,
             port=port,
-            debug=True
+            debug=debug_mode,
+            use_reloader=debug_mode and not is_running_from_reloader()
         )
     except Exception as e:
         logging.error(f"❌ Falha ao iniciar servidor: {str(e)}")
         raise
 
-# --- INICIALIZAÇÃO GLOBAL ---
-# Estas linhas são executadas quando o Gunicorn importa o arquivo.
+# --- CORREÇÃO NA ORDEM DE INICIALIZAÇÃO ---
+# Esta seção é executada quando o Gunicorn na Render importa o arquivo.
 
-# 1. Configura o logging primeiro para capturar todas as mensagens.
+# 1. Configura o logging primeiro.
 configure_logging()
-
-# 2. Carrega as variáveis de ambiente do arquivo .env (se existir).
+# 2. Carrega as variáveis do .env (se houver).
 load_dotenv()
-
-# 3. CRIA A INSTÂNCIA DA APLICAÇÃO.
-#    Agora a variável 'app' existe no escopo global e pode ser encontrada pelo Gunicorn.
+# 3. AGORA, com tudo configurado, cria a aplicação.
 app = create_app()
 
-# -----------------------------
-
+# -------------------------------------------
 
 if __name__ == '__main__':
-    # Este bloco é executado APENAS quando você roda `python app.py` na sua máquina.
-    # O Gunicorn na Render IGNORA esta parte.
+    # Este bloco é apenas para rodar localmente e é ignorado pelo Gunicorn.
+    # As funções de configuração não são mais necessárias aqui, pois já foram chamadas acima.
     try:
-        # A verificação de config já acontece dentro de create_app, 
-        # mas podemos verificar novamente por segurança.
         verify_config(app)
-        # Inicia o servidor de desenvolvimento para testes locais.
         start_server(app)
     except Exception as e:
-        logging.critical(f"⛔ Falha crítica na inicialização local: {str(e)}")
+        logging.critical(f"⛔ Falha crítica na inicialização: {str(e)}")
         raise
