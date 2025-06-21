@@ -72,11 +72,11 @@ def preview():
         session['lista'] = lista_atual
         session.modified = True
 
+        # Aqui só enviamos o MAPBOX_TOKEN para o template (Google API Key não é mais necessária)
         return render_template(
             "preview.html",
             lista=lista_atual,
-            GOOGLE_API_KEY=os.environ.get("GOOGLE_API_KEY", ""),
-            MAPBOX_TOKEN=os.environ.get("MAPBOX_TOKEN", ""),  # <-- ADICIONA O TOKEN MAPBOX
+            MAPBOX_TOKEN=os.environ.get("MAPBOX_TOKEN", ""),
             CORES_IMPORTACAO=CORES_IMPORTACAO,
             origens=list({
                 item.get('importacao_tipo', 'manual')
