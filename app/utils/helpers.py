@@ -1,101 +1,109 @@
 # app/utils/helpers.py
-
+"""
+Módulo com funções auxiliares (helpers) utilizadas em toda a aplicação.
+Inclui normalização de texto, validação de dados, gestão de cores e constantes.
+"""
 import unicodedata
 import re
 from typing import List, Dict, Any
 
-# Constantes de cores padronizadas (ajuste as cores se quiser algo diferente no Mapbox)
+# Paleta de cores padronizada para os tipos de importação (usada nos mapas/frontends)
 CORES_IMPORTACAO = {
-    "manual": "#0074D9",      # Azul
-    "delnext": "#FF851B",     # Laranja
-    "paack": "#2ECC40",       # Verde
-    "divergente": "#DC143C",  # Vermelho
-    "default": "#B10DC9"      # Roxo
+    "manual": "#0074D9",     # Azul
+    "delnext": "#FF851B",    # Laranja
+    "paack": "#2ECC40",      # Verde
+    "divergente": "#DC143C", # Vermelho (divergências/erros)
+    "default": "#B10DC9"     # Roxo (fallback)
 }
 
 def normalizar(texto: str) -> str:
     """
-    Remove acentos e normaliza a string para comparação.
+    Remove acentos, pontuação e excesso de espaços para comparação consistente.
+
     Args:
-        texto: String a ser normalizada
+        texto (str): String de entrada.
+
     Returns:
-        String normalizada em minúsculas sem acentos
+        str: String normalizada, minúscula e sem acentos.
     """
     if not texto:
         return ''
-    texto = str(texto)
-    normalizado = ''.join(
-        c for c in unicodedata.normalize('NFKD', texto.lower())
+    texto = str(texto).lower()
+    # Remove acentos
+    texto = ''.join(
+        c for c in unicodedata.normalize('NFKD', texto)
         if not unicodedata.combining(c)
-    ).strip()
-    return normalizado
+    )
+    # Remove pontuação
+    texto = re.sub(r'[^\w\s]', '', texto)
+    # Espaços únicos e limpa bordas
+    return re.sub(r'\s+', ' ', texto).strip()
 
 def registro_unico(lista: List[Dict[str, Any]], novo: Dict[str, Any]) -> bool:
     """
-    Verifica se um registro é único na lista baseado em endereço, CEP e tipo.
+    Verifica se um novo registro é único na lista (por endereço, CEP e tipo).
+
     Args:
-        lista: Lista de registros existentes
-        novo: Novo registro a ser verificado
+        lista (list): Lista de registros existentes.
+        novo (dict): Novo registro a verificar.
+
     Returns:
-        True se o registro for único, False caso contrário
+        bool: True se for único, False se duplicado.
     """
-    if not isinstance(lista, list) or not isinstance(novo, dict):
-        return True
     endereco_novo = normalizar(novo.get("address", ""))
     cep_novo = normalizar(novo.get("cep", ""))
     tipo_novo = novo.get("importacao_tipo", "")
     for item in lista:
-        if not isinstance(item, dict):
-            continue
-        endereco_existente = normalizar(item.get("address", ""))
-        cep_existente = normalizar(item.get("cep", ""))
-        tipo_existente = item.get("importacao_tipo", "")
         if (
-            endereco_existente == endereco_novo and
-            cep_existente == cep_novo and
-            tipo_existente == tipo_novo
+            normalizar(item.get("address", "")) == endereco_novo and
+            normalizar(item.get("cep", "")) == cep_novo and
+            item.get("importacao_tipo") == tipo_novo
         ):
             return False
     return True
 
 def cor_por_tipo(tipo: str) -> str:
     """
-    Retorna a cor padrão associada a um tipo de importação.
+    Retorna a cor hexadecimal associada ao tipo de importação.
+
     Args:
-        tipo: Tipo de importação
+        tipo (str): Tipo de importação.
+
     Returns:
-        Código de cor hexadecimal
+        str: Cor hexadecimal.
     """
     return CORES_IMPORTACAO.get(tipo, CORES_IMPORTACAO["default"])
 
 def validar_cep(cep: str) -> bool:
     """
     Valida formato de CEP português (xxxx-xxx).
+
     Args:
-        cep: CEP a ser validado
+        cep (str): CEP a validar.
+
     Returns:
-        True se válido, False caso contrário
+        bool: True se válido, False caso contrário.
     """
-    if not cep:
+    if not isinstance(cep, str):
         return False
     padrao = r'^\d{4}-\d{3}$'
-    return bool(re.match(padrao, str(cep).strip()))
+    return bool(re.match(padrao, cep.strip()))
 
 def sanitizar_endereco(endereco: str) -> str:
     """
-    Sanitiza endereço removendo caracteres perigosos.
+    Limpa uma string de endereço, removendo caracteres perigosos e limitando o tamanho.
+
     Args:
-        endereco: Endereço a ser sanitizado
+        endereco (str): Endereço original.
+
     Returns:
-        Endereço sanitizado
+        str: Endereço seguro e sanitizado.
     """
     if not endereco:
         return ""
-    endereco = str(endereco).strip()
+    endereco = str(endereco)
+    # Remove caracteres de controle e outros perigosos para segurança
     endereco = re.sub(r'[<>"\'\\\x00-\x1f\x7f-\x9f]', '', endereco)
-    return endereco[:500]  # Limita tamanho
-
-# >>> Observação:
-# O frontend (preview.html) decide qual mapa usar (Mapbox ou Google)
-# e utiliza a cor do campo "cor" conforme CORES_IMPORTACAO para pintar os marcadores.
-# O backend (helpers.py) não precisa saber qual mapa será usado, apenas entrega os dados.
+    # (Opcional) remove emojis/caracteres não BMP — pode ativar se desejar
+    # endereco = re.sub(r'[^\u0000-\uFFFF]', '', endereco)
+    return endereco.strip()[:500]
