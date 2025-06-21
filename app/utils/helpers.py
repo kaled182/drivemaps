@@ -4,15 +4,14 @@ import unicodedata
 import re
 from typing import List, Dict, Any
 
-# Constantes de cores padronizadas
+# Constantes de cores padronizadas (ajuste as cores se quiser algo diferente no Mapbox)
 CORES_IMPORTACAO = {
-    "manual": "#0074D9",     # Azul
-    "delnext": "#FF851B",    # Laranja
-    "paack": "#2ECC40",      # Verde
+    "manual": "#0074D9",      # Azul
+    "delnext": "#FF851B",     # Laranja
+    "paack": "#2ECC40",       # Verde
     "divergente": "#DC143C",  # Vermelho
-    "default": "#B10DC9"     # Roxo
+    "default": "#B10DC9"      # Roxo
 }
-
 
 def normalizar(texto: str) -> str:
     """
@@ -24,17 +23,12 @@ def normalizar(texto: str) -> str:
     """
     if not texto:
         return ''
-    # Converte para string se não for
     texto = str(texto)
-
-    # Remove acentos e normaliza
     normalizado = ''.join(
         c for c in unicodedata.normalize('NFKD', texto.lower())
         if not unicodedata.combining(c)
     ).strip()
-
     return normalizado
-
 
 def registro_unico(lista: List[Dict[str, Any]], novo: Dict[str, Any]) -> bool:
     """
@@ -50,7 +44,6 @@ def registro_unico(lista: List[Dict[str, Any]], novo: Dict[str, Any]) -> bool:
     endereco_novo = normalizar(novo.get("address", ""))
     cep_novo = normalizar(novo.get("cep", ""))
     tipo_novo = novo.get("importacao_tipo", "")
-
     for item in lista:
         if not isinstance(item, dict):
             continue
@@ -65,7 +58,6 @@ def registro_unico(lista: List[Dict[str, Any]], novo: Dict[str, Any]) -> bool:
             return False
     return True
 
-
 def cor_por_tipo(tipo: str) -> str:
     """
     Retorna a cor padrão associada a um tipo de importação.
@@ -75,7 +67,6 @@ def cor_por_tipo(tipo: str) -> str:
         Código de cor hexadecimal
     """
     return CORES_IMPORTACAO.get(tipo, CORES_IMPORTACAO["default"])
-
 
 def validar_cep(cep: str) -> bool:
     """
@@ -87,10 +78,8 @@ def validar_cep(cep: str) -> bool:
     """
     if not cep:
         return False
-    # Padrão para CEP português
     padrao = r'^\d{4}-\d{3}$'
     return bool(re.match(padrao, str(cep).strip()))
-
 
 def sanitizar_endereco(endereco: str) -> str:
     """
@@ -102,7 +91,11 @@ def sanitizar_endereco(endereco: str) -> str:
     """
     if not endereco:
         return ""
-    # Remove caracteres potencialmente perigosos
     endereco = str(endereco).strip()
     endereco = re.sub(r'[<>"\'\\\x00-\x1f\x7f-\x9f]', '', endereco)
     return endereco[:500]  # Limita tamanho
+
+# >>> Observação:
+# O frontend (preview.html) decide qual mapa usar (Mapbox ou Google)
+# e utiliza a cor do campo "cor" conforme CORES_IMPORTACAO para pintar os marcadores.
+# O backend (helpers.py) não precisa saber qual mapa será usado, apenas entrega os dados.
