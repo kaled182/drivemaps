@@ -1,0 +1,6 @@
+[project]
+name = "drivemaps"
+version = "0.1.0"
+
+[tool.pip]
+python = "3.10"
