@@ -1,161 +1,247 @@
 {% extends "base.html" %}
 
-{% block content %}
-<div class="container my-4">
-    <h2 class="mb-3">
-        <i class="fas fa-map-marked-alt me-2"></i> Visualização de Endereços
-    </h2>
-    <div class="alert alert-info mb-3">
-        <i class="fas fa-info-circle me-2"></i>
-        Total de endereços: {{ lista|length }} |
-        Origem: {{ origens|join(', ') }}
-    </div>
-    <div class="map-container mb-4">
-        <div id="map"></div>
-        <div id="map-status" class="text-muted small mt-2"></div>
-    </div>
-</div>
-{% endblock %}
+{% block title %}Visualização de Endereços | MapsDrive{% endblock %}
 
 {% block styles %}
-<link href='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css' rel='stylesheet' />
-<link rel="stylesheet" href="{{ url_for('static', filename='css/map.css') }}">
-<style>
-    .map-container #map {
-        min-height: 300px;
-        height: 500px;
-        width: 100%;
-        border-radius: 20px;
-        box-shadow: 0 2px 20px #0001;
-        background: #e9ecef;
-        position: relative;
-    }
-    .map-infowindow {
-        font-size: 14px;
-        min-width: 180px;
-    }
-    .map-empty-message {
-        position: absolute;
-        top: 40%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        z-index: 2;
-        background: rgba(255,255,255,0.95);
-        border-radius: 12px;
-        padding: 24px 36px;
-        text-align: center;
-        font-size: 1.1rem;
-        box-shadow: 0 2px 10px #0001;
-    }
-    #map-status {
-        font-family: monospace;
-    }
-</style>
+    <link href='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css' rel='stylesheet' />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/map.css') }}">
+    <style>
+        .map-container #map {
+            min-height: 450px; height: 60vh; width: 100%; border-radius: 14px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); background: #e9ecef; position: relative;
+        }
+        .table > :not(caption) > * > * { vertical-align: middle; }
+        .form-control-sm { font-size: 0.9rem; }
+        .btn-icon {
+            padding: 0.3rem 0.6rem;
+            font-size: 0.8rem;
+        }
+        .shadow-sm-strong { box-shadow: 0 .125rem .35rem rgba(0,0,0,.075)!important; }
+        .form-add-address { transition: all 0.3s ease-in-out; }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="mb-0"><i class="fas fa-map-marked-alt text-primary me-2"></i> Visualização de Endereços</h2>
+        <a href="{{ url_for('preview.home') }}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-file-import me-1"></i> Nova Importação</a>
+    </div>
+
+    <div class="alert alert-info shadow-sm-strong">
+        <i class="fas fa-info-circle me-2"></i>
+        <strong>Total de endereços: <span class="fw-bold">{{ lista|length }}</span></strong> |
+        Origem: <span class="badge bg-secondary">{{ origens|join(', ')|capitalize }}</span>
+    </div>
+
+    <div class="map-container mb-4">
+        <div id="map"></div>
+        <div id="map-status" class="position-absolute bottom-0 start-0 m-2 p-1 bg-light rounded shadow-sm small"></div>
+    </div>
+
+    <div class="d-flex justify-content-end mb-3">
+        <button id="btn-show-form" class="btn btn-success" onclick="toggleNewAddressForm()">
+            <i class="fas fa-plus-circle me-1"></i> Adicionar Novo Endereço
+        </button>
+    </div>
+
+    <!-- Formulário de Novo Endereço com Validação Bootstrap -->
+    <form id="new-address-form" class="card p-3 mb-4 shadow-sm form-add-address" style="display:none;" onsubmit="saveNewAddress(event)">
+        <h6 class="mb-3">Novo Endereço</h6>
+        <div class="row g-2 align-items-center">
+            <div class="col-md-2">
+                <label for="new_id" class="visually-hidden">ID</label>
+                <input type="text" class="form-control" id="new_id" placeholder="ID" required aria-label="ID do novo endereço">
+                <div class="invalid-feedback">O ID é obrigatório.</div>
+            </div>
+            <div class="col-md-5">
+                <label for="new_address" class="visually-hidden">Endereço Completo</label>
+                <input type="text" class="form-control" id="new_address" placeholder="Endereço completo" required aria-label="Endereço completo">
+                <div class="invalid-feedback">O endereço é obrigatório.</div>
+            </div>
+            <div class="col-md-3">
+                <label for="new_cep" class="visually-hidden">Código Postal</label>
+                <input type="text" class="form-control" id="new_cep" placeholder="Código Postal" required aria-label="Código Postal">
+                <div class="invalid-feedback">O Código Postal é obrigatório.</div>
+            </div>
+            <div class="col-md-2 text-end">
+                <button type="button" class="btn btn-primary btn-sm" onclick="alert('Simulando validação do novo endereço...')">Validar</button>
+            </div>
+        </div>
+        <div class="d-flex justify-content-end mt-3">
+            <button type="button" class="btn btn-secondary btn-sm me-2" onclick="toggleNewAddressForm()">Cancelar</button>
+            <button type="submit" class="btn btn-success btn-sm">Salvar Endereço</button>
+        </div>
+    </form>
+    
+    <div class="table-responsive">
+        <table class="table table-hover align-middle shadow-sm bg-white" style="border-radius:14px; overflow:hidden;">
+            <thead class="table-light">
+                <tr>
+                    <th style="width:80px;">ID</th>
+                    <th>Endereço</th>
+                    <th style="width:150px;">Código Postal</th>
+                    <th style="width:120px;">Status</th>
+                    <th style="width:160px;" class="text-center">Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in lista %}
+                <tr id="row-{{ item.order_number }}">
+                    <td><span class="badge bg-primary-subtle text-primary-emphasis rounded-pill">{{ item.order_number }}</span></td>
+                    <td>
+                        <label for="address-{{ item.order_number }}" class="visually-hidden">Endereço do ID {{ item.order_number }}</label>
+                        <input type="text" class="form-control form-control-sm" id="address-{{ item.order_number }}" value="{{ item.address }}" oninput="enableButtons('{{ item.order_number }}')" aria-label="Endereço do ID {{ item.order_number }}">
+                    </td>
+                    <td>
+                        <label for="cep-{{ item.order_number }}" class="visually-hidden">Código Postal do ID {{ item.order_number }}</label>
+                        <input type="text" class="form-control form-control-sm" id="cep-{{ item.order_number }}" value="{{ item.cep or '' }}" oninput="enableButtons('{{ item.order_number }}')" aria-label="Código Postal do ID {{ item.order_number }}">
+                    </td>
+                    <td id="status-{{ item.order_number }}">
+                        {% if item.status_google == "OK" %}
+                            <span class="badge bg-success-subtle text-success-emphasis rounded-pill">Validado</span>
+                        {% else %}
+                            <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill">Pendente</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        <button class="btn btn-primary btn-sm btn-icon btn-validate" id="btn-validate-{{ item.order_number }}" onclick="validateAddress('{{ item.order_number }}')" disabled title="Validar endereço"><i class="fas fa-search-location"></i></button>
+                        <button class="btn btn-secondary btn-sm btn-icon" onclick="focusMarker('{{ item.order_number }}')" title="Focar no mapa"><i class="fas fa-map-marker-alt"></i></button>
+                        <button class="btn btn-success btn-sm btn-icon btn-confirm" id="btn-confirm-{{ item.order_number }}" onclick="confirmEdit('{{ item.order_number }}')" style="display:none;" title="Confirmar alteração"><i class="fas fa-check"></i></button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script src='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js'></script>
 <script>
-const enderecosData = {{ lista|tojson|safe }};
-const mapboxToken = "{{ MAPBOX_TOKEN|default('') }}";
-let map, markers = [];
+    // Dados injetados pelo Flask
+    const enderecosData = {{ lista|tojson|safe }};
+    // REFINAMENTO: Usar uma variável MAPBOX_TOKEN para clareza
+    const mapboxToken = "{{ MAPBOX_TOKEN }}";
+    let map;
+    const markers = {};
 
-function updateStatus(message) {
-    document.getElementById('map-status').innerText = message;
-    console.log("Mapa Status:", message);
-}
-
-function showEmptyMapMessage(reason) {
-    const mapDiv = document.getElementById('map');
-    mapDiv.innerHTML = `<div class="map-empty-message">
-        <i class="fas fa-exclamation-triangle me-2"></i>
-        ${reason || 'Nenhuma localização válida para exibir no mapa.'}<br>
-        Verifique se os endereços foram validados corretamente.
-    </div>`;
-    updateStatus(`Erro: ${reason || 'Sem coordenadas válidas'}`);
-}
-
-function initMapbox() {
-    try {
-        updateStatus("Inicializando mapa (Mapbox)...");
-        if (!mapboxToken) {
-            showEmptyMapMessage("Mapbox Token não configurado.");
-            return;
-        }
-
-        // Filtra coordenadas válidas
-        const validCoords = enderecosData.filter(e => {
-            const lat = parseFloat(e.latitude);
-            const lng = parseFloat(e.longitude);
-            return !isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
-        });
-
-        updateStatus(`Endereços válidos: ${validCoords.length}/${enderecosData.length}`);
-        if (validCoords.length === 0) {
-            showEmptyMapMessage("Nenhuma coordenada válida encontrada");
-            return;
-        }
-
-        mapboxgl.accessToken = mapboxToken;
-        map = new mapboxgl.Map({
-            container: 'map',
-            style: 'mapbox://styles/mapbox/streets-v12',
-            center: [parseFloat(validCoords[0].longitude), parseFloat(validCoords[0].latitude)],
-            zoom: 12
-        });
-
-        // Adiciona marcadores
-        validCoords.forEach((item, idx) => {
-            const marker = new mapboxgl.Marker({ color: item.cor || '#4285F4' })
-                .setLngLat([parseFloat(item.longitude), parseFloat(item.latitude)])
-                .setPopup(
-                    new mapboxgl.Popup({ offset: 25 })
-                    .setHTML(`
-                        <div class="map-infowindow">
-                            <h6>${item.order_number || 'Sem ID'}</h6>
-                            <p>${item.address}</p>
-                            <p>CEP: ${item.cep || 'Não informado'}</p>
-                            ${item.status_google === 'OK'
-                                ? '<p class="text-success">✓ Validado</p>'
-                                : `<p class="text-danger">${item.status_google || 'Não validado'}</p>`}
-                        </div>
-                    `)
-                )
-                .addTo(map);
-            markers.push(marker);
-        });
-
-        // Ajusta o mapa para mostrar todos os marcadores
-        if (validCoords.length > 1) {
-            const bounds = new mapboxgl.LngLatBounds();
-            validCoords.forEach(e => bounds.extend([parseFloat(e.longitude), parseFloat(e.latitude)]));
-            map.fitBounds(bounds, { padding: 60, animate: true });
-        }
-
-        updateStatus(`Mapa carregado com ${validCoords.length} marcadores (Mapbox)`);
-
-    } catch (error) {
-        console.error("Erro ao inicializar Mapbox:", error);
-        showEmptyMapMessage(`Erro técnico: ${error.message}`);
+    function enableButtons(id) {
+        document.getElementById('btn-validate-' + id).disabled = false;
+        document.getElementById('btn-confirm-' + id).style.display = 'inline-block';
     }
-}
 
-document.addEventListener('DOMContentLoaded', () => {
-    if (document.getElementById('map')) {
-        updateStatus("Verificando dados...");
-        const hasValidData = enderecosData.some(e =>
-            e.latitude && e.longitude &&
-            !isNaN(parseFloat(e.latitude)) &&
-            !isNaN(parseFloat(e.longitude))
-        );
-        if (hasValidData && mapboxToken) {
-            updateStatus("Carregando mapa Mapbox...");
-            initMapbox();
+    function validateAddress(id) {
+        // TODO: Substituir por chamada AJAX para /api/validar-linha
+        alert('Simulando validação para o endereço ID ' + id);
+        const statusCell = document.getElementById('status-' + id);
+        statusCell.innerHTML = '<span class="badge bg-success-subtle text-success-emphasis rounded-pill">Validado</span>';
+        document.getElementById('btn-validate-' + id).disabled = true;
+    }
+
+    function confirmEdit(id) {
+        // TODO: Substituir por chamada AJAX para salvar a alteração
+        alert('Simulando confirmação da edição para o ID ' + id);
+        document.getElementById('btn-confirm-' + id).style.display = 'none';
+    }
+
+    function focusMarker(id) {
+        const marker = markers[id];
+        if (marker) {
+            map.flyTo({ center: marker.getLngLat(), zoom: 16 });
+            marker.togglePopup();
         } else {
-            const reason = !hasValidData ? "Sem dados válidos" : "Mapbox Token não configurado";
-            showEmptyMapMessage(reason);
+            alert('Marcador não encontrado para o ID ' + id + '. Verifique se o endereço tem coordenadas válidas.');
         }
     }
-});
+
+    function toggleNewAddressForm() {
+        const form = document.getElementById('new-address-form');
+        const btn = document.getElementById('btn-show-form');
+        const isHidden = form.style.display === 'none';
+        
+        form.style.display = isHidden ? 'block' : 'none';
+        btn.innerHTML = isHidden ? '<i class="fas fa-times me-1"></i> Cancelar' : '<i class="fas fa-plus-circle me-1"></i> Adicionar Novo Endereço';
+        btn.classList.toggle('btn-secondary', isHidden);
+        btn.classList.toggle('btn-success', !isHidden);
+        if (!isHidden) form.querySelector('input').focus();
+    }
+
+    function saveNewAddress(event) {
+        event.preventDefault();
+        const form = event.target;
+        if (!form.checkValidity()) {
+            form.classList.add('was-validated');
+            return;
+        }
+        // REFINAMENTO: Feedback ao salvar
+        alert('Simulando salvamento do novo endereço...');
+        // TODO: Aqui entraria a chamada AJAX para /api/add-address
+        form.classList.remove('was-validated');
+        form.reset();
+        toggleNewAddressForm();
+    }
+
+    function updateStatus(message) { document.getElementById('map-status').innerText = message; }
+
+    function showEmptyMapMessage(reason) {
+        document.getElementById('map').innerHTML = `<div class="map-empty-message"><h5><i class="fas fa-exclamation-triangle text-warning me-2"></i>Mapa indisponível</h5><p class="text-muted small">${reason}</p></div>`;
+    }
+
+    function initMapbox() {
+        try {
+            if (!mapboxToken) return showEmptyMapMessage("Token de acesso para o mapa não configurado.");
+            mapboxgl.accessToken = mapboxToken;
+            const validCoords = enderecosData.filter(e => e.latitude && e.longitude);
+            if (validCoords.length === 0) return showEmptyMapMessage("Nenhum endereço com coordenadas válidas.");
+
+            map = new mapboxgl.Map({
+                container: 'map', style: 'mapbox://styles/mapbox/streets-v12',
+                center: [validCoords[0].longitude, validCoords[0].latitude], zoom: 11
+            });
+            map.addControl(new mapboxgl.NavigationControl());
+
+            validCoords.forEach(item => {
+                const marker = new mapboxgl.Marker({ color: item.cor || '#0d6efd', draggable: true })
+                    .setLngLat([item.longitude, item.latitude])
+                    .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML(`<h6>${item.order_number}</h6><p>${item.address}</p>`))
+                    .addTo(map);
+                marker.on('dragend', () => onMarkerDrag(item.order_number, marker));
+                markers[item.order_number] = marker;
+            });
+            
+            if (validCoords.length > 1) {
+                const bounds = new mapboxgl.LngLatBounds();
+                validCoords.forEach(e => bounds.extend([e.longitude, e.latitude]));
+                map.fitBounds(bounds, { padding: 80 });
+            }
+            updateStatus(`Mapa carregado com ${validCoords.length} marcadores.`);
+        } catch (error) {
+            console.error("Erro ao inicializar Mapbox:", error);
+            showEmptyMapMessage(`Erro técnico: ${error.message}`);
+        }
+    }
+
+    function onMarkerDrag(id, marker) {
+        const newLngLat = marker.getLngLat();
+        // REFINAMENTO: Melhor feedback para o utilizador
+        const row = document.getElementById(`row-${id}`);
+        row.classList.add('table-info');
+
+        // SIMULAÇÃO: No futuro, aqui você faria a chamada para a API de geocoding reverso
+        alert(`PIN de ID ${id} movido.\nNuma aplicação real, uma chamada AJAX buscaria o novo endereço para estas coordenadas:\nLat: ${newLngLat.lat.toFixed(6)}, Lng: ${newLngLat.lng.toFixed(6)}`);
+        
+        // Exemplo de como seria após receber a resposta do backend
+        document.getElementById('address-' + id).value = `Endereço atualizado (simulado)`;
+        document.getElementById('cep-' + id).value = `XXXX-XXX`;
+        document.getElementById('status-' + id).innerHTML = '<span class="badge bg-info-subtle text-info-emphasis rounded-pill">Aguardando Confirmação</span>';
+        enableButtons(id);
+        row.classList.remove('table-info');
+    }
+    
+    document.addEventListener('DOMContentLoaded', () => {
+        if (document.getElementById('map')) initMapbox();
+    });
 </script>
 {% endblock %}
