@@ -25,5 +25,6 @@ services:
   region: frankfurt
   buildCommand: pip install -r requirements.txt
   startCommand: gunicorn app:app
+  pythonVersion: 3.11.9
   autoDeployTrigger: commit
 version: "1"
