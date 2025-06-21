@@ -1,227 +1,141 @@
 /**
- * MapsDrive - Map Utilities
- * Contém funções específicas para manipulação do mapa
+ * MapsDrive - Map Manager
+ * Classe modular e reutilizável para gerir a lógica do mapa Mapbox GL.
+ * Esta classe é responsável por inicializar o mapa, renderizar marcadores
+ * e comunicar eventos (como o arrastar de um marcador) de volta para o script principal.
  */
-
 class MapManager {
-  constructor(mapElementId, options = {}) {
-    this.mapElement = document.getElementById(mapElementId);
-    this.options = {
-      defaultZoom: 12,
-      clusterStyles: {
-        url: 'https://developers.google.com/maps/documentation/javascript/examples/markerclusterer/m1.png',
-        width: 56,
-        height: 56,
-        textColor: '#fff',
-        textSize: 12
-      },
-      ...options
-    };
-    
-    this.map = null;
-    this.markers = [];
-    this.markerCluster = null;
-    this.infoWindow = null;
-  }
-  
-  /**
-   * Inicializa o mapa
-   * @param {Object} initialPosition - Posição inicial { lat, lng }
-   * @returns {Promise} Resolve quando o mapa está pronto
-   */
-  init(initialPosition) {
-    return new Promise((resolve) => {
-      if (!this.mapElement) {
-        console.error('Map element not found');
-        return;
-      }
-      
-      const center = initialPosition || { lat: -15.793889, lng: -47.882778 }; // Brasília como fallback
-      
-      this.map = new google.maps.Map(this.mapElement, {
-        zoom: this.options.defaultZoom,
-        center,
-        gestureHandling: 'greedy',
-        mapTypeControl: false,
-        streetViewControl: false,
-        fullscreenControl: true,
-        styles: this.options.mapStyles
-      });
-      
-      this.infoWindow = new google.maps.InfoWindow();
-      resolve(this.map);
-    });
-  }
-  
-  /**
-   * Adiciona um marcador ao mapa
-   * @param {Object} position - Posição { lat, lng }
-   * @param {Object} options - Opções do marcador
-   * @returns {google.maps.Marker} O marcador criado
-   */
-  addMarker(position, options = {}) {
-    if (!this.map) {
-      console.error('Map not initialized');
-      return null;
+    /**
+     * @param {string} containerId - O ID do elemento HTML onde o mapa será renderizado.
+     * @param {string} accessToken - O seu token de acesso do Mapbox.
+     * @param {object} [options={}] - Opções de configuração adicionais.
+     * @param {function} [options.onMarkerDragEnd] - Callback a ser executado quando um marcador é arrastado.
+     */
+    constructor(containerId, accessToken, options = {}) {
+        this.containerId = containerId;
+        this.accessToken = accessToken;
+        this.options = { defaultZoom: 11, ...options };
+        this.map = null;
+        this.markers = {}; // Usar um objeto para associar marcadores a um ID único (ex: originalIndex)
     }
-    
-    const marker = new google.maps.Marker({
-      position,
-      map: this.map,
-      title: options.title || '',
-      icon: options.icon || null,
-      draggable: options.draggable || false,
-      zIndex: options.zIndex || 0
-    });
-    
-    if (options.content) {
-      marker.addListener('click', () => {
-        this.infoWindow.setContent(options.content);
-        this.infoWindow.open(this.map, marker);
-      });
-    }
-    
-    this.markers.push(marker);
-    return marker;
-  }
-  
-  /**
-   * Remove um marcador do mapa
-   * @param {google.maps.Marker} marker - Marcador a ser removido
-   */
-  removeMarker(marker) {
-    const index = this.markers.indexOf(marker);
-    if (index > -1) {
-      marker.setMap(null);
-      this.markers.splice(index, 1);
-      
-      if (this.markerCluster) {
-        this.markerCluster.removeMarker(marker);
-      }
-    }
-  }
-  
-  /**
-   * Limpa todos os marcadores do mapa
-   */
-  clearMarkers() {
-    this.markers.forEach(marker => marker.setMap(null));
-    this.markers = [];
-    
-    if (this.markerCluster) {
-      this.markerCluster.clearMarkers();
-    }
-  }
-  
-  /**
-   * Atualiza o cluster de marcadores
-   */
-  updateCluster() {
-    if (!this.markerCluster && this.markers.length > 0) {
-      this.markerCluster = new markerClusterer.MarkerClusterer({
-        map: this.map,
-        markers: this.markers,
-        renderer: {
-          render: ({ count, position }) => {
-            return new google.maps.Marker({
-              position,
-              label: { text: String(count), color: 'white' },
-              icon: {
-                path: google.maps.SymbolPath.CIRCLE,
-                scale: 10 + Math.min(count, 10),
-                fillColor: this.options.clusterColor || '#4285F4',
-                fillOpacity: 0.8,
-                strokeWeight: 2
-              }
-            });
-          }
+
+    /**
+     * Inicializa o mapa Mapbox.
+     * @param {Array} initialData - Os dados iniciais dos endereços para encontrar um ponto central.
+     */
+    init(initialData = []) {
+        if (!this.accessToken) {
+            this.handleError("Token de acesso do Mapbox não fornecido.");
+            return;
         }
-      });
-    } else if (this.markerCluster) {
-      this.markerCluster.repaint();
+        mapboxgl.accessToken = this.accessToken;
+
+        const validCoords = initialData.filter(item => item.latitude && item.longitude);
+        const center = validCoords.length > 0 ? [validCoords[0].longitude, validCoords[0].latitude] : [-9.1393, 38.7223]; // Lisboa como fallback
+
+        this.map = new mapboxgl.Map({
+            container: this.containerId,
+            style: 'mapbox://styles/mapbox/streets-v12',
+            center: center,
+            zoom: this.options.defaultZoom
+        });
+        this.map.addControl(new mapboxgl.NavigationControl());
     }
-  }
-  
-  /**
-   * Ajusta o zoom para mostrar todos os marcadores
-   * @param {number} padding - Espaçamento opcional em pixels
-   */
-  fitToMarkers(padding = 50) {
-    if (!this.map || this.markers.length === 0) return;
-    
-    const bounds = new google.maps.LatLngBounds();
-    this.markers.forEach(marker => bounds.extend(marker.getPosition()));
-    
-    // Se houver apenas um marcador, centraliza com zoom padrão
-    if (this.markers.length === 1) {
-      this.map.setCenter(bounds.getCenter());
-      this.map.setZoom(this.options.defaultZoom);
-    } else {
-      this.map.fitBounds(bounds, padding);
+
+    /**
+     * Limpa todos os marcadores existentes e renderiza novos com base nos dados fornecidos.
+     * @param {Array} addressData - A lista completa de endereços para renderizar.
+     */
+    renderMarkers(addressData) {
+        if (!this.map) return;
+
+        // Limpa marcadores antigos
+        Object.values(this.markers).forEach(marker => marker.remove());
+        this.markers = {};
+
+        const validCoords = addressData.map((item, index) => ({...item, originalIndex: index}))
+                                       .filter(item => item.latitude && item.longitude);
+        
+        if (validCoords.length === 0) {
+            this.handleError("Nenhum endereço com coordenadas válidas para exibir no mapa.");
+            return;
+        }
+
+        validCoords.forEach(item => {
+            const marker = new mapboxgl.Marker({
+                color: item.cor || '#0d6efd',
+                draggable: true
+            })
+            .setLngLat([item.longitude, item.latitude])
+            .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML(`
+                <div class="map-infowindow">
+                  <h6>${item.order_number || 'Sem ID'}</h6>
+                  <p>${item.address}</p>
+                  <p>CEP: ${item.cep || 'Não informado'}</p>
+                  ${item.status_google === 'OK'
+                    ? '<p class="text-success">✓ Validado</p>'
+                    : `<p class="text-danger">${item.status_google || 'Não validado'}</p>`}
+                </div>
+            `))
+            .addTo(this.map);
+
+            // Se um callback para o 'drag end' foi fornecido, associa-o
+            if (typeof this.options.onMarkerDragEnd === 'function') {
+                marker.on('dragend', () => this.options.onMarkerDragEnd(item.originalIndex, marker));
+            }
+            
+            this.markers[item.originalIndex] = marker;
+        });
+        
+        this.fitToBounds(validCoords);
     }
-  }
-  
-  /**
-   * Cria um ícone personalizado para marcador
-   * @param {string|number} label - Rótulo do marcador
-   * @param {string} color - Cor do marcador em hexadecimal
-   * @param {number} size - Tamanho do marcador
-   * @returns {Object} Objeto de ícone para o marcador
-   */
-  static createPinIcon(label, color = '#4285F4', size = 40) {
-    return {
-      path: google.maps.SymbolPath.CIRCLE,
-      fillColor: color,
-      fillOpacity: 1,
-      strokeColor: '#fff',
-      strokeWeight: 2,
-      scale: size / 10,
-      label: {
-        text: String(label).substr(0, 3),
-        color: '#fff',
-        fontSize: '12px'
-      }
-    };
-  }
+
+    /**
+     * Ajusta o zoom e o centro do mapa para mostrar todos os endereços.
+     * @param {Array} data - A lista de endereços com coordenadas.
+     */
+    fitToBounds(data) {
+        if (!this.map || data.length === 0) return;
+        
+        if (data.length === 1) {
+            this.map.flyTo({ center: [data[0].longitude, data[0].latitude], zoom: 15 });
+            return;
+        }
+
+        const bounds = new mapboxgl.LngLatBounds();
+        data.forEach(item => bounds.extend([item.longitude, item.latitude]));
+        this.map.fitBounds(bounds, { padding: 80, maxZoom: 15 });
+    }
+
+    /**
+     * Foca o mapa num marcador específico.
+     * @param {number} index - O índice do marcador a focar.
+     */
+    focusMarker(index) {
+        const marker = this.markers[index];
+        if (marker) {
+            this.map.flyTo({ center: marker.getLngLat(), zoom: 16 });
+            marker.togglePopup();
+        }
+    }
+    
+    /**
+     * Mostra uma mensagem de erro no container do mapa.
+     * @param {string} message - A mensagem de erro a ser exibida.
+     */
+    handleError(message) {
+        const mapDiv = document.getElementById(this.containerId);
+        if (mapDiv) {
+            mapDiv.innerHTML = `<div class="d-flex h-100 align-items-center justify-content-center">
+                <div class="text-center p-4 bg-white rounded shadow">
+                    <h5 class="text-danger"><i class="fas fa-exclamation-triangle me-2"></i>Mapa indisponível</h5>
+                    <p class="text-muted small">${message}</p>
+                </div>
+            </div>`;
+        }
+        console.error("MapManager Error:", message);
+    }
 }
 
+// Exporta para uso externo/global
 window.MapManager = MapManager;
-
-// ========== Integração MapsDrive ==========
-function initDefaultMap() {
-  if (!window.enderecosData || !Array.isArray(window.enderecosData) || window.enderecosData.length === 0) {
-    console.warn('Nenhum dado de endereço para exibir no mapa.');
-    return;
-  }
-  const first = window.enderecosData.find(e => e.latitude && e.longitude);
-  if (!first) {
-    document.getElementById('map').innerHTML = '<div class="alert alert-warning m-3">Nenhuma localização válida para exibir</div>';
-    return;
-  }
-  const mapManager = new MapManager('map');
-  mapManager.init({ lat: parseFloat(first.latitude), lng: parseFloat(first.longitude) }).then(() => {
-    // Cria marcadores
-    window.enderecosData.forEach((item, idx) => {
-      if (item.latitude && item.longitude) {
-        mapManager.addMarker(
-          { lat: parseFloat(item.latitude), lng: parseFloat(item.longitude) },
-          {
-            title: `${item.order_number || (idx + 1)} - ${item.address}`,
-            icon: MapManager.createPinIcon(item.order_number || idx + 1, item.cor || "#4285F4", 40),
-            content: `<div class="map-infowindow">
-                <h6>${item.order_number || 'Sem ID'}</h6>
-                <p>${item.address}</p>
-                <p>CEP: ${item.cep || 'Não informado'}</p>
-                ${item.status_google === 'OK' ? 
-                  '<p class="text-success">✓ Validado</p>' : 
-                  `<p class="text-danger">${item.status_google || 'Não validado'}</p>`}
-              </div>`
-          }
-        );
-      }
-    });
-    mapManager.updateCluster();
-    mapManager.fitToMarkers();
-  });
-}
-window.initDefaultMap = initDefaultMap;
