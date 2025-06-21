@@ -1,31 +1,49 @@
 {% extends "base.html" %}
-
 {% block title %}Visualização de Endereços | MapsDrive{% endblock %}
 
 {% block styles %}
-    <link href='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css' rel='stylesheet' />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/map.css') }}">
-    <style>
-        .map-container #map {
-            min-height: 450px; height: 60vh; width: 100%; border-radius: 14px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); background: #e9ecef; position: relative;
-        }
-        .table > :not(caption) > * > * { vertical-align: middle; }
-        .form-control-sm { font-size: 0.9rem; }
-        .btn-icon {
-            padding: 0.3rem 0.6rem;
-            font-size: 0.8rem;
-        }
-        .shadow-sm-strong { box-shadow: 0 .125rem .35rem rgba(0,0,0,.075)!important; }
-        .form-add-address { transition: all 0.3s ease-in-out; }
-    </style>
+<link href='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css' rel='stylesheet' />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/map.css') }}">
+<style>
+    .map-container #map { min-height: 450px; height: 60vh; width: 100%; border-radius: 14px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); background: #e9ecef; position: relative; }
+    .table > :not(caption) > * > * { vertical-align: middle; }
+    .form-control-sm { font-size: 0.9rem; }
+    .btn-icon { padding: 0.3rem 0.6rem; font-size: 0.8rem; }
+    .shadow-sm-strong { box-shadow: 0 .125rem .35rem rgba(0,0,0,.075)!important; }
+    .form-add-address { transition: all 0.3s ease-in-out; }
+    .spinner-border.spinner-border-sm { width: 1.2rem; height: 1.2rem; }
+    .map-empty-message { text-align: center; padding: 2rem 0; }
+    .toast-container { position: fixed; top: 1rem; right: 1rem; z-index: 1055; }
+</style>
 {% endblock %}
 
 {% block content %}
 <div class="container my-4">
+
+    <!-- Toast Container (feedback visual) -->
+    <div class="toast-container" id="toast-container"></div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2 class="mb-0"><i class="fas fa-map-marked-alt text-primary me-2"></i> Visualização de Endereços</h2>
-        <a href="{{ url_for('preview.home') }}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-file-import me-1"></i> Nova Importação</a>
+        <div>
+            <a href="#" class="btn btn-outline-primary btn-sm me-2" onclick="document.getElementById('form-generate-csv').submit();">
+                <i class="fas fa-file-csv me-1"></i> Exportar CSV
+            </a>
+            <form id="form-generate-csv" method="POST" action="{{ url_for('gerar.generate') }}" style="display:none"></form>
+            <a href="{{ url_for('preview.home') }}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-file-import me-1"></i> Nova Importação</a>
+        </div>
     </div>
 
     <div class="alert alert-info shadow-sm-strong">
@@ -45,27 +63,23 @@
         </button>
     </div>
 
-    <!-- Formulário de Novo Endereço com Validação Bootstrap -->
-    <form id="new-address-form" class="card p-3 mb-4 shadow-sm form-add-address" style="display:none;" onsubmit="saveNewAddress(event)">
+    <form id="new-address-form" class="card p-3 mb-4 shadow-sm form-add-address" style="display:none;" onsubmit="saveNewAddress(event)" novalidate>
         <h6 class="mb-3">Novo Endereço</h6>
         <div class="row g-2 align-items-center">
             <div class="col-md-2">
-                <label for="new_id" class="visually-hidden">ID</label>
                 <input type="text" class="form-control" id="new_id" placeholder="ID" required aria-label="ID do novo endereço">
                 <div class="invalid-feedback">O ID é obrigatório.</div>
             </div>
             <div class="col-md-5">
-                <label for="new_address" class="visually-hidden">Endereço Completo</label>
                 <input type="text" class="form-control" id="new_address" placeholder="Endereço completo" required aria-label="Endereço completo">
                 <div class="invalid-feedback">O endereço é obrigatório.</div>
             </div>
             <div class="col-md-3">
-                <label for="new_cep" class="visually-hidden">Código Postal</label>
-                <input type="text" class="form-control" id="new_cep" placeholder="Código Postal" required aria-label="Código Postal">
-                <div class="invalid-feedback">O Código Postal é obrigatório.</div>
+                <input type="text" class="form-control" id="new_cep" placeholder="Código Postal" required pattern="\d{4}-\d{3}" title="Formato: 1234-567" aria-label="Código Postal">
+                <div class="invalid-feedback">O Código Postal é obrigatório e deve estar no formato 1234-567.</div>
             </div>
             <div class="col-md-2 text-end">
-                <button type="button" class="btn btn-primary btn-sm" onclick="alert('Simulando validação do novo endereço...')">Validar</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="validateNewAddress()">Validar</button>
             </div>
         </div>
         <div class="d-flex justify-content-end mt-3">
@@ -75,27 +89,25 @@
     </form>
     
     <div class="table-responsive">
-        <table class="table table-hover align-middle shadow-sm bg-white" style="border-radius:14px; overflow:hidden;">
+        <table class="table table-hover align-middle shadow-sm bg-white" style="border-radius:14px; overflow:hidden;" role="table">
             <thead class="table-light">
-                <tr>
+                <tr role="row">
                     <th style="width:80px;">ID</th>
                     <th>Endereço</th>
                     <th style="width:150px;">Código Postal</th>
                     <th style="width:120px;">Status</th>
-                    <th style="width:160px;" class="text-center">Ações</th>
+                    <th style="width:180px;" class="text-center">Ações</th>
                 </tr>
             </thead>
             <tbody>
                 {% for item in lista %}
-                <tr id="row-{{ item.order_number }}">
+                <tr id="row-{{ item.order_number }}" role="row">
                     <td><span class="badge bg-primary-subtle text-primary-emphasis rounded-pill">{{ item.order_number }}</span></td>
                     <td>
-                        <label for="address-{{ item.order_number }}" class="visually-hidden">Endereço do ID {{ item.order_number }}</label>
-                        <input type="text" class="form-control form-control-sm" id="address-{{ item.order_number }}" value="{{ item.address }}" oninput="enableButtons('{{ item.order_number }}')" aria-label="Endereço do ID {{ item.order_number }}">
+                        <input type="text" class="form-control form-control-sm" id="address-{{ item.order_number }}" value="{{ item.address }}" oninput="enableButtons('{{ item.order_number }}')" aria-label="Endereço do ID {{ item.order_number }}" role="cell">
                     </td>
                     <td>
-                        <label for="cep-{{ item.order_number }}" class="visually-hidden">Código Postal do ID {{ item.order_number }}</label>
-                        <input type="text" class="form-control form-control-sm" id="cep-{{ item.order_number }}" value="{{ item.cep or '' }}" oninput="enableButtons('{{ item.order_number }}')" aria-label="Código Postal do ID {{ item.order_number }}">
+                        <input type="text" class="form-control form-control-sm" id="cep-{{ item.order_number }}" value="{{ item.cep or '' }}" oninput="enableButtons('{{ item.order_number }}')" aria-label="Código Postal do ID {{ item.order_number }}" pattern="\d{4}-\d{3}" title="Formato: 1234-567" role="cell">
                     </td>
                     <td id="status-{{ item.order_number }}">
                         {% if item.status_google == "OK" %}
@@ -108,6 +120,7 @@
                         <button class="btn btn-primary btn-sm btn-icon btn-validate" id="btn-validate-{{ item.order_number }}" onclick="validateAddress('{{ item.order_number }}')" disabled title="Validar endereço"><i class="fas fa-search-location"></i></button>
                         <button class="btn btn-secondary btn-sm btn-icon" onclick="focusMarker('{{ item.order_number }}')" title="Focar no mapa"><i class="fas fa-map-marker-alt"></i></button>
                         <button class="btn btn-success btn-sm btn-icon btn-confirm" id="btn-confirm-{{ item.order_number }}" onclick="confirmEdit('{{ item.order_number }}')" style="display:none;" title="Confirmar alteração"><i class="fas fa-check"></i></button>
+                        <button class="btn btn-danger btn-sm btn-icon" onclick="removeAddress('{{ item.order_number }}')" title="Remover endereço"><i class="fas fa-trash-alt"></i></button>
                     </td>
                 </tr>
                 {% endfor %}
@@ -120,30 +133,80 @@
 {% block scripts %}
 <script src='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js'></script>
 <script>
-    // Dados injetados pelo Flask
     const enderecosData = {{ lista|tojson|safe }};
-    // REFINAMENTO: Usar uma variável MAPBOX_TOKEN para clareza
     const mapboxToken = "{{ MAPBOX_TOKEN }}";
     let map;
     const markers = {};
+
+    // Toast feedback
+    function showToast(msg, type="info") {
+        const container = document.getElementById('toast-container');
+        const toastId = "toast-" + Date.now();
+        const colors = {info: "primary", success: "success", warning: "warning", danger: "danger"};
+        const html = `
+          <div id="${toastId}" class="toast align-items-center text-bg-${colors[type]||"info"} border-0 mb-2 show" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+              <div class="toast-body">${msg}</div>
+              <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close" onclick="this.parentNode.parentNode.remove()"></button>
+            </div>
+          </div>
+        `;
+        container.insertAdjacentHTML("beforeend", html);
+        setTimeout(()=>{ const t=document.getElementById(toastId); t && t.remove(); }, 5500);
+    }
 
     function enableButtons(id) {
         document.getElementById('btn-validate-' + id).disabled = false;
         document.getElementById('btn-confirm-' + id).style.display = 'inline-block';
     }
 
-    function validateAddress(id) {
-        // TODO: Substituir por chamada AJAX para /api/validar-linha
-        alert('Simulando validação para o endereço ID ' + id);
-        const statusCell = document.getElementById('status-' + id);
-        statusCell.innerHTML = '<span class="badge bg-success-subtle text-success-emphasis rounded-pill">Validado</span>';
-        document.getElementById('btn-validate-' + id).disabled = true;
+    function setStatusLoading(id) {
+        document.getElementById('status-' + id).innerHTML = '<span class="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true"></span> <span class="visually-hidden">Validando...</span>';
     }
 
-    function confirmEdit(id) {
-        // TODO: Substituir por chamada AJAX para salvar a alteração
-        alert('Simulando confirmação da edição para o ID ' + id);
-        document.getElementById('btn-confirm-' + id).style.display = 'none';
+    // AJAX para validar linha e salvar imediatamente
+    async function validateAddress(id) {
+        const address = document.getElementById('address-' + id).value;
+        const cep = document.getElementById('cep-' + id).value;
+        setStatusLoading(id);
+        try {
+            const resp = await fetch("/api/validar-linha", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({ idx: parseInt(id)-1, endereco: address, cep: cep })
+            });
+            const data = await resp.json();
+            if (data.success) {
+                document.getElementById('status-' + id).innerHTML =
+                    '<span class="badge bg-success-subtle text-success-emphasis rounded-pill">Validado</span>';
+                showToast("Endereço validado e salvo!", "success");
+            } else {
+                document.getElementById('status-' + id).innerHTML =
+                    `<span class="badge bg-danger-subtle text-danger-emphasis rounded-pill">Erro: ${data.msg || 'Falha ao validar.'}</span>`;
+                showToast("Erro ao validar: " + (data.msg || 'Falha na validação.'), "danger");
+            }
+            document.getElementById('btn-validate-' + id).disabled = true;
+            document.getElementById('btn-confirm-' + id).style.display = 'none';
+        } catch (err) {
+            document.getElementById('status-' + id).innerHTML =
+                '<span class="badge bg-danger-subtle text-danger-emphasis rounded-pill">Erro na validação</span>';
+            showToast("Erro técnico na validação.", "danger");
+        }
+    }
+
+    async function confirmEdit(id) {
+        // Salva edição (reaproveita validação, mas pode criar endpoint separado se desejar)
+        await validateAddress(id);
+    }
+
+    // Remoção AJAX
+    async function removeAddress(id) {
+        if (!confirm("Tem certeza que deseja remover este endereço?")) return;
+        // Aqui você implementaria o endpoint /api/remove-address (não existe no backend ainda)
+        // Exemplo de simulação:
+        document.getElementById("row-" + id).remove();
+        showToast("Endereço removido (simulado).", "warning");
+        // Para produção, recomendo criar um endpoint REST para remoção na sessão.
     }
 
     function focusMarker(id) {
@@ -152,7 +215,7 @@
             map.flyTo({ center: marker.getLngLat(), zoom: 16 });
             marker.togglePopup();
         } else {
-            alert('Marcador não encontrado para o ID ' + id + '. Verifique se o endereço tem coordenadas válidas.');
+            showToast('Marcador não encontrado para o ID ' + id + '.', "warning");
         }
     }
 
@@ -160,7 +223,6 @@
         const form = document.getElementById('new-address-form');
         const btn = document.getElementById('btn-show-form');
         const isHidden = form.style.display === 'none';
-        
         form.style.display = isHidden ? 'block' : 'none';
         btn.innerHTML = isHidden ? '<i class="fas fa-times me-1"></i> Cancelar' : '<i class="fas fa-plus-circle me-1"></i> Adicionar Novo Endereço';
         btn.classList.toggle('btn-secondary', isHidden);
@@ -168,19 +230,49 @@
         if (!isHidden) form.querySelector('input').focus();
     }
 
-    function saveNewAddress(event) {
+    async function saveNewAddress(event) {
         event.preventDefault();
         const form = event.target;
         if (!form.checkValidity()) {
             form.classList.add('was-validated');
             return;
         }
-        // REFINAMENTO: Feedback ao salvar
-        alert('Simulando salvamento do novo endereço...');
-        // TODO: Aqui entraria a chamada AJAX para /api/add-address
-        form.classList.remove('was-validated');
-        form.reset();
-        toggleNewAddressForm();
+        const submitBtn = form.querySelector('button[type=submit]');
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Salvando...';
+        const id = document.getElementById('new_id').value;
+        const address = document.getElementById('new_address').value;
+        const cep = document.getElementById('new_cep').value;
+        try {
+            const resp = await fetch("/api/add-address", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({ id: id, endereco: address, cep: cep })
+            });
+            const data = await resp.json();
+            if (data.success) {
+                showToast("Novo endereço adicionado!", "success");
+                location.reload();
+            } else {
+                showToast("Erro ao salvar: " + (data.msg || "Erro inesperado."), "danger");
+            }
+        } catch (err) {
+            showToast("Erro técnico ao salvar novo endereço.", "danger");
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = 'Salvar Endereço';
+        }
+    }
+
+    // Validação do novo endereço (apenas visual)
+    function validateNewAddress() {
+        const address = document.getElementById('new_address').value;
+        const cep = document.getElementById('new_cep').value;
+        if (!address || !cep.match(/^\d{4}-\d{3}$/)) {
+            showToast("Preencha endereço e CEP no formato correto.", "warning");
+            return;
+        }
+        showToast("Validação local concluída!", "success");
     }
 
     function updateStatus(message) { document.getElementById('map-status').innerText = message; }
@@ -196,9 +288,10 @@
             const validCoords = enderecosData.filter(e => e.latitude && e.longitude);
             if (validCoords.length === 0) return showEmptyMapMessage("Nenhum endereço com coordenadas válidas.");
 
+            let mapZoom = validCoords.length === 1 ? 15 : 11;
             map = new mapboxgl.Map({
                 container: 'map', style: 'mapbox://styles/mapbox/streets-v12',
-                center: [validCoords[0].longitude, validCoords[0].latitude], zoom: 11
+                center: [validCoords[0].longitude, validCoords[0].latitude], zoom: mapZoom
             });
             map.addControl(new mapboxgl.NavigationControl());
 
@@ -210,7 +303,7 @@
                 marker.on('dragend', () => onMarkerDrag(item.order_number, marker));
                 markers[item.order_number] = marker;
             });
-            
+
             if (validCoords.length > 1) {
                 const bounds = new mapboxgl.LngLatBounds();
                 validCoords.forEach(e => bounds.extend([e.longitude, e.latitude]));
@@ -223,23 +316,35 @@
         }
     }
 
-    function onMarkerDrag(id, marker) {
+    // Geocoding reverso real AJAX
+    async function onMarkerDrag(id, marker) {
         const newLngLat = marker.getLngLat();
-        // REFINAMENTO: Melhor feedback para o utilizador
         const row = document.getElementById(`row-${id}`);
         row.classList.add('table-info');
-
-        // SIMULAÇÃO: No futuro, aqui você faria a chamada para a API de geocoding reverso
-        alert(`PIN de ID ${id} movido.\nNuma aplicação real, uma chamada AJAX buscaria o novo endereço para estas coordenadas:\nLat: ${newLngLat.lat.toFixed(6)}, Lng: ${newLngLat.lng.toFixed(6)}`);
-        
-        // Exemplo de como seria após receber a resposta do backend
-        document.getElementById('address-' + id).value = `Endereço atualizado (simulado)`;
-        document.getElementById('cep-' + id).value = `XXXX-XXX`;
-        document.getElementById('status-' + id).innerHTML = '<span class="badge bg-info-subtle text-info-emphasis rounded-pill">Aguardando Confirmação</span>';
-        enableButtons(id);
-        row.classList.remove('table-info');
+        try {
+            // Endpoint real, você precisa criar o /api/reverse-geocode no backend
+            const resp = await fetch("/api/reverse-geocode", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({ id: id, lat: newLngLat.lat, lng: newLngLat.lng })
+            });
+            const data = await resp.json();
+            if (data.success) {
+                document.getElementById('address-' + id).value = data.address || '';
+                document.getElementById('cep-' + id).value = data.cep || '';
+                document.getElementById('status-' + id).innerHTML = '<span class="badge bg-info-subtle text-info-emphasis rounded-pill">Aguardando Confirmação</span>';
+                enableButtons(id);
+                showToast("Endereço atualizado via geocoding reverso!", "success");
+            } else {
+                showToast("Falha ao buscar endereço: " + (data.msg || "Erro."), "danger");
+            }
+        } catch (err) {
+            showToast("Erro técnico ao atualizar endereço.", "danger");
+        } finally {
+            row.classList.remove('table-info');
+        }
     }
-    
+
     document.addEventListener('DOMContentLoaded', () => {
         if (document.getElementById('map')) initMapbox();
     });
