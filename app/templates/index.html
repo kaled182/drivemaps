@@ -1,47 +1,32 @@
 {% extends "base.html" %}
 
-{% block title %}Importar Endereços | MapsDrive{% endblock %}
+{% block title %}Importar Rotas | MapsDrive{% endblock %}
 
 {% block styles %}
 <style>
-    .form-section {
-        transition: transform 0.2s, box-shadow 0.2s;
-        border: 1px solid var(--bs-border-color-translucent);
-        border-radius: 0.7rem;
-        background: var(--bs-body-bg);
+    .upload-section {
+        border: 2px dashed var(--bs-border-color);
+        border-radius: 0.75rem;
+        padding: 2rem;
+        background-color: var(--bs-tertiary-bg);
+        transition: all 0.3s ease;
+        min-height: 180px;
+        outline: none;
     }
-    .form-section:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+    .upload-section.is-dragging, .upload-section:focus-visible {
+        border-color: var(--bs-primary);
+        background-color: var(--bs-primary-bg-subtle);
+        box-shadow: 0 0 0 0.25rem rgba(var(--bs-primary-rgb), 0.25);
     }
     .address-textarea {
         font-family: 'Courier New', monospace;
-        font-size: 0.95rem;
-        min-height: 200px;
-        background: var(--bs-tertiary-bg);
-        color: var(--bs-body-color);
+        min-height: 150px;
+        resize: vertical;
     }
-    .file-upload-container {
-        border: 2px dashed var(--bs-border-color);
-        border-radius: 0.5rem;
-        transition: all 0.3s ease;
-        background: var(--bs-tertiary-bg);
-        cursor: pointer;
-    }
-    .file-upload-container.is-dragging {
-        border-color: var(--bs-primary);
-        background: var(--bs-primary-bg-subtle);
-    }
-    .format-guide-link {
-        text-decoration: underline dotted;
-        cursor: pointer;
-    }
-    #filename-display {
-        font-size: 0.95em;
-        min-height: 1.5em;
-        margin-top: 0.5em;
-        color: var(--bs-primary);
-        font-weight: 500;
+    #file-list ul {
+        padding-left: 0;
+        list-style-type: none;
+        margin-bottom: 0;
     }
 </style>
 {% endblock %}
@@ -53,96 +38,108 @@
 {% block content %}
 <div class="container py-4">
     <div class="row justify-content-center">
-        <div class="col-lg-10">
-            <article class="card shadow-sm border-0 overflow-hidden">
+        <div class="col-lg-10 col-xl-8">
+            <div class="card shadow-sm border-0">
                 <header class="card-header bg-primary text-white py-3 d-flex align-items-center">
                     <i class="fas fa-route fa-fw me-2"></i>
-                    <h1 class="h5 mb-0">Iniciar Roteirização</h1>
+                    <h1 class="h5 mb-0">Criar Nova Rota</h1>
                 </header>
-                <div class="card-body p-0">
-                    <div class="row g-0">
-                        <!-- Seção Upload -->
-                        <section class="col-md-6 p-4 form-section" aria-labelledby="upload-heading">
-                            <h2 id="upload-heading" class="h6 mb-3 text-primary fw-bold">
-                                <i class="fas fa-file-upload me-2"></i>1. Importar a partir de Ficheiro (Recomendado)
-                            </h2>
-                            <form id="uploadForm" enctype="multipart/form-data" method="post" action="{{ url_for('importacao.import_planilha') }}" novalidate>
-                                <div class="mb-3">
-                                    <label for="empresa" class="form-label small fw-semibold">Formato do Ficheiro</label>
-                                    <select name="empresa" id="empresa" class="form-select" required>
-                                        <option value="" disabled selected>Selecione a origem...</option>
-                                        <option value="delnext">Delnext</option>
-                                        <option value="paack">Paack</option>
-                                    </select>
-                                    <div class="invalid-feedback">Por favor, selecione a empresa.</div>
-                                </div>
-                                <div class="mb-3">
-                                    <label for="planilha" class="form-label small fw-semibold">Selecione o ficheiro</label>
-                                    <div id="file-upload-container" class="file-upload-container p-4 text-center" tabindex="0" aria-describedby="filename-display">
-                                        <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-2"></i>
-                                        <p class="mb-2">Arraste e solte o ficheiro aqui</p>
-                                        <p class="text-muted small mb-2">ou</p>
-                                        <label for="planilha" class="btn btn-sm btn-outline-primary mb-0">
-                                            <i class="fas fa-folder-open me-1"></i>Procurar Ficheiro
-                                        </label>
-                                        <input type="file" name="planilha" id="planilha" accept=".xlsx,.xls,.csv,.txt" required class="d-none">
-                                        <span id="filename-display" aria-live="polite"></span>
-                                    </div>
-                                    <div class="form-text small">Formatos suportados: .xlsx, .xls, .csv, .txt</div>
-                                </div>
-                                <button type="submit" class="btn btn-primary w-100 py-2 fw-bold shadow-sm" id="uploadBtn">
-                                    <span id="uploadBtnText"><i class="fas fa-upload me-2"></i>Importar e Visualizar</span>
-                                    <span id="uploadBtnSpinner" class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
-                                </button>
-                            </form>
-                        </section>
-                        <!-- Seção Manual -->
-                        <section class="col-md-6 p-4 form-section" aria-labelledby="manual-heading">
-                            <h2 id="manual-heading" class="h6 mb-3 text-primary fw-bold">
-                                <i class="fas fa-keyboard me-2"></i>2. Inserção Manual (Texto)
-                            </h2>
-                            <form method="post" action="{{ url_for('preview.preview') }}" novalidate>
-                                <div class="mb-3">
-                                    <label for="enderecos" class="form-label fw-semibold">Cole os endereços:</label>
-                                    <textarea id="enderecos" name="enderecos" class="form-control address-textarea"
-                                              placeholder="Cole aqui os dados no formato Paack..." required></textarea>
-                                    <div class="form-text small mt-2">
-                                        Veja os exemplos no <a href="#" class="format-guide-link" data-bs-toggle="modal" data-bs-target="#formatosModal">guia de formatação</a>.
-                                    </div>
-                                </div>
-                                <button type="submit" class="btn btn-success w-100 py-2 fw-bold shadow-sm">
-                                    <i class="fas fa-check-circle me-2"></i>Validar Texto
-                                </button>
-                            </form>
-                        </section>
-                    </div>
+                
+                <div class="card-body p-4">
+                    <form id="unifiedImportForm" enctype="multipart/form-data" method="post" action="{{ url_for('importacao.importar_misto') }}">
+                        
+                        <!-- Secção de Upload de Ficheiros -->
+                        <div class="mb-4">
+                            <label for="planilhas" class="form-label fw-bold">1. Ficheiros de Importação (Paack e/ou Delnext)</label>
+                            <div id="file-upload-container" class="upload-section text-center d-flex flex-column justify-content-center" tabindex="0" aria-label="Área de upload de ficheiros. Clique ou arraste ficheiros aqui.">
+                                <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                                <p class="mb-2 fw-semibold">Arraste e solte os ficheiros aqui</p>
+                                <p class="text-muted small mb-3">ou</p>
+                                <label for="planilhas" class="btn btn-outline-primary mb-2" tabindex="-1">
+                                    <i class="fas fa-folder-open me-1"></i> Procurar Ficheiros
+                                </label>
+                                <input type="file" name="planilhas" id="planilhas" class="d-none" accept=".xlsx,.xls,.csv,.txt" multiple>
+                                <div id="file-list" class="mt-3 text-start small" aria-live="polite"></div>
+                            </div>
+                            <div class="form-text mt-1">Pode selecionar múltiplos ficheiros (.xlsx, .xls, .csv, .txt).</div>
+                        </div>
+
+                        <!-- Secção de Inserção Manual -->
+                        <div class="mb-4">
+                            <label for="enderecos_manuais" class="form-label fw-bold d-flex align-items-center">
+                                2. Adicionar Endereços Manuais 
+                                <span class="fw-normal ms-1">(Formato Paack)</span>
+                                <a href="#" class="ms-2 text-primary" data-bs-toggle="modal" data-bs-target="#formatosModal" aria-label="Abrir guia de formatação">
+                                    <i class="fas fa-info-circle"></i>
+                                </a>
+                            </label>
+                            <textarea name="enderecos_manuais" id="enderecos_manuais" class="form-control address-textarea" 
+                                      placeholder="Opcional: Cole aqui endereços adicionais no formato Paack..."></textarea>
+                        </div>
+                        
+                        <!-- Botão de Submissão -->
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-success btn-lg fw-bold" id="submitBtn">
+                                <span id="submitBtnText"><i class="fas fa-cogs me-2"></i>Processar e Visualizar Rota</span>
+                                <span id="submitBtnSpinner" class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                            </button>
+                        </div>
+                    </form>
                 </div>
-            </article>
+            </div>
         </div>
     </div>
 </div>
 
-<!-- Modal de Formatos -->
+<!-- Modal Guia de Formatação -->
 <div class="modal fade" id="formatosModal" tabindex="-1" aria-labelledby="formatosModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
             <header class="modal-header bg-primary text-white">
-                <h5 class="modal-title" id="formatosModalLabel">Formatos Suportados</h5>
+                <h5 class="modal-title" id="formatosModalLabel">Guia de Formatação de Endereços</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
             </header>
             <section class="modal-body">
                 <div class="row">
                     <div class="col-md-6">
-                        <h6 class="fw-bold">Formato Paack</h6>
-                        <pre class="bg-light p-3 small rounded">Rua Exemplo, 123, 4900-000 Cidade
-#COD12345
+                        <h6 class="fw-bold mb-2">Formato Paack (manual ou arquivo)</h6>
+                        <pre class="bg-light p-3 small rounded" style="font-family:monospace;">
 Rua Exemplo, 123, 4900-000 Cidade
-1</pre>
+#E25061600140945
+Rua Exemplo, 123, 4900-000 Cidade
+1
+
+Rua Dois, 500, 1200-100 Lisboa
+#E25061600140946
+Rua Dois, 500, 1200-100 Lisboa
+2
+                        </pre>
+                        <ul class="mb-0 small text-muted">
+                            <li>Quatro linhas por endereço.</li>
+                            <li>1ª linha: endereço completo.</li>
+                            <li>2ª linha: código identificador (começa com #).</li>
+                            <li>3ª linha: repetir o endereço.</li>
+                            <li>4ª linha: número sequencial.</li>
+                        </ul>
                     </div>
                     <div class="col-md-6">
-                        <h6 class="fw-bold">Formato Delnext</h6>
-                        <pre class="bg-light p-3 small rounded">Nome;Morada;Código Postal;Localidade;Número</pre>
+                        <h6 class="fw-bold mb-2">Formato Delnext (arquivo Excel/CSV)</h6>
+                        <pre class="bg-light p-3 small rounded" style="font-family:monospace;">
+Nome;Morada;Código Postal;Localidade;Número
+
+João Silva;Rua Exemplo, 123;4900-000;Viana do Castelo;1
+Maria Sousa;Rua Dois, 500;1200-100;Lisboa;2
+                        </pre>
+                        <ul class="mb-0 small text-muted">
+                            <li>Colunas obrigatórias: <b>Morada</b> e <b>Código Postal</b>.</li>
+                            <li>Formato: Excel (.xlsx, .xls) ou CSV (.csv).</li>
+                            <li>Importe normalmente usando o botão acima.</li>
+                        </ul>
                     </div>
+                </div>
+                <hr>
+                <div class="text-muted small">
+                    Dica: O sistema identifica o formato automaticamente. Em caso de dúvida, consulte o suporte MapsDrive.
                 </div>
             </section>
         </div>
@@ -153,62 +150,69 @@ Rua Exemplo, 123, 4900-000 Cidade
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Bootstrap validation
-    const forms = document.querySelectorAll('.needs-validation');
-    Array.from(forms).forEach(form => {
-        form.addEventListener('submit', event => {
-            if (!form.checkValidity()) {
-                event.preventDefault();
-                event.stopPropagation();
-            }
-            form.classList.add('was-validated');
-        }, false);
+    const form = document.getElementById('unifiedImportForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const fileInput = document.getElementById('planilhas');
+    const fileUploadContainer = document.getElementById('file-upload-container');
+    const fileListDiv = document.getElementById('file-list');
+    const textarea = document.getElementById('enderecos_manuais');
+
+    // Feedback de Upload
+    form.addEventListener('submit', function(e) {
+        if (!fileInput.files.length && !textarea.value.trim()) {
+            alert("Por favor, adicione pelo menos um ficheiro ou um endereço manual.");
+            e.preventDefault();
+            return;
+        }
+        submitBtn.disabled = true;
+        submitBtn.querySelector('#submitBtnText').textContent = 'A processar...';
+        submitBtn.querySelector('#submitBtnSpinner').classList.remove('d-none');
     });
 
-    // Feedback do upload
-    const uploadForm = document.getElementById('uploadForm');
-    if (uploadForm) {
-        uploadForm.addEventListener('submit', function() {
-            if (!uploadForm.checkValidity()) return;
-            const btn = document.getElementById('uploadBtn');
-            btn.querySelector('#uploadBtnText').textContent = 'A processar...';
-            btn.querySelector('#uploadBtnSpinner').classList.remove('d-none');
-            btn.disabled = true;
-        });
-    }
+    // Lógica de Drag & Drop e feedback de ficheiros
+    fileUploadContainer.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', updateFileList);
 
-    // Arraste e Solte
-    const fileUploadContainer = document.getElementById('file-upload-container');
-    if (fileUploadContainer) {
-        const fileInput = document.getElementById('planilha');
-        const filenameDisplay = document.getElementById('filename-display');
-
-        const updateFilename = () => {
-            filenameDisplay.textContent = fileInput.files.length > 0 ? fileInput.files[0].name : '';
-        };
-
-        fileInput.addEventListener('change', updateFilename);
-
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-            fileUploadContainer.addEventListener(eventName, e => {
-                e.preventDefault();
-                e.stopPropagation();
-            }, false);
-        });
-
-        ['dragenter', 'dragover'].forEach(eventName => {
-            fileUploadContainer.classList.add('is-dragging');
-        });
-        ['dragleave', 'drop'].forEach(eventName => {
-            fileUploadContainer.classList.remove('is-dragging');
-        });
-
-        fileUploadContainer.addEventListener('drop', e => {
-            fileInput.files = e.dataTransfer.files;
-            updateFilename();
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        fileUploadContainer.addEventListener(eventName, e => {
+            e.preventDefault();
+            e.stopPropagation();
         }, false);
+    });
+    ['dragenter', 'dragover'].forEach(eventName => {
+        fileUploadContainer.addEventListener(eventName, () => fileUploadContainer.classList.add('is-dragging'), false);
+    });
+    ['dragleave', 'drop'].forEach(eventName => {
+        fileUploadContainer.addEventListener(eventName, () => fileUploadContainer.classList.remove('is-dragging'), false);
+    });
+    fileUploadContainer.addEventListener('drop', e => {
+        if (e.dataTransfer.files.length) {
+            fileInput.files = e.dataTransfer.files;
+            updateFileList();
+        }
+    });
 
-        fileUploadContainer.addEventListener('click', () => fileInput.click());
+    // Acessibilidade: permite focar e ativar com o teclado
+    fileUploadContainer.addEventListener('keydown', function(e) {
+        if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            fileInput.click();
+        }
+    });
+
+    function updateFileList() {
+        fileListDiv.innerHTML = '';
+        if (fileInput.files.length > 0) {
+            const list = document.createElement('ul');
+            list.className = 'list-group list-group-flush bg-transparent';
+            Array.from(fileInput.files).forEach(file => {
+                const listItem = document.createElement('li');
+                listItem.className = 'list-group-item list-group-item-light py-1 px-2 border-0';
+                listItem.innerHTML = `<i class="fas fa-file-alt me-2 text-muted"></i> ${file.name}`;
+                list.appendChild(listItem);
+            });
+            fileListDiv.appendChild(list);
+        }
     }
 });
 </script>
