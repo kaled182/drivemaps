@@ -11,11 +11,11 @@
  * Mostra uma notificação toast usando Bootstrap 5.
  * @param {string} message - Mensagem a ser exibida.
  * @param {string} [type='info'] - Tipo do alerta: success, danger, warning, info.
- * @param {number} [duration=5000] - Duração em milissegundos.
+ * @param {number} [duration=5000] - Duração em milissegundos para o toast desaparecer.
  */
 function showToast(message, type = 'info', duration = 5000) {
     const toastContainer = document.getElementById('toast-container') || createToastContainer();
-    const toastId = `toast-${Date.now()}-${Math.floor(Math.random()*1000)}`;
+    const toastId = `toast-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     const toastColor = {
         info: "primary",
         success: "success",
@@ -36,7 +36,13 @@ function showToast(message, type = 'info', duration = 5000) {
 
     const toastElement = document.getElementById(toastId);
     const toast = new bootstrap.Toast(toastElement);
+    
+    // Limpa o elemento do DOM após o toast ser escondido
     toastElement.addEventListener('hidden.bs.toast', () => toastElement.remove());
+    
+    // Acessibilidade: Foca no toast para leitores de tela
+    setTimeout(() => { toastElement.focus?.(); }, 100);
+    
     toast.show();
 }
 
@@ -45,11 +51,14 @@ function showToast(message, type = 'info', duration = 5000) {
  * @returns {HTMLElement} O elemento do container de toasts.
  */
 function createToastContainer() {
-    const container = document.createElement('div');
-    container.id = 'toast-container';
-    container.className = 'position-fixed top-0 end-0 p-3';
-    container.style.zIndex = '1100';
-    document.body.appendChild(container);
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'position-fixed top-0 end-0 p-3';
+        container.style.zIndex = '1100';
+        document.body.appendChild(container);
+    }
     return container;
 }
 
@@ -61,8 +70,8 @@ function createToastContainer() {
 function formatCEP(cep) {
     if (!cep) return '';
     return cep.replace(/\D/g, '')
-              .replace(/^(\d{4})(\d{0,3}).*$/, (m, g1, g2) => g2 ? `${g1}-${g2}` : g1)
-              .substr(0, 8);
+        .replace(/^(\d{4})(\d{0,3}).*$/, (m, g1, g2) => g2 ? `${g1}-${g2}` : g1)
+        .substr(0, 8);
 }
 
 /**
@@ -76,19 +85,24 @@ function isValidCEP(cep) {
 }
 
 /**
+ * Handler para o evento de input da máscara de CEP.
+ */
+function maskCepHandler() {
+    const original = this.value;
+    const masked = formatCEP(original);
+    if (original !== masked) {
+        this.value = masked;
+    }
+}
+
+/**
  * Aplica a máscara de CEP a todos os campos com classe .cep-input.
  */
 function initCEPMasks() {
     document.querySelectorAll('.cep-input').forEach(input => {
-        input.addEventListener('input', function() {
-            const original = this.value;
-            const masked = formatCEP(original);
-            if (original !== masked) {
-                this.value = masked;
-            }
-        });
-        // Se o valor já existir ao carregar (autofill), aplica a máscara
-        input.value = formatCEP(input.value);
+        input.removeEventListener('input', maskCepHandler); // Evita múltiplos listeners
+        input.addEventListener('input', maskCepHandler);
+        input.value = formatCEP(input.value); // Aplica no carregamento
     });
 }
 
@@ -107,7 +121,10 @@ function setTheme(mode) {
     const themeToggleBtn = document.getElementById('toggle-theme-btn');
     if (themeToggleBtn) {
         const icon = themeToggleBtn.querySelector('i');
-        icon.className = validMode === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+        if (icon) {
+            icon.className = validMode === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+        }
+        themeToggleBtn.setAttribute('aria-label', validMode === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro');
     }
 }
 
@@ -123,22 +140,21 @@ function toggleDarkMode() {
 // ===== INICIALIZAÇÃO GLOBAL (DOM Ready)
 // ==========================================================================
 
-document.addEventListener('DOMContentLoaded', function() {
-    // Tooltips Bootstrap
+document.addEventListener('DOMContentLoaded', function () {
+    // Inicializa componentes do Bootstrap
     const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
     tooltipTriggerList.map(el => new bootstrap.Tooltip(el));
 
-    // Popovers Bootstrap
     const popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'));
     popoverTriggerList.map(el => new bootstrap.Popover(el));
 
-    // Alternar tema
+    // Configura o botão de alternar tema
     const themeToggleBtn = document.getElementById('toggle-theme-btn');
     if (themeToggleBtn) {
         themeToggleBtn.addEventListener('click', toggleDarkMode);
     }
 
-    // Tema salvo ou preferência do sistema
+    // Aplica o tema salvo ou a preferência do sistema
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme) {
         setTheme(savedTheme);
@@ -148,23 +164,25 @@ document.addEventListener('DOMContentLoaded', function() {
         setTheme('light');
     }
 
-    // Máscara de CEP em inputs
+    // Aplica máscaras de CEP aos inputs existentes e futuros
     initCEPMasks();
+    const observer = new MutationObserver(() => initCEPMasks());
+    observer.observe(document.body, { childList: true, subtree: true });
 
-    // Validação de formulários com Bootstrap
-    document.querySelectorAll('.needs-validation').forEach(form => {
-        form.addEventListener('submit', event => {
-            if (!form.checkValidity()) {
+    // Delegação de eventos para validação de formulários
+    document.addEventListener('submit', function (event) {
+        if (event.target.classList && event.target.classList.contains('needs-validation')) {
+            if (!event.target.checkValidity()) {
                 event.preventDefault();
                 event.stopPropagation();
             }
-            form.classList.add('was-validated');
-        }, false);
-    });
+            event.target.classList.add('was-validated');
+        }
+    }, true);
 });
 
 // ==========================================================================
-// ===== EXPORT GLOBAL (Opcional para uso externo) =====
+// ===== EXPORT GLOBAL (Opcional para uso em outras partes do projeto) =====
 window.MapsDrive = {
     showToast,
     formatCEP,
