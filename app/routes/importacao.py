@@ -44,7 +44,6 @@ def _processa_e_geocodifica(empresa: str, enderecos: list, ceps: list, order_num
             "freguesia": res_google.get('sublocality', ''),
             "locality": res_google.get('locality', '')
         }
-        # A função 'registro_unico' do helpers pode ser usada aqui para evitar duplos na mesma importação
         if registro_unico(lista_processada, novo_item):
             lista_processada.append(novo_item)
             
@@ -117,8 +116,8 @@ def _reindexar_lista(lista: list) -> list:
         item['order_number'] = str(idx)
     return lista
 
-@importacao_bp.route('/import_planilha', methods=['POST'])
-def import_planilha():
+@importacao_bp.route('/importar_misto', methods=['POST'])
+def importar_misto():
     """
     Ponto de entrada unificado para importação. Aceita múltiplos ficheiros e texto manual,
     processa, deduplica, e redireciona para a página de pré-visualização.
