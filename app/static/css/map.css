@@ -2,40 +2,7 @@
    DriveMaps - Estilos Específicos do Mapa (map.css)
    ========================================================================== */
 
-/* ===== MAPA FIXO (STICKY) ===== */
-.map-sticky-container {
-    position: -webkit-sticky; /* Para compatibilidade com Safari */
-    position: sticky;
-    top: 10px; /* Pequena margem do topo */
-    z-index: 1020; /* Garante que fica por cima do conteúdo da tabela ao rolar */
-}
-
-/* ===== MARCADOR/PIN CUSTOMIZADO COM NÚMERO ===== */
-.custom-marker-numbered {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    width: 34px;
-    height: 34px;
-    background-color: #0d6efd; /* Cor default, será sobreposta pelo JS */
-    color: white;
-    font-weight: bold;
-    font-size: 13px;
-    font-family: 'Segoe UI', Roboto, sans-serif;
-    border-radius: 50%;
-    border: 2px solid white;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-    cursor: pointer;
-    transition: transform 0.1s ease-in-out;
-}
-
-.custom-marker-numbered:hover {
-    transform: scale(1.15);
-}
-
-
-/* ===== ESTILOS ORIGINAIS (MANTIDOS) ===== */
-
+/* ===== CONTAINER PRINCIPAL DO MAPA ===== */
 .map-container {
     position: relative;
     height: 60vh; /* Altura generosa para o mapa */
@@ -53,6 +20,7 @@
     transition: background-color 0.2s ease-in-out;
 }
 
+/* ===== POPUP/INFOWINDOW DO MAPBOX ===== */
 .mapboxgl-popup-content {
     padding: 1rem !important;
     font-family: 'Segoe UI', Roboto, Arial, sans-serif;
@@ -86,6 +54,8 @@
     color: var(--bs-danger);
 }
 
+
+/* ===== MENSAGEM DE MAPA VAZIO/ERRO ===== */
 .map-empty-message {
     position: absolute;
     top: 50%;
@@ -102,6 +72,7 @@
     transition: background-color 0.2s, color 0.2s;
 }
 
+/* ===== STATUS DO MAPA (CANTO INFERIOR) ===== */
 #map-status {
     font-family: monospace;
     font-size: 0.8rem;
@@ -111,6 +82,7 @@
     transition: color 0.2s, background-color 0.2s;
 }
 
+/* ===== CONTROLES DE NAVEGAÇÃO DO MAPBOX ===== */
 .mapboxgl-ctrl-group {
     background-color: var(--bs-body-bg) !important;
     border-radius: 0.5rem !important;
@@ -127,6 +99,7 @@
     filter: invert(var(--bs-tertiary-bg) == #f4f7fa ? 0 : 1);
 }
 
+/* ===== RESPONSIVIDADE ===== */
 @media (max-width: 768px) {
     .map-container {
         height: 50vh;
