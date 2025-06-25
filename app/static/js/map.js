@@ -62,16 +62,8 @@ class MapManager {
         }
 
         validCoords.forEach(item => {
-            // *** AQUI ESTÁ A ALTERAÇÃO PRINCIPAL ***
-            // 1. Criar um elemento div para ser o nosso marcador customizado.
-            const el = document.createElement('div');
-            el.className = 'custom-marker-numbered'; // Aplicar a nova classe CSS
-            el.style.backgroundColor = item.cor || '#0d6efd'; // Definir a cor dinamicamente
-            el.innerText = String(item.order_number || item.originalIndex + 1).substring(0, 4); // Inserir o ID
-
-            // 2. Criar o marcador do Mapbox usando o nosso elemento HTML.
             const marker = new mapboxgl.Marker({
-                element: el, // Usa o nosso elemento personalizado
+                color: item.cor || '#0d6efd',
                 draggable: true
             })
             .setLngLat([item.longitude, item.latitude])
@@ -81,13 +73,13 @@ class MapManager {
                   <p>${item.address}</p>
                   <p>CEP: ${item.cep || 'Não informado'}</p>
                   ${item.status_google === 'OK'
-                    ? '<p class="text-success small">✓ Validado</p>'
-                    : `<p class="text-danger small">${item.status_google || 'Não validado'}</p>`}
+                    ? '<p class="text-success">✓ Validado</p>'
+                    : `<p class="text-danger">${item.status_google || 'Não validado'}</p>`}
                 </div>
             `))
             .addTo(this.map);
 
-            // Se um callback para o 'drag end' foi fornecido, associa-o (FUNCIONALIDADE MANTIDA)
+            // Se um callback para o 'drag end' foi fornecido, associa-o
             if (typeof this.options.onMarkerDragEnd === 'function') {
                 marker.on('dragend', () => this.options.onMarkerDragEnd(item.originalIndex, marker));
             }
@@ -135,7 +127,7 @@ class MapManager {
         const mapDiv = document.getElementById(this.containerId);
         if (mapDiv) {
             mapDiv.innerHTML = `<div class="d-flex h-100 align-items-center justify-content-center">
-                <div class="text-center p-4 bg-white rounded shadow map-empty-message">
+                <div class="text-center p-4 bg-white rounded shadow">
                     <h5 class="text-danger"><i class="fas fa-exclamation-triangle me-2"></i>Mapa indisponível</h5>
                     <p class="text-muted small">${message}</p>
                 </div>
