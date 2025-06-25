@@ -50,36 +50,72 @@ def _processa_e_geocodifica(empresa: str, enderecos: list, ceps: list, order_num
     return lista_processada
 
 def _processar_ficheiro(file: FileStorage) -> list:
-    """Processa um único ficheiro, deteta o seu formato e retorna uma lista de itens processados."""
+    """Processa um único ficheiro, com logs de diagnóstico detalhados."""
     if not file or not extensao_permitida(file.filename):
         return []
 
-    logger.info(f"Processando ficheiro: {file.filename}")
+    logger.info(f"== INICIANDO PROCESSAMENTO DE: {file.filename} ==")
     
     # Caso 1: Ficheiro de texto (assumido como Paack)
     if file.filename.lower().endswith('.txt'):
-        conteudo = file.read().decode("utf-8")
+        conteudo = file.read().decode("utf-8", errors="ignore")
         enderecos, ceps, order_numbers = parser.parse_paack_texto(conteudo)
         return _processa_e_geocodifica('paack', enderecos, ceps, order_numbers)
     
     # Caso 2: Ficheiro estruturado (Excel/CSV)
-    try:
-        df = pd.read_excel(file)
-    except Exception:
-        file.seek(0)
-        df = pd.read_csv(file, sep=None, engine='python', on_bad_lines='skip', encoding='utf-8')
-    
-    if df.empty:
-        logger.warning(f"DataFrame vazio para o ficheiro {file.filename}")
+    df = None
+    formato = None
+
+    for header_row in [0, 1]:
+        logger.info(f"-- Tentativa com header na linha: {header_row} --")
+        temp_df = None
+        
+        # Tentativa 1: Ler como Excel
+        try:
+            file.seek(0)
+            logger.info(f"Tentando ler {file.filename} como Excel...")
+            temp_df = pd.read_excel(file, header=header_row)
+            logger.info("Leitura como Excel bem-sucedida.")
+        except Exception as e_excel:
+            logger.warning(f"Falha ao ler como Excel (header={header_row}): {e_excel}. Tentando como CSV.")
+            # Tentativa 2: Ler como CSV
+            try:
+                file.seek(0)
+                logger.info(f"Tentando ler {file.filename} como CSV...")
+                temp_df = pd.read_csv(file, sep=None, engine='python', on_bad_lines='skip', encoding='utf-8', header=header_row)
+                logger.info("Leitura como CSV bem-sucedida.")
+            except Exception as e_csv:
+                logger.error(f"Falha ao ler como CSV também (header={header_row}): {e_csv}")
+                continue # Vai para a próxima iteração do loop (header=1)
+
+        # Diagnóstico do DataFrame resultante
+        if temp_df is None:
+            logger.warning(f"DataFrame resultante é None após tentativa com header={header_row}.")
+            continue
+            
+        if temp_df.empty:
+            logger.warning(f"DataFrame resultante está vazio após tentativa com header={header_row}.")
+            continue
+
+        logger.info(f"DataFrame criado com sucesso. Colunas: {list(temp_df.columns)}")
+        temp_formato = parser.detectar_formato_df(temp_df)
+        
+        if temp_formato:
+            logger.info(f"FORMATO ENCONTRADO: '{temp_formato}'")
+            df = temp_df
+            formato = temp_formato
+            break # Sucesso, sai do loop do header
+        else:
+            logger.warning(f"Formato não detetado para as colunas encontradas com header={header_row}.")
+
+    if df is None or not formato:
+        logger.error(f"== PROCESSAMENTO FALHOU para {file.filename}. Formato não reconhecido em nenhuma tentativa. ==")
         return []
 
-    formato = parser.detectar_formato_df(df)
-    if not formato:
-        logger.warning(f"Formato não reconhecido para {file.filename}. A ignorar.")
-        return []
-
+    logger.info(f"== PROCESSAMENTO BEM-SUCEDIDO para {file.filename}. Prosseguindo para geocodificação. ==")
     enderecos, ceps, order_numbers = parser.parse_dataframe(df, formato)
     return _processa_e_geocodifica(formato, enderecos, ceps, order_numbers)
+
 
 def _processar_texto_manual(texto: str) -> list:
     """Processa o texto da área de texto manual (assumido como Paack) e retorna itens processados."""
@@ -110,12 +146,6 @@ def _unificar_e_deduplicar(lista_de_itens: list) -> list:
     logger.info(f"Resultaram {len(lista_deduplicada)} itens únicos após deduplicação.")
     return lista_deduplicada
 
-def _reindexar_lista(lista: list) -> list:
-    """Re-indexa o order_number de toda a lista final de 1 a N."""
-    for idx, item in enumerate(lista, 1):
-        item['order_number'] = str(idx)
-    return lista
-
 @importacao_bp.route('/importar_misto', methods=['POST'])
 def importar_misto():
     """
@@ -143,9 +173,8 @@ def importar_misto():
             flash("Nenhum endereço válido foi encontrado nas fontes fornecidas.", "warning")
             return redirect(url_for('preview.home'))
 
-        # 3. Deduplicar com prioridade e Re-indexar
-        lista_unica = _unificar_e_deduplicar(todos_os_itens)
-        lista_final = _reindexar_lista(lista_unica)
+        # 3. Deduplicar com prioridade
+        lista_final = _unificar_e_deduplicar(todos_os_itens)
 
         # 4. Salvar na sessão e redirecionar
         session.clear()
