@@ -62,22 +62,22 @@ class MapManager {
         }
 
         validCoords.forEach(item => {
-            // *** AQUI ACONTECE A MAGIA ***
+            // *** AQUI ESTÁ A ALTERAÇÃO PRINCIPAL ***
             // 1. Criar um elemento div para ser o nosso marcador customizado.
             const el = document.createElement('div');
-            el.className = 'custom-marker'; // Aplicar a classe CSS que criámos
+            el.className = 'custom-marker-numbered'; // Aplicar a nova classe CSS
             el.style.backgroundColor = item.cor || '#0d6efd'; // Definir a cor dinamicamente
             el.innerText = String(item.order_number || item.originalIndex + 1).substring(0, 4); // Inserir o ID
 
             // 2. Criar o marcador do Mapbox usando o nosso elemento HTML.
             const marker = new mapboxgl.Marker({
-                element: el,
+                element: el, // Usa o nosso elemento personalizado
                 draggable: true
             })
             .setLngLat([item.longitude, item.latitude])
             .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML(`
                 <div class="map-infowindow">
-                  <h6>ID: ${item.order_number || 'Sem ID'}</h6>
+                  <h6>${item.order_number || 'Sem ID'}</h6>
                   <p>${item.address}</p>
                   <p>CEP: ${item.cep || 'Não informado'}</p>
                   ${item.status_google === 'OK'
@@ -87,7 +87,7 @@ class MapManager {
             `))
             .addTo(this.map);
 
-            // Se um callback para o 'drag end' foi fornecido, associa-o
+            // Se um callback para o 'drag end' foi fornecido, associa-o (FUNCIONALIDADE MANTIDA)
             if (typeof this.options.onMarkerDragEnd === 'function') {
                 marker.on('dragend', () => this.options.onMarkerDragEnd(item.originalIndex, marker));
             }
@@ -135,7 +135,7 @@ class MapManager {
         const mapDiv = document.getElementById(this.containerId);
         if (mapDiv) {
             mapDiv.innerHTML = `<div class="d-flex h-100 align-items-center justify-content-center">
-                <div class="text-center p-4 bg-white rounded shadow">
+                <div class="text-center p-4 bg-white rounded shadow map-empty-message">
                     <h5 class="text-danger"><i class="fas fa-exclamation-triangle me-2"></i>Mapa indisponível</h5>
                     <p class="text-muted small">${message}</p>
                 </div>
@@ -144,3 +144,6 @@ class MapManager {
         console.error("MapManager Error:", message);
     }
 }
+
+// Exporta para uso externo/global
+window.MapManager = MapManager;
