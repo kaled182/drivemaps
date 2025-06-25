@@ -62,19 +62,27 @@ class MapManager {
         }
 
         validCoords.forEach(item => {
+            // *** AQUI ACONTECE A MAGIA ***
+            // 1. Criar um elemento div para ser o nosso marcador customizado.
+            const el = document.createElement('div');
+            el.className = 'custom-marker'; // Aplicar a classe CSS que criámos
+            el.style.backgroundColor = item.cor || '#0d6efd'; // Definir a cor dinamicamente
+            el.innerText = String(item.order_number || item.originalIndex + 1).substring(0, 4); // Inserir o ID
+
+            // 2. Criar o marcador do Mapbox usando o nosso elemento HTML.
             const marker = new mapboxgl.Marker({
-                color: item.cor || '#0d6efd',
+                element: el,
                 draggable: true
             })
             .setLngLat([item.longitude, item.latitude])
             .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML(`
                 <div class="map-infowindow">
-                  <h6>${item.order_number || 'Sem ID'}</h6>
+                  <h6>ID: ${item.order_number || 'Sem ID'}</h6>
                   <p>${item.address}</p>
                   <p>CEP: ${item.cep || 'Não informado'}</p>
                   ${item.status_google === 'OK'
-                    ? '<p class="text-success">✓ Validado</p>'
-                    : `<p class="text-danger">${item.status_google || 'Não validado'}</p>`}
+                    ? '<p class="text-success small">✓ Validado</p>'
+                    : `<p class="text-danger small">${item.status_google || 'Não validado'}</p>`}
                 </div>
             `))
             .addTo(this.map);
@@ -136,6 +144,3 @@ class MapManager {
         console.error("MapManager Error:", message);
     }
 }
-
-// Exporta para uso externo/global
-window.MapManager = MapManager;
