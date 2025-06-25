@@ -2,72 +2,134 @@
    DriveMaps - Estilos Específicos do Mapa (map.css)
    ========================================================================== */
 
-/* ===== LAYOUT DE DUAS COLUNAS ===== */
-.preview-layout-container {
-    display: flex;
-    /* Usa a altura total da janela menos a altura do seu header (assumindo 56px) */
-    height: calc(100vh - 56px); 
-    width: 100%;
-    overflow: hidden; /* Previne scroll na página inteira */
+/* ===== MAPA FIXO (STICKY) ===== */
+.map-sticky-container {
+    position: -webkit-sticky; /* Para compatibilidade com Safari */
+    position: sticky;
+    top: 10px; /* Pequena margem do topo */
+    z-index: 1020; /* Garante que fica por cima do conteúdo da tabela ao rolar */
 }
-
-.map-column-fixed {
-    flex: 0 0 50%; /* Ocupa 50% da largura e não cresce/encolhe */
-    height: 100%;
-    position: relative; /* Necessário para o mapa se ajustar */
-}
-
-#map {
-    width: 100%;
-    height: 100%;
-}
-
-.content-column-scrollable {
-    flex: 1 1 50%; /* Ocupa os restantes 50% e é flexível */
-    height: 100%;
-    overflow-y: auto; /* A magia acontece aqui: permite scroll SÓ nesta coluna */
-    padding: 1.5rem;
-}
-
 
 /* ===== MARCADOR/PIN CUSTOMIZADO COM NÚMERO ===== */
-.custom-marker {
+.custom-marker-numbered {
     display: flex;
     justify-content: center;
     align-items: center;
-
     width: 34px;
     height: 34px;
-    
     background-color: #0d6efd; /* Cor default, será sobreposta pelo JS */
     color: white;
     font-weight: bold;
     font-size: 13px;
     font-family: 'Segoe UI', Roboto, sans-serif;
-
     border-radius: 50%;
     border: 2px solid white;
     box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-
     cursor: pointer;
     transition: transform 0.1s ease-in-out;
 }
 
-.custom-marker:hover {
+.custom-marker-numbered:hover {
     transform: scale(1.15);
-    z-index: 10; /* Garante que fica por cima dos outros ao passar o rato */
 }
 
-/* ===== POPUP/INFOWINDOW DO MAPBOX ===== */
+
+/* ===== ESTILOS ORIGINAIS (MANTIDOS) ===== */
+
+.map-container {
+    position: relative;
+    height: 60vh; /* Altura generosa para o mapa */
+    min-height: 400px;
+    background-color: var(--bs-tertiary-bg, #e9ecef);
+    border-radius: 0.75rem;
+    overflow: hidden;
+    transition: background-color 0.2s ease-in-out;
+}
+
+#map {
+    width: 100%;
+    height: 100%;
+    background-color: var(--bs-tertiary-bg, #e9ecef);
+    transition: background-color 0.2s ease-in-out;
+}
+
 .mapboxgl-popup-content {
     padding: 1rem !important;
-    font-family: 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+    background-color: var(--bs-body-bg) !important;
+    color: var(--bs-body-color) !important;
     border-radius: 0.5rem !important;
     box-shadow: 0 4px 15px rgba(0,0,0,0.15) !important;
     min-width: 220px;
+    max-width: 280px;
+    transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
 }
 
 .mapboxgl-popup-content h6 {
     font-weight: 600;
     margin-bottom: 0.5rem;
+    color: var(--primary, #1e88e5);
+}
+
+.mapboxgl-popup-content p {
+    margin-bottom: 0.25rem;
+    font-size: 0.9rem;
+}
+
+.mapboxgl-popup-close-button {
+    font-size: 1.5rem;
+    padding: 0 0.5rem;
+    color: var(--bs-secondary-color);
+    transition: color 0.2s ease;
+}
+.mapboxgl-popup-close-button:hover {
+    color: var(--bs-danger);
+}
+
+.map-empty-message {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 2;
+    background-color: var(--bs-body-bg);
+    border: 1px solid var(--bs-border-color-translucent);
+    border-radius: 14px;
+    padding: 2rem;
+    text-align: center;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    color: var(--bs-body-color);
+    transition: background-color 0.2s, color 0.2s;
+}
+
+#map-status {
+    font-family: monospace;
+    font-size: 0.8rem;
+    color: var(--bs-secondary-color);
+    background-color: rgba(var(--bs-body-bg-rgb), 0.8);
+    backdrop-filter: blur(2px);
+    transition: color 0.2s, background-color 0.2s;
+}
+
+.mapboxgl-ctrl-group {
+    background-color: var(--bs-body-bg) !important;
+    border-radius: 0.5rem !important;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.13);
+}
+.mapboxgl-ctrl-group button {
+    background-color: var(--bs-body-bg) !important;
+    transition: background-color 0.2s ease !important;
+}
+.mapboxgl-ctrl-group button:hover {
+    background-color: var(--bs-tertiary-bg) !important;
+}
+.mapboxgl-ctrl-group button .mapboxgl-ctrl-icon {
+    filter: invert(var(--bs-tertiary-bg) == #f4f7fa ? 0 : 1);
+}
+
+@media (max-width: 768px) {
+    .map-container {
+        height: 50vh;
+        min-height: 350px;
+    }
 }
