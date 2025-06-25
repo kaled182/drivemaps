@@ -1,77 +1,98 @@
 {% extends "base.html" %}
-
 {% block title %}Visualização de Endereços | MapsDrive{% endblock %}
 
 {% block styles %}
 <link href='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css' rel='stylesheet' />
 <link rel="stylesheet" href="{{ url_for('static', filename='css/map.css') }}">
+<style>
+    /* Estilos in-line mantidos para compatibilidade, mas a lógica principal está no map.css */
+    .table > :not(caption) > * > * { vertical-align: middle; }
+    .form-control-sm { font-size: 0.9rem; }
+    .btn-icon { padding: 0.3rem 0.6rem; font-size: 0.8rem; }
+    .shadow-sm-strong { box-shadow: 0 .125rem .35rem rgba(0,0,0,.075)!important; }
+    .form-add-address { transition: all 0.3s ease-in-out; }
+    .toast-container { position: fixed; top: 1rem; right: 1rem; z-index: 1055; }
+    .table-info, .table-info > th, .table-info > td { background-color: #cff4fc !important; transition: background-color 0.3s; }
+</style>
 {% endblock %}
 
 {% block content %}
-<!-- Container principal para o layout de duas colunas -->
-<div class="preview-layout-container">
+<div class="container my-4">
 
-    <!-- Coluna Esquerda (Mapa Fixo) -->
-    <div class="map-column-fixed">
+    <!-- Container para notificações (toasts) -->
+    <div class="toast-container" id="toast-container"></div>
+    
+    <!-- Elemento para passar dados do Flask para o JavaScript de forma segura -->
+    <div id="page-data" 
+         data-enderecos='{{ lista|tojson|safe }}' 
+         data-mapbox-token="{{ MAPBOX_TOKEN }}"
+         style="display: none;">
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="mb-0"><i class="fas fa-map-marked-alt text-primary me-2"></i> Visualização de Endereços</h2>
+        <div>
+            <a href="#" class="btn btn-outline-primary btn-sm me-2" onclick="document.getElementById('form-generate-csv').submit();"><i class="fas fa-file-csv me-1"></i> Exportar CSV</a>
+            <form id="form-generate-csv" method="POST" action="{{ url_for('gerar.generate') }}" style="display:none"></form>
+            <a href="{{ url_for('preview.home') }}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-file-import me-1"></i> Nova Importação</a>
+        </div>
+    </div>
+
+    <div id="stats-bar" class="alert alert-info shadow-sm-strong"></div>
+    
+    <!-- AQUI ESTÁ A ALTERAÇÃO: ADICIONADA A CLASSE 'map-sticky-container' -->
+    <div class="map-container map-sticky-container mb-4">
         <div id="map"></div>
     </div>
 
-    <!-- Coluna Direita (Conteúdo com Scroll) -->
-    <div class="content-column-scrollable">
-        
-        <!-- Elemento para passar dados do Flask para o JavaScript -->
-        <div id="page-data" 
-             data-enderecos='{{ lista|tojson|safe }}' 
-             data-mapbox-token="{{ MAPBOX_TOKEN }}"
-             style="display: none;">
-        </div>
+    <div class="d-flex justify-content-end mb-3">
+        <button id="btn-show-form" class="btn btn-success" onclick="toggleNewAddressForm()"><i class="fas fa-plus-circle me-1"></i> Adicionar Endereço</button>
+    </div>
 
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2 class="mb-0"><i class="fas fa-map-marked-alt text-primary me-2"></i> Endereços</h2>
-            <div>
-                <a href="#" class="btn btn-outline-primary btn-sm me-2" onclick="document.getElementById('form-generate-csv').submit();"><i class="fas fa-file-csv me-1"></i> Exportar CSV</a>
-                <form id="form-generate-csv" method="POST" action="{{ url_for('gerar.generate') }}" style="display:none"></form>
-                <a href="{{ url_for('preview.home') }}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-file-import me-1"></i> Nova Importação</a>
+    <form id="new-address-form" class="card p-3 mb-4 shadow-sm form-add-address" style="display:none;" onsubmit="saveNewAddress(event)" novalidate>
+        <h6 class="mb-3">Novo Endereço</h6>
+        <div class="row g-2 align-items-center">
+            <div class="col-md-2">
+                <input type="text" class="form-control" id="new_id" placeholder="ID (ex: M1)" required aria-label="ID do novo endereço">
+                <div class="invalid-feedback">O ID é obrigatório.</div>
+            </div>
+            <div class="col-md-5">
+                <input type="text" class="form-control" id="new_address" placeholder="Endereço completo" required aria-label="Endereço completo">
+                <div class="invalid-feedback">O endereço é obrigatório.</div>
+            </div>
+            <div class="col-md-3">
+                <input type="text" class="form-control cep-input" id="new_cep" placeholder="Código Postal" required pattern="\d{4}-\d{3}" title="Formato: 1234-567" aria-label="Código Postal">
+                <div class="invalid-feedback">O Código Postal é obrigatório e deve estar no formato 1234-567.</div>
+            </div>
+            <div class="col-md-2 text-end">
+                <button type="submit" class="btn btn-success btn-sm">Salvar Endereço</button>
             </div>
         </div>
-
-        <div id="stats-bar" class="alert alert-secondary shadow-sm-strong"></div>
-
-        <div class="d-flex justify-content-end mb-3">
-            <button id="btn-show-form" class="btn btn-success" onclick="toggleNewAddressForm()"><i class="fas fa-plus-circle me-1"></i> Adicionar Endereço</button>
-        </div>
-
-        <form id="new-address-form" class="card p-3 mb-4 shadow-sm" style="display:none;" onsubmit="saveNewAddress(event)" novalidate>
-             <!-- O seu formulário de adicionar endereço permanece aqui -->
-        </form>
-        
-        <div class="table-responsive">
-            <table class="table table-hover align-middle shadow-sm bg-white" style="border-radius:14px; overflow:hidden;">
-                <thead class="table-light">
-                    <tr>
-                        <th style="width:80px;">ID</th>
-                        <th>Endereço</th>
-                        <th style="width:150px;">Código Postal</th>
-                        <th style="width:120px;">Status</th>
-                        <th style="width:120px;" class="text-center">Ações</th>
-                    </tr>
-                </thead>
-                <tbody id="address-table-body">
-                    <!-- As linhas serão geradas dinamicamente -->
-                </tbody>
-            </table>
-        </div>
+    </form>
+    
+    <div class="table-responsive">
+        <table class="table table-hover align-middle shadow-sm bg-white" style="border-radius:14px; overflow:hidden;">
+            <thead class="light">
+                <tr>
+                    <th style="width:80px;">ID</th><th>Endereço</th><th style="width:150px;">Código Postal</th>
+                    <th style="width:120px;">Status</th><th style="width:180px;" class="text-center">Ações</th>
+                </tr>
+            </thead>
+            <tbody id="address-table-body">
+                <!-- As linhas serão geradas dinamicamente pelo preview.js -->
+            </tbody>
+        </table>
     </div>
 </div>
 {% endblock %}
@@ -79,93 +100,5 @@
 {% block scripts %}
 <script src='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js'></script>
 <script src="{{ url_for('static', filename='js/map.js') }}"></script>
-<!-- Substituído o preview.js por lógica direta para garantir funcionamento -->
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const pageDataEl = document.getElementById('page-data');
-        const enderecosData = JSON.parse(pageDataEl.dataset.enderecos);
-        const mapboxToken = pageDataEl.dataset.mapboxToken;
-
-        if (!mapboxToken) {
-            console.error("Mapbox Token não encontrado!");
-            document.getElementById('map').innerHTML = '<div class="alert alert-danger m-3">Mapbox Token não configurado.</div>';
-            return;
-        }
-
-        const handleMarkerDrag = (originalIndex, marker) => {
-            console.log(`Marcador com índice ${originalIndex} foi arrastado.`, marker.getLngLat());
-            const row = document.getElementById(`row-${originalIndex}`);
-            if(row) {
-                row.classList.add('table-info');
-            }
-            // Adicionar lógica de chamada AJAX para atualizar o endereço
-        };
-
-        const mapManager = new MapManager('map', mapboxToken, {
-            onMarkerDragEnd: handleMarkerDrag
-        });
-
-        window.mapManager = mapManager; // Torna o mapManager acessível globalmente
-
-        mapManager.init(enderecosData);
-        mapManager.renderMarkers(enderecosData);
-
-        function populateTable(data) {
-            const tableBody = document.getElementById('address-table-body');
-            if (!tableBody) return;
-            tableBody.innerHTML = '';
-
-            if (data.length === 0) {
-                 tableBody.innerHTML = '<tr><td colspan="5" class="text-center p-4">Nenhum endereço para exibir.</td></tr>';
-                 return;
-            }
-
-            data.forEach((item, index) => {
-                const row = document.createElement('tr');
-                row.id = `row-${item.originalIndex || index}`;
-                
-                const statusClass = item.status_google === 'OK' ? 'text-success' : 'text-danger';
-                const statusIcon = item.status_google === 'OK' ? 'fa-check-circle' : 'fa-times-circle';
-
-                row.innerHTML = `
-                    <td><span class="badge bg-dark">${item.order_number || (index + 1)}</span></td>
-                    <td>${item.address}</td>
-                    <td>${item.cep}</td>
-                    <td><span class="${statusClass}"><i class="fas ${statusIcon} me-1"></i>${item.status_google}</span></td>
-                    <td class="text-center">
-                        <button class="btn btn-sm btn-outline-info" title="Focar no mapa" onclick="window.mapManager.focusMarker(${item.originalIndex || index})">
-                            <i class="fas fa-map-marker-alt"></i>
-                        </button>
-                    </td>
-                `;
-                tableBody.appendChild(row);
-            });
-        }
-
-        function updateStats(data) {
-            const statsBar = document.getElementById('stats-bar');
-            if (!statsBar) return;
-            
-            const total = data.length;
-            const validados = data.filter(item => item.status_google === 'OK').length;
-            const pendentes = total - validados;
-
-            statsBar.innerHTML = `
-                <strong>Resumo:</strong> 
-                <span class="badge rounded-pill bg-secondary ms-2">Total: ${total}</span>
-                <span class="badge rounded-pill bg-success">Validados: ${validados}</span>
-                <span class="badge rounded-pill bg-danger">Pendentes: ${pendentes}</span>
-            `;
-        }
-        
-        populateTable(enderecosData);
-        updateStats(enderecosData);
-    });
-
-    // Funções de UI que estavam no preview.js
-    function toggleNewAddressForm() {
-        const form = document.getElementById('new-address-form');
-        form.style.display = form.style.display === 'none' ? 'block' : 'none';
-    }
-</script>
+<script src="{{ url_for('static', filename='js/preview.js') }}" defer></script>
 {% endblock %}
