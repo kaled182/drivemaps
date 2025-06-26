@@ -1,27 +1,28 @@
 /**
  * MapsDrive - Map Manager
  * Classe modular e reutilizável para gerir a lógica do mapa Mapbox GL.
- * Esta classe é responsável por inicializar o mapa, renderizar marcadores
- * e comunicar eventos (como o arrastar de um marcador) de volta para o script principal.
+ * Suporta temas dinâmicos (claro/escuro) e marcadores customizados com número do pacote.
  */
 class MapManager {
     /**
      * @param {string} containerId - O ID do elemento HTML onde o mapa será renderizado.
-     * @param {string} accessToken - O seu token de acesso do Mapbox.
-     * @param {object} [options={}] - Opções de configuração adicionais.
-     * @param {function} [options.onMarkerDragEnd] - Callback a ser executado quando um marcador é arrastado.
+     * @param {string} accessToken - Seu token do Mapbox.
+     * @param {object} [options={}] - Opções extras (ex: callbacks).
+     * @param {function} [options.onMarkerDragEnd] - Callback chamado ao arrastar marcador.
      */
     constructor(containerId, accessToken, options = {}) {
         this.containerId = containerId;
         this.accessToken = accessToken;
         this.options = { defaultZoom: 11, ...options };
         this.map = null;
-        this.markers = {}; // Usar um objeto para associar marcadores a um ID único (ex: originalIndex)
+        this.markers = {};
+        this.addressData = []; // Estado interno dos dados de endereços.
+        this.currentTheme = 'light';
     }
 
     /**
      * Inicializa o mapa Mapbox.
-     * @param {Array} initialData - Os dados iniciais dos endereços para encontrar um ponto central.
+     * @param {Array} initialData - Lista de endereços para centralização inicial.
      */
     init(initialData = []) {
         if (!this.accessToken) {
@@ -29,87 +30,100 @@ class MapManager {
             return;
         }
         mapboxgl.accessToken = this.accessToken;
+        this.addressData = initialData;
 
-        const validCoords = initialData.filter(item => item.latitude && item.longitude);
-        const center = validCoords.length > 0 ? [validCoords[0].longitude, validCoords[0].latitude] : [-9.1393, 38.7223]; // Lisboa como fallback
+        const validCoords = this.addressData.filter(item => item.latitude && item.longitude);
+        const center = validCoords.length > 0
+            ? [validCoords[0].longitude, validCoords[0].latitude]
+            : [-9.1393, 38.7223]; // Fallback: Lisboa
+
+        const theme = document.documentElement.getAttribute('data-bs-theme') || 'light';
+        this.currentTheme = theme;
 
         this.map = new mapboxgl.Map({
             container: this.containerId,
-            style: 'mapbox://styles/mapbox/streets-v12',
+            style: theme === 'dark'
+                ? 'mapbox://styles/mapbox/dark-v11'
+                : 'mapbox://styles/mapbox/streets-v12',
             center: center,
             zoom: this.options.defaultZoom
         });
+
         this.map.addControl(new mapboxgl.NavigationControl());
     }
 
     /**
-     * Limpa todos os marcadores existentes e renderiza novos com base nos dados fornecidos.
-     * @param {Array} addressData - A lista completa de endereços para renderizar.
+     * Renderiza marcadores customizados, com círculo numerado e cor do pacote.
+     * @param {Array} addressData - Lista de endereços (atualiza o estado interno).
      */
     renderMarkers(addressData) {
         if (!this.map) return;
+        this.addressData = addressData;
 
-        // Limpa marcadores antigos
+        // Remove todos os marcadores antigos
         Object.values(this.markers).forEach(marker => marker.remove());
         this.markers = {};
 
-        const validCoords = addressData.map((item, index) => ({...item, originalIndex: index}))
-                                       .filter(item => item.latitude && item.longitude);
-        
+        const validCoords = this.addressData.map((item, index) => ({ ...item, originalIndex: index }))
+            .filter(item => item.latitude && item.longitude);
+
         if (validCoords.length === 0) {
             this.handleError("Nenhum endereço com coordenadas válidas para exibir no mapa.");
             return;
         }
 
         validCoords.forEach(item => {
+            // Cria elemento HTML para marcador customizado
+            const el = document.createElement('div');
+            el.className = 'custom-marker-numbered';
+            el.style.backgroundColor = item.cor || '#0d6efd';
+            el.innerText = String(item.order_number || item.originalIndex + 1).substring(0, 4);
+
             const marker = new mapboxgl.Marker({
-                color: item.cor || '#0d6efd',
+                element: el,
                 draggable: true
             })
             .setLngLat([item.longitude, item.latitude])
             .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML(`
                 <div class="map-infowindow">
-                  <h6>${item.order_number || 'Sem ID'}</h6>
-                  <p>${item.address}</p>
-                  <p>CEP: ${item.cep || 'Não informado'}</p>
-                  ${item.status_google === 'OK'
-                    ? '<p class="text-success">✓ Validado</p>'
-                    : `<p class="text-danger">${item.status_google || 'Não validado'}</p>`}
+                    <h6>${item.order_number || 'Sem ID'}</h6>
+                    <p>${item.address}</p>
+                    <p>CEP: ${item.cep || 'Não informado'}</p>
+                    ${item.status_google === 'OK'
+                        ? '<p class="text-success small">✓ Validado</p>'
+                        : `<p class="text-danger small">${item.status_google || 'Não validado'}</p>`}
                 </div>
             `))
             .addTo(this.map);
 
-            // Se um callback para o 'drag end' foi fornecido, associa-o
+            // Callback para arrastar
             if (typeof this.options.onMarkerDragEnd === 'function') {
                 marker.on('dragend', () => this.options.onMarkerDragEnd(item.originalIndex, marker));
             }
-            
             this.markers[item.originalIndex] = marker;
         });
-        
+
         this.fitToBounds(validCoords);
     }
 
     /**
-     * Ajusta o zoom e o centro do mapa para mostrar todos os endereços.
-     * @param {Array} data - A lista de endereços com coordenadas.
+     * Ajusta zoom/área do mapa para mostrar todos os pontos.
+     * @param {Array} data - Lista de endereços válidos.
      */
     fitToBounds(data) {
         if (!this.map || data.length === 0) return;
-        
         if (data.length === 1) {
             this.map.flyTo({ center: [data[0].longitude, data[0].latitude], zoom: 15 });
             return;
         }
-
         const bounds = new mapboxgl.LngLatBounds();
         data.forEach(item => bounds.extend([item.longitude, item.latitude]));
         this.map.fitBounds(bounds, { padding: 80, maxZoom: 15 });
     }
 
     /**
-     * Foca o mapa num marcador específico.
-     * @param {number} index - O índice do marcador a focar.
+     * Foca e abre o popup do marcador pelo índice original.
+     * @param {number} index - Índice na lista original.
      */
     focusMarker(index) {
         const marker = this.markers[index];
@@ -118,16 +132,34 @@ class MapManager {
             marker.togglePopup();
         }
     }
-    
+
     /**
-     * Mostra uma mensagem de erro no container do mapa.
-     * @param {string} message - A mensagem de erro a ser exibida.
+     * Altera o tema do mapa (claro/escuro) e redesenha marcadores.
+     * @param {'light' | 'dark'} theme
+     */
+    setTheme(theme) {
+        if (!this.map || (theme !== 'dark' && theme !== 'light') || this.currentTheme === theme) return;
+        this.currentTheme = theme;
+        const styleUrl = theme === 'dark'
+            ? 'mapbox://styles/mapbox/dark-v11'
+            : 'mapbox://styles/mapbox/streets-v12';
+        this.map.setStyle(styleUrl);
+
+        // Após trocar o style, renderize novamente os marcadores (pois são apagados)
+        this.map.once('styledata', () => {
+            this.renderMarkers(this.addressData);
+        });
+    }
+
+    /**
+     * Mostra mensagem de erro no container do mapa.
+     * @param {string} message
      */
     handleError(message) {
         const mapDiv = document.getElementById(this.containerId);
         if (mapDiv) {
-            mapDiv.innerHTML = `<div class="d-flex h-100 align-items-center justify-content-center">
-                <div class="text-center p-4 bg-white rounded shadow">
+            mapDiv.innerHTML = `<div class="d-flex h-100 align-items-center justify-content-center map-empty-message">
+                <div class="text-center p-4">
                     <h5 class="text-danger"><i class="fas fa-exclamation-triangle me-2"></i>Mapa indisponível</h5>
                     <p class="text-muted small">${message}</p>
                 </div>
@@ -137,5 +169,5 @@ class MapManager {
     }
 }
 
-// Exporta para uso externo/global
+// Exporta globalmente
 window.MapManager = MapManager;
