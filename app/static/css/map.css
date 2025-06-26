@@ -1,26 +1,54 @@
 /* ==========================================================================
-   DriveMaps - Estilos Específicos do Mapa (map.css)
+   DriveMaps - Estilos da Página de Visualização
    ========================================================================== */
 
-/* ===== CONTAINER PRINCIPAL DO MAPA ===== */
-.map-container {
-    position: relative;
-    height: 60vh; /* Altura generosa para o mapa */
-    min-height: 400px;
+/*
+ * 1. LAYOUT PRINCIPAL (FLEXBOX)
+ * Este bloco controla o layout de duas colunas (mapa à esquerda, tabela à direita).
+ * É responsivo e empilha as colunas em ecrãs mais pequenos.
+*/
+.mapsdrive-flex-row-responsive {
+    display: flex;
+    flex-wrap: nowrap; /* Previne que as colunas quebrem antes do @media query */
+    gap: 1.5rem;
+    align-items: flex-start;
+}
+
+.map-column {
+    flex: 1 1 55%; /* Base de 55% da largura, com flexibilidade para crescer/encolher */
+    position: sticky; /* Efeito "colar" no topo ao rolar */
+    top: 1rem;
+    align-self: flex-start; /* Garante que a coluna cola no seu topo */
+    z-index: 1000;
+}
+
+.table-column {
+    flex: 1 1 45%; /* Base de 45%, flexível */
+    min-width: 350px; /* Garante que a tabela não fica demasiado espremida */
+    display: flex;
+    flex-direction: column;
+}
+
+.table-container {
+    max-height: 80vh; /* Altura máxima para a área da tabela */
+    overflow-y: auto;   /* Scroll vertical apenas neste container */
+}
+
+
+/*
+ * 2. COMPONENTES DO MAPA
+ * Estilos para o container do mapa, popups e outros elementos visuais.
+*/
+#map {
+    width: 100%;
+    height: 65vh; /* Altura generosa para o mapa */
+    min-height: 450px;
     background-color: var(--bs-tertiary-bg, #e9ecef);
     border-radius: 0.75rem;
     overflow: hidden;
     transition: background-color 0.2s ease-in-out;
 }
 
-#map {
-    width: 100%;
-    height: 100%;
-    background-color: var(--bs-tertiary-bg, #e9ecef);
-    transition: background-color 0.2s ease-in-out;
-}
-
-/* ===== POPUP/INFOWINDOW DO MAPBOX ===== */
 .mapboxgl-popup-content {
     padding: 1rem !important;
     font-family: 'Segoe UI', Roboto, Arial, sans-serif;
@@ -54,8 +82,28 @@
     color: var(--bs-danger);
 }
 
+.mapboxgl-ctrl-group {
+    background-color: var(--bs-body-bg) !important;
+    border-radius: 0.5rem !important;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.13);
+}
+.mapboxgl-ctrl-group button {
+    background-color: var(--bs-body-bg) !important;
+    transition: background-color 0.2s ease !important;
+}
+.mapboxgl-ctrl-group button:hover {
+    background-color: var(--bs-tertiary-bg) !important;
+}
+.mapboxgl-ctrl-group button .mapboxgl-ctrl-icon {
+    /* Adapta o ícone ao tema claro/escuro */
+    filter: invert(var(--bs-tertiary-bg) == #f4f7fa ? 0 : 1);
+}
 
-/* ===== MENSAGEM DE MAPA VAZIO/ERRO ===== */
+
+/*
+ * 3. ELEMENTOS DE UI AUXILIARES
+ * Mensagens de erro, status, etc.
+*/
 .map-empty-message {
     position: absolute;
     top: 50%;
@@ -72,7 +120,6 @@
     transition: background-color 0.2s, color 0.2s;
 }
 
-/* ===== STATUS DO MAPA (CANTO INFERIOR) ===== */
 #map-status {
     font-family: monospace;
     font-size: 0.8rem;
@@ -82,72 +129,28 @@
     transition: color 0.2s, background-color 0.2s;
 }
 
-/* ===== CONTROLES DE NAVEGAÇÃO DO MAPBOX ===== */
-.mapboxgl-ctrl-group {
-    background-color: var(--bs-body-bg) !important;
-    border-radius: 0.5rem !important;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.13);
-}
-.mapboxgl-ctrl-group button {
-    background-color: var(--bs-body-bg) !important;
-    transition: background-color 0.2s ease !important;
-}
-.mapboxgl-ctrl-group button:hover {
-    background-color: var(--bs-tertiary-bg) !important;
-}
-.mapboxgl-ctrl-group button .mapboxgl-ctrl-icon {
-    filter: invert(var(--bs-tertiary-bg) == #f4f7fa ? 0 : 1);
-}
 
-/* ===== RESPONSIVIDADE ===== */
-@media (max-width: 768px) {
-    .map-container {
-        height: 50vh;
-        min-height: 350px;
-    }
-}
-
-/* === FLEXBOX: LAYOUT MAPA + TABELA LADO A LADO === */
-.mapsdrive-flex-row-responsive {
-    display: flex;
-    gap: 1.5rem;
-    align-items: flex-start;
-    width: 100%;
-}
-
-.map-column {
-    flex: 1 1 60%;
-    min-width: 350px;
-    max-width: 60vw;
-    display: flex;
-    flex-direction: column;
-    min-height: 450px;
-}
-
-.table-column {
-    flex: 1 1 40%;
-    min-width: 320px;
-    max-width: 600px;
-    display: flex;
-    flex-direction: column;
-}
-
-/* Ajusta a tabela para não sair do box e ficar scrollável se necessário */
-.table-container {
-    max-height: 65vh;
-    overflow-y: auto;
-}
-
-/* Responsivo para mobile: empilha colunas */
+/*
+ * 4. RESPONSIVIDADE
+ * Ajusta o layout para ecrãs mais pequenos (mobile).
+*/
 @media (max-width: 991px) {
     .mapsdrive-flex-row-responsive {
-        flex-direction: column;
+        flex-direction: column; /* Empilha as colunas */
     }
-    .map-column,
-    .table-column {
-        max-width: 100vw;
+
+    .map-column {
+        position: static; /* Desativa o efeito "sticky" em mobile */
+        width: 100%;
     }
+    
+    #map {
+        height: 50vh; /* Altura do mapa em mobile */
+        min-height: 350px;
+    }
+
     .table-container {
-        max-height: 45vh;
+        max-height: none; /* Permite que a tabela cresça o necessário */
+        overflow-y: visible;
     }
 }
