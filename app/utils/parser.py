@@ -68,14 +68,13 @@ def _parse_delnext_df(df: pd.DataFrame) -> Tuple[List[str], List[str], List[str]
     # Encontra as colunas relevantes procurando por palavras-chave
     col_end = next((c for c in df.columns if 'morada' in _normalize_col_name(c)), None)
     col_cep = next((c for c in df.columns if 'codigopostal' in _normalize_col_name(c)), None)
-    col_order = next((c for c in df.columns if 'encomenda' in _normalize_col_name(c) or 'pedido' in _normalize_col_name(c)), None)
 
     if not col_end or not col_cep:
         return [], [], []
         
     enderecos = df[col_end].astype(str).tolist()
     ceps = df[col_cep].astype(str).tolist()
-    order_numbers = df[col_order].astype(str).tolist() if col_order else [f"D{i+1}" for i in range(len(enderecos))]
+    order_numbers = [f"D{i+1}" for i in range(len(enderecos))]  # Sempre sequencial D1, D2...
     
     return enderecos, ceps, order_numbers
 
