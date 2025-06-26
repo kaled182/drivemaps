@@ -1,8 +1,8 @@
 # app/routes/api.py
 
 from flask import Blueprint, request, jsonify, session
-from app.utils.google import (
-    valida_rua_google_cache,
+from app.utils.geocoder import (
+    valida_rua,  # <- Dispatcher dinâmico (NÃO mais google direto)
     obter_endereco_por_coordenadas,
 )
 from app.utils.helpers import normalizar, sanitizar_endereco, validar_cep, cor_por_tipo
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 def validar_linha_endpoint():
     """
     Valida um endereço (novo ou existente) a partir do seu índice na lista da sessão.
-    Recebe um índice, endereço e CEP, consulta a API do Google e atualiza o item na sessão com os novos dados geocodificados.
+    Agora usa sempre o dispatcher valida_rua!
     """
     try:
         data = request.get_json()
@@ -45,21 +45,21 @@ def validar_linha_endpoint():
         
         item_para_atualizar = lista[idx]
 
-        resultado_google = valida_rua_google_cache(endereco, cep)
+        resultado = valida_rua(endereco, cep)
         
         item_para_atualizar.update({
             "address": endereco,
             "cep": cep,
-            "status_google": resultado_google.get('status', 'ERRO'),
-            "postal_code_encontrado": resultado_google.get('postal_code_encontrado', ''),
-            "endereco_formatado": resultado_google.get('endereco_formatado', ''),
-            "latitude": resultado_google.get('coordenadas', {}).get('lat'),
-            "longitude": resultado_google.get('coordenadas', {}).get('lng'),
-            "rua_google": resultado_google.get('route_encontrada', ''),
-            "cep_ok": cep == resultado_google.get('postal_code_encontrado', ''),
-            "rua_bate": _comparar_ruas(endereco.split(',')[0], resultado_google.get('route_encontrada', '')),
-            "freguesia": resultado_google.get('sublocality', ''),
-            "locality": resultado_google.get('locality', '')
+            "status_google": resultado.get('status', 'ERRO'),
+            "postal_code_encontrado": resultado.get('postal_code_encontrado', ''),
+            "endereco_formatado": resultado.get('endereco_formatado', ''),
+            "latitude": resultado.get('coordenadas', {}).get('lat'),
+            "longitude": resultado.get('coordenadas', {}).get('lng'),
+            "rua_google": resultado.get('route_encontrada', ''),
+            "cep_ok": cep == resultado.get('postal_code_encontrado', ''),
+            "rua_bate": _comparar_ruas(endereco.split(',')[0], resultado.get('route_encontrada', '')),
+            "freguesia": resultado.get('sublocality', ''),
+            "locality": resultado.get('locality', '')
         })
         
         session['lista'] = lista
@@ -76,7 +76,7 @@ def validar_linha_endpoint():
 def validar_por_id():
     """
     Valida um endereço a partir do seu order_number (ID), útil para AJAX dinâmico.
-    Recebe order_number, endereço e cep.
+    Usa sempre o dispatcher valida_rua!
     """
     try:
         data = request.get_json()
@@ -94,20 +94,20 @@ def validar_por_id():
         if idx is None:
             return jsonify({"success": False, "msg": "Endereço não encontrado."}), 404
 
-        resultado_google = valida_rua_google_cache(endereco, cep)
+        resultado = valida_rua(endereco, cep)
         lista[idx].update({
             "address": endereco,
             "cep": cep,
-            "status_google": resultado_google.get('status', 'ERRO'),
-            "postal_code_encontrado": resultado_google.get('postal_code_encontrado', ''),
-            "endereco_formatado": resultado_google.get('endereco_formatado', ''),
-            "latitude": resultado_google.get('coordenadas', {}).get('lat'),
-            "longitude": resultado_google.get('coordenadas', {}).get('lng'),
-            "rua_google": resultado_google.get('route_encontrada', ''),
-            "cep_ok": cep == resultado_google.get('postal_code_encontrado', ''),
-            "rua_bate": _comparar_ruas(endereco.split(',')[0], resultado_google.get('route_encontrada', '')),
-            "freguesia": resultado_google.get('sublocality', ''),
-            "locality": resultado_google.get('locality', '')
+            "status_google": resultado.get('status', 'ERRO'),
+            "postal_code_encontrado": resultado.get('postal_code_encontrado', ''),
+            "endereco_formatado": resultado.get('endereco_formatado', ''),
+            "latitude": resultado.get('coordenadas', {}).get('lat'),
+            "longitude": resultado.get('coordenadas', {}).get('lng'),
+            "rua_google": resultado.get('route_encontrada', ''),
+            "cep_ok": cep == resultado.get('postal_code_encontrado', ''),
+            "rua_bate": _comparar_ruas(endereco.split(',')[0], resultado.get('route_encontrada', '')),
+            "freguesia": resultado.get('sublocality', ''),
+            "locality": resultado.get('locality', '')
         })
         session['lista'] = lista
         session.modified = True
@@ -173,6 +173,7 @@ def reverse_geocode_endpoint():
 def add_address_endpoint():
     """
     Adiciona um novo endereço à lista na sessão. O 'order_number' é gerado automaticamente.
+    Agora valida endereço usando o dispatcher (valida_rua)!
     """
     try:
         data = request.get_json()
@@ -197,13 +198,26 @@ def add_address_endpoint():
                 max_id = max(max_id, int(item['order_number']))
         
         novo_order_number = str(max_id + 1)
-        
+
+        # ---- NOVO: Valida endereço já na adição, usando o dispatcher ----
+        resultado = valida_rua(endereco, cep)
+
         novo_item = {
             "order_number": id_fornecido or novo_order_number,
-            "address": endereco, "cep": cep, "status_google": "Pendente",
-            "latitude": None, "longitude": None, "cor": cor_por_tipo("manual"),
-            "importacao_tipo": "manual", "rua_google": "", "postal_code_encontrado": "",
-            "endereco_formatado": "", "cep_ok": False, "rua_bate": False, "freguesia": "", "locality": ""
+            "address": endereco,
+            "cep": cep,
+            "status_google": resultado.get('status', 'ERRO'),
+            "latitude": resultado.get('coordenadas', {}).get('lat'),
+            "longitude": resultado.get('coordenadas', {}).get('lng'),
+            "cor": cor_por_tipo("manual"),
+            "importacao_tipo": "manual",
+            "postal_code_encontrado": resultado.get('postal_code_encontrado', ''),
+            "endereco_formatado": resultado.get('endereco_formatado', ''),
+            "rua_google": resultado.get('route_encontrada', ''),
+            "cep_ok": cep == resultado.get('postal_code_encontrado', ''),
+            "rua_bate": _comparar_ruas(endereco.split(',')[0], resultado.get('route_encontrada', '')),
+            "freguesia": resultado.get('sublocality', ''),
+            "locality": resultado.get('locality', '')
         }
         
         lista.append(novo_item)
