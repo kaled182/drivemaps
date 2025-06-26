@@ -31,10 +31,10 @@ def create_app():
         app.logger.error(f"❌ Erro ao carregar configurações: {str(e)}")
         raise
 
-    # Verificação reforçada das configurações
+    # Verificação reforçada das configurações essenciais (sem GOOGLE_API_KEY)
     required_configs = {
         'SECRET_KEY': 'Chave secreta para segurança',
-        'GOOGLE_API_KEY': 'API Key do Google Maps',
+        'MAPBOX_TOKEN': 'Token do Mapbox',
         'MAP_ID': 'ID do mapa',
         'SESSION_COOKIE_NAME': 'Nome do cookie de sessão'
     }
@@ -45,6 +45,10 @@ def create_app():
                    "\n".join(f"- {key}: {required_configs[key]}" for key in missing)
         app.logger.error(error_msg)
         raise ValueError("Configurações essenciais faltando no arquivo config.py ou variáveis de ambiente")
+
+    # Apenas warning caso falte a key do Google
+    if not app.config.get('GOOGLE_API_KEY'):
+        app.logger.warning("⚠️ GOOGLE_API_KEY não definida! Validações de endereço Google desativadas.")
 
     # Configuração de sessão com tratamento robusto
     try:
