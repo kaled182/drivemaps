@@ -106,6 +106,38 @@ document.addEventListener('DOMContentLoaded', () => {
         onMarkerDragEnd: previewMap.onMarkerDragEnd
     });
     mapManager.init(enderecosData);
+
+    // --- [AJUSTE] Redefina renderMarkers para mostrar PIN vermelho se não validado
+    mapManager.renderMarkers = function(lista) {
+        // Remove todos os markers antigos, se houver
+        if (this.markers) this.markers.forEach(m => m.remove());
+        this.markers = [];
+        for (let i = 0; i < lista.length; i++) {
+            const item = lista[i];
+            // Só marca se houver coordenada (pelo menos do CEP)
+            if (item.latitude && item.longitude) {
+                // Cor: verde se OK, vermelho se erro/pending/etc
+                let color = "#1DB954"; // Verde padrão
+                if (!item.status_google || item.status_google === "Pendente" || item.status_google === "NOT_FOUND" || item.status_google === "ERRO" || item.status_google === "ZERO_RESULTS") {
+                    color = "#E74C3C"; // Vermelho
+                }
+                const marker = new mapboxgl.Marker({ color })
+                    .setLngLat([item.longitude, item.latitude])
+                    .setPopup(new mapboxgl.Popup({ offset: 20 }).setText(
+                        item.endereco_formatado || item.address || 'Sem endereço'
+                    ))
+                    .addTo(this.map);
+
+                // Event: ao clicar na tabela, foca o marker
+                marker.getElement().addEventListener('click', () => {
+                    marker.togglePopup();
+                });
+
+                this.markers.push(marker);
+            }
+        }
+    };
+
     mapManager.renderMarkers(enderecosData);
 
     // === Integração: troca de tema ===
@@ -198,6 +230,8 @@ const previewMap = {
                 previewTable.updateRow(idx, data.item);
                 previewStats.update();
                 window.MapsDrive?.showToast?.(t('updated'), t('success'));
+                // Após atualizar, atualiza os markers do mapa
+                mapManager.renderMarkers(enderecosData);
             }
         } catch(e) { /* Erro já tratado pela fetchAPI */ }
         finally { row?.classList.remove('table-info'); }
@@ -317,7 +351,9 @@ function toggleNewAddressForm() {
 }
 
 function focusMarker(idx) {
-    if (mapManager) mapManager.focusMarker(idx);
+    if (mapManager && mapManager.markers && mapManager.markers[idx]) {
+        mapManager.markers[idx].togglePopup();
+    }
 }
 
 // ========================
