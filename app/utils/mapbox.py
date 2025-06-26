@@ -38,3 +38,35 @@ def valida_rua_mapbox(endereco, cep):
             return {"status": "NOT_FOUND"}
     except Exception as e:
         return {"status": "ERRO", "erro": str(e)}
+
+def obter_endereco_por_coordenadas(lat, lng):
+    """
+    Busca reversa de endereço (coordenadas para endereço) usando Mapbox Geocoding API.
+    """
+    url = f"https://api.mapbox.com/geocoding/v5/mapbox.places/{lng},{lat}.json"
+    params = {
+        "access_token": MAPBOX_TOKEN,
+        "country": "PT",
+        "limit": 1
+    }
+    try:
+        r = requests.get(url, params=params)
+        r.raise_for_status()
+        data = r.json()
+        if data.get('features'):
+            feat = data['features'][0]
+            def get_context(ctx_id):
+                return next((c['text'] for c in feat.get('context', []) if c['id'].startswith(ctx_id)), "")
+
+            return {
+                "status": "OK",
+                "address": feat['place_name'],
+                "postal_code": get_context("postcode"),
+                "sublocality": "",
+                "locality": get_context("place"),
+                "coordenadas": {"lat": lat, "lng": lng},
+            }
+        else:
+            return {"status": "NOT_FOUND"}
+    except Exception as e:
+        return {"status": "ERRO", "erro": str(e)}
