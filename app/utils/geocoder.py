@@ -1,20 +1,21 @@
-import os
+# app/utils/geocoder.py
 
-# Importa providers disponíveis
+import os
 from app.utils.google import valida_rua_google
 from app.utils.mapbox import valida_rua_mapbox
 
 GEOCODERS = {
-    'google': valida_rua_google,
-    'mapbox': valida_rua_mapbox,
-    # no futuro: 'tomtom': valida_rua_tomtom, etc.
+    "google": valida_rua_google,
+    "mapbox": valida_rua_mapbox,
+    # No futuro: "tomtom": valida_rua_tomtom, etc.
 }
 
-# Define o provider ativo (exemplo: variável de ambiente, config ou banco)
 DEFAULT_GEOCODER = os.environ.get("GEOCODER_PROVIDER", "mapbox")
 
 def valida_rua(endereco, cep, provider=None):
-    """Função única para validação, redireciona para provider configurado."""
+    """
+    Faz a validação de endereço usando o provider configurado (Google, Mapbox, ...).
+    """
     prov = provider or DEFAULT_GEOCODER
     if prov not in GEOCODERS:
         raise ValueError(f"Geocoder '{prov}' não suportado.")
