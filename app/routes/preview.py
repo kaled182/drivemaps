@@ -1,5 +1,5 @@
 # app/routes/preview.py
-from flask import Blueprint, render_template, request, session, redirect, url_for, flash
+from flask import Blueprint, render_template, request, session, redirect, url_for, flash, jsonify
 from app.utils.google import valida_rua_google
 from app.utils.helpers import normalizar, registro_unico, CORES_IMPORTACAO
 from app.utils import parser
@@ -76,3 +76,26 @@ def preview():
         logger.error(f"[preview] Erro ao processar: {str(e)}", exc_info=True)
         flash(f"Houve um erro ao processar os endereços: {e}. Tente novamente.", "danger")
         return redirect(url_for('preview.home'))
+
+
+# --- NOVA ROTA PARA REMOVER ENDEREÇO ---
+@preview_bp.route('/api/remover-endereco', methods=['POST'])
+def remover_endereco():
+    """Remove um endereço da lista de endereços na sessão, dado o índice."""
+    data = request.get_json()
+    idx = data.get('idx')
+
+    # Recupera lista atual da sessão
+    lista = session.get('lista', [])
+
+    try:
+        idx = int(idx)
+        if 0 <= idx < len(lista):
+            lista.pop(idx)
+            session['lista'] = lista
+            session.modified = True
+            return jsonify({'success': True, 'lista': lista})
+        else:
+            return jsonify({'success': False, 'msg': 'Índice inválido.'}), 400
+    except Exception as e:
+        return jsonify({'success': False, 'msg': f'Erro ao remover: {str(e)}'}), 500
