@@ -1,7 +1,7 @@
 # app/routes/importacao.py
 
 from flask import Blueprint, request, session, redirect, url_for, flash
-from app.utils.geocoder import valida_rua
+from app.utils.geocoder import valida_rua  # <<<< AGORA USA O DISPATCHER DINÂMICO!
 from app.utils.helpers import normalizar, registro_unico, cor_por_tipo
 from app.utils import parser
 import pandas as pd
@@ -19,12 +19,12 @@ def _processa_e_geocodifica(empresa: str, enderecos: list, ceps: list, order_num
     lista_processada = []
     if not enderecos:
         return lista_processada
-        
+
     logger.info(f"Geocodificando {len(enderecos)} endereços para o formato '{empresa}'...")
     for i, (endereco, cep) in enumerate(zip(enderecos, ceps)):
         order_number = order_numbers[i] if i < len(order_numbers) and order_numbers[i] else f"{(empresa or 'item').upper()}-{i+1}"
-        
-        res_geo = valida_rua(endereco, cep)
+
+        res_geo = valida_rua(endereco, cep)  # USANDO O DISPATCHER
         novo_item = {
             "order_number": order_number, "address": endereco, "cep": cep,
             "status_google": res_geo.get('status', 'ERRO'),
@@ -54,22 +54,33 @@ def _processar_ficheiro(file: FileStorage) -> list:
         enderecos, ceps, order_numbers = parser.parse_paack_texto(conteudo)
         return _processa_e_geocodifica('paack', enderecos, ceps, order_numbers)
 
+    # -- Tenta ignorar a primeira linha, depois tenta normal se der erro ou detectar menos de 2 colunas --
     try:
-        df = pd.read_excel(file)
+        file.seek(0)
+        df = pd.read_excel(file, skiprows=1)
+        if df.empty or len(df.columns) < 2:
+            file.seek(0)
+            df = pd.read_excel(file)
     except Exception:
         file.seek(0)
-        df = pd.read_csv(file, sep=None, engine='python', on_bad_lines='skip', encoding='utf-8')
-    
-    # LOG EXTRA para depuração:
-    logger.warning(f"[DEBUG] Colunas detectadas: {list(df.columns)}")
-    logger.warning(f"[DEBUG] Primeiras linhas do arquivo: {df.head().to_dict()}")
+        try:
+            df = pd.read_csv(file, sep=None, engine='python', on_bad_lines='skip', encoding='utf-8', skiprows=1)
+            if df.empty or len(df.columns) < 2:
+                file.seek(0)
+                df = pd.read_csv(file, sep=None, engine='python', on_bad_lines='skip', encoding='utf-8')
+        except Exception as err:
+            logger.error(f"Erro ao ler arquivo como excel/csv: {err}")
+            return []
+
+    logger.debug(f"[IMPORTACAO] Colunas detectadas: {list(df.columns)}")
+    logger.debug(f"[IMPORTACAO] Primeiras linhas: {df.head().to_dict()}")
 
     if df.empty:
         logger.warning(f"DataFrame vazio para o ficheiro {file.filename}")
         return []
 
     formato = parser.detectar_formato_df(df)
-    logger.warning(f"[DEBUG] Formato detectado: {formato}")
+    logger.info(f"Formato detectado: {formato}")
 
     if not formato:
         logger.warning(f"Formato não reconhecido para {file.filename}. A ignorar.")
@@ -88,7 +99,7 @@ def _processar_texto_manual(texto: str) -> list:
 def _unificar_e_deduplicar(lista_de_itens: list) -> list:
     registros_unicos = {}
     logger.info(f"Deduplicando {len(lista_de_itens)} itens no total...")
-    
+
     for item in lista_de_itens:
         chave = (normalizar(item['address']), normalizar(item['cep']))
         if chave in registros_unicos:
