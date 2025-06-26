@@ -54,6 +54,7 @@ class MapManager {
 
     /**
      * Renderiza marcadores customizados, com círculo numerado e cor do pacote.
+     * Pendente: PIN vermelho, Validado: cor normal.
      * @param {Array} addressData - Lista de endereços (atualiza o estado interno).
      */
     renderMarkers(addressData) {
@@ -73,10 +74,18 @@ class MapManager {
         }
 
         validCoords.forEach(item => {
+            // Define cor: vermelho para pendente ou erro, cor do pacote para validado
+            let corMarker = "#0d6efd"; // azul padrão
+            if (item.status_google !== "OK") {
+                corMarker = "#E74C3C"; // vermelho para pendentes/erro
+            } else if (item.cor) {
+                corMarker = item.cor;
+            }
+
             // Cria elemento HTML para marcador customizado
             const el = document.createElement('div');
             el.className = 'custom-marker-numbered';
-            el.style.backgroundColor = item.cor || '#0d6efd';
+            el.style.backgroundColor = corMarker;
             el.innerText = String(item.order_number || item.originalIndex + 1).substring(0, 4);
 
             const marker = new mapboxgl.Marker({
