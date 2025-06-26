@@ -1,31 +1,20 @@
-
 {% extends "base.html" %}
 {% block title %}Visualização de Endereços | MapsDrive{% endblock %}
 
 {% block styles %}
 <link href='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css' rel='stylesheet' />
+<!-- Todos os estilos estão agora consolidados no map.css -->
 <link rel="stylesheet" href="{{ url_for('static', filename='css/map.css') }}">
-<style>
-    .map-container #map { min-height: 450px; height: 60vh; width: 100%; border-radius: 14px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); background: #e9ecef; position: relative; }
-    .table > :not(caption) > * > * { vertical-align: middle; }
-    .form-control-sm { font-size: 0.9rem; }
-    .btn-icon { padding: 0.3rem 0.6rem; font-size: 0.8rem; }
-    .shadow-sm-strong { box-shadow: 0 .125rem .35rem rgba(0,0,0,.075)!important; }
-    .form-add-address { transition: all 0.3s ease-in-out; }
-    .toast-container { position: fixed; top: 1rem; right: 1rem; z-index: 1055; }
-    .table-info, .table-info > th, .table-info > td { background-color: #cff4fc !important; transition: background-color 0.3s; }
-</style>
 {% endblock %}
 
 {% block content %}
 <div class="container my-4">
-
-    <!-- Container para notificações (toasts) -->
+    <!-- Toast notifications -->
     <div class="toast-container" id="toast-container"></div>
     
-    <!-- Elemento para passar dados do Flask para o JavaScript de forma segura -->
-    <div id="page-data" 
-         data-enderecos='{{ lista|tojson|safe }}' 
+    <!-- Hidden page-data -->
+    <div id="page-data"
+         data-enderecos='{{ lista|tojson|safe }}'
          data-mapbox-token="{{ MAPBOX_TOKEN }}"
          style="display: none;">
     </div>
@@ -41,7 +30,7 @@
       {% endif %}
     {% endwith %}
 
-    <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap">
         <h2 class="mb-0"><i class="fas fa-map-marked-alt text-primary me-2"></i> Visualização de Endereços</h2>
         <div>
             <a href="#" class="btn btn-outline-primary btn-sm me-2" onclick="document.getElementById('form-generate-csv').submit();"><i class="fas fa-file-csv me-1"></i> Exportar CSV</a>
@@ -50,46 +39,60 @@
         </div>
     </div>
 
-    <div id="stats-bar" class="alert alert-info shadow-sm-strong"></div>
-    <div class="map-container mb-4"><div id="map"></div></div>
+    <div id="stats-bar" class="alert alert-info shadow-sm-strong mb-3"></div>
 
-    <div class="d-flex justify-content-end mb-3">
-        <button id="btn-show-form" class="btn btn-success" onclick="toggleNewAddressForm()"><i class="fas fa-plus-circle me-1"></i> Adicionar Endereço</button>
-    </div>
+    <!-- Layout Flexbox Responsivo (Sua Estrutura) -->
+    <div class="mapsdrive-flex-row-responsive">
+        
+        <!-- Coluna do Mapa -->
+        <div class="map-column">
+            <div id="map"></div>
+        </div>
 
-    <form id="new-address-form" class="card p-3 mb-4 shadow-sm form-add-address" style="display:none;" onsubmit="saveNewAddress(event)" novalidate>
-        <h6 class="mb-3">Novo Endereço</h6>
-        <div class="row g-2 align-items-center">
-            <div class="col-md-2">
-                <input type="text" class="form-control" id="new_id" placeholder="ID (ex: M1)" required aria-label="ID do novo endereço">
-                <div class="invalid-feedback">O ID é obrigatório.</div>
+        <!-- Coluna da Tabela e Ações -->
+        <div class="table-column">
+            <div class="d-flex justify-content-end mb-3">
+                <button id="btn-show-form" class="btn btn-success" onclick="toggleNewAddressForm()"><i class="fas fa-plus-circle me-1"></i> Adicionar Endereço</button>
             </div>
-            <div class="col-md-5">
-                <input type="text" class="form-control" id="new_address" placeholder="Endereço completo" required aria-label="Endereço completo">
-                <div class="invalid-feedback">O endereço é obrigatório.</div>
-            </div>
-            <div class="col-md-3">
-                <input type="text" class="form-control cep-input" id="new_cep" placeholder="Código Postal" required pattern="\d{4}-\d{3}" title="Formato: 1234-567" aria-label="Código Postal">
-                <div class="invalid-feedback">O Código Postal é obrigatório e deve estar no formato 1234-567.</div>
-            </div>
-            <div class="col-md-2 text-end">
-                <button type="submit" class="btn btn-success btn-sm">Salvar Endereço</button>
+            
+            <form id="new-address-form" class="card p-3 mb-4 shadow-sm form-add-address" style="display:none;" onsubmit="saveNewAddress(event)" novalidate>
+                <h6 class="mb-3">Novo Endereço</h6>
+                <div class="row g-2 align-items-center">
+                    <div class="col-md-2">
+                        <input type="text" class="form-control" id="new_id" placeholder="ID (ex: M1)" required aria-label="ID do novo endereço">
+                        <div class="invalid-feedback">O ID é obrigatório.</div>
+                    </div>
+                    <div class="col-md-5">
+                        <input type="text" class="form-control" id="new_address" placeholder="Endereço completo" required aria-label="Endereço completo">
+                        <div class="invalid-feedback">O endereço é obrigatório.</div>
+                    </div>
+                    <div class="col-md-3">
+                        <input type="text" class="form-control cep-input" id="new_cep" placeholder="Código Postal" required pattern="\d{4}-\d{3}" title="Formato: 1234-567" aria-label="Código Postal">
+                        <div class="invalid-feedback">O Código Postal é obrigatório e deve estar no formato 1234-567.</div>
+                    </div>
+                    <div class="col-md-2 text-end">
+                        <button type="submit" class="btn btn-success btn-sm">Salvar Endereço</button>
+                    </div>
+                </div>
+            </form>
+            
+            <div class="table-container">
+                <table class="table table-hover align-middle shadow-sm bg-white" style="border-radius:14px; overflow:hidden;">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width:80px;">ID</th>
+                            <th>Endereço</th>
+                            <th style="width:150px;">Código Postal</th>
+                            <th style="width:120px;">Status</th>
+                            <th style="width:180px;" class="text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="address-table-body">
+                        <!-- As linhas serão geradas dinamicamente pelo preview.js -->
+                    </tbody>
+                </table>
             </div>
         </div>
-    </form>
-    
-    <div class="table-responsive">
-        <table class="table table-hover align-middle shadow-sm bg-white" style="border-radius:14px; overflow:hidden;">
-            <thead class="table-light">
-                <tr>
-                    <th style="width:80px;">ID</th><th>Endereço</th><th style="width:150px;">Código Postal</th>
-                    <th style="width:120px;">Status</th><th style="width:180px;" class="text-center">Ações</th>
-                </tr>
-            </thead>
-            <tbody id="address-table-body">
-                <!-- As linhas serão geradas dinamicamente pelo preview.js -->
-            </tbody>
-        </table>
     </div>
 </div>
 {% endblock %}
