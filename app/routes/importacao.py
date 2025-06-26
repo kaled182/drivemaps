@@ -112,8 +112,13 @@ def _unificar_e_deduplicar(lista_de_itens: list) -> list:
     return lista_deduplicada
 
 def _reindexar_lista(lista: list) -> list:
-    for idx, item in enumerate(lista, 1):
-        item['order_number'] = str(idx)
+    """Mantém o order_number original para Paack e garante D1, D2... para Delnext"""
+    d_count = 1
+    for item in lista:
+        if str(item.get("importacao_tipo", "")).lower() == "delnext":
+            item['order_number'] = f"D{d_count}"
+            d_count += 1
+        # Paack mantém order_number como está
     return lista
 
 @importacao_bp.route('/import_planilha', methods=['POST'])
