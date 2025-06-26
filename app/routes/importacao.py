@@ -1,7 +1,7 @@
 # app/routes/importacao.py
 
 from flask import Blueprint, request, session, redirect, url_for, flash
-from app.utils.geocoder import valida_rua  # <<<< AGORA USA O DISPATCHER DINÂMICO!
+from app.utils.geocoder import valida_rua
 from app.utils.helpers import normalizar, registro_unico, cor_por_tipo
 from app.utils import parser
 import pandas as pd
@@ -24,7 +24,7 @@ def _processa_e_geocodifica(empresa: str, enderecos: list, ceps: list, order_num
     for i, (endereco, cep) in enumerate(zip(enderecos, ceps)):
         order_number = order_numbers[i] if i < len(order_numbers) and order_numbers[i] else f"{(empresa or 'item').upper()}-{i+1}"
         
-        res_geo = valida_rua(endereco, cep)  # USANDO O DISPATCHER
+        res_geo = valida_rua(endereco, cep)
         novo_item = {
             "order_number": order_number, "address": endereco, "cep": cep,
             "status_google": res_geo.get('status', 'ERRO'),
@@ -48,23 +48,29 @@ def _processar_ficheiro(file: FileStorage) -> list:
         return []
 
     logger.info(f"Processando ficheiro: {file.filename}")
-    
+
     if file.filename.lower().endswith('.txt'):
         conteudo = file.read().decode("utf-8")
         enderecos, ceps, order_numbers = parser.parse_paack_texto(conteudo)
         return _processa_e_geocodifica('paack', enderecos, ceps, order_numbers)
-    
+
     try:
         df = pd.read_excel(file)
     except Exception:
         file.seek(0)
         df = pd.read_csv(file, sep=None, engine='python', on_bad_lines='skip', encoding='utf-8')
     
+    # LOG EXTRA para depuração:
+    logger.warning(f"[DEBUG] Colunas detectadas: {list(df.columns)}")
+    logger.warning(f"[DEBUG] Primeiras linhas do arquivo: {df.head().to_dict()}")
+
     if df.empty:
         logger.warning(f"DataFrame vazio para o ficheiro {file.filename}")
         return []
 
     formato = parser.detectar_formato_df(df)
+    logger.warning(f"[DEBUG] Formato detectado: {formato}")
+
     if not formato:
         logger.warning(f"Formato não reconhecido para {file.filename}. A ignorar.")
         return []
