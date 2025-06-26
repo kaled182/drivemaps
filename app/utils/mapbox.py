@@ -5,15 +5,43 @@ import os
 
 MAPBOX_TOKEN = os.environ.get("MAPBOX_TOKEN", "SEU_TOKEN_MAPBOX_AQUI")
 
+def _tenta_busca_cep(cep, params):
+    """
+    Tenta localizar o centro do CEP no Mapbox, testando com traço, sem traço e só prefixo.
+    """
+    # Tenta com CEP formatado, limpo e apenas 4 dígitos
+    tentativas = [cep, cep.replace("-", ""), cep.split("-")[0]]
+    for cep_try in tentativas:
+        url_cep = f"https://api.mapbox.com/geocoding/v5/mapbox.places/{cep_try}.json"
+        params_cep = dict(params)
+        params_cep["types"] = "postcode"
+        try:
+            r_cep = requests.get(url_cep, params=params_cep)
+            r_cep.raise_for_status()
+            data_cep = r_cep.json()
+            if data_cep.get('features'):
+                feat = data_cep['features'][0]
+                def get_context(ctx_id):
+                    return next((c['text'] for c in feat.get('context', []) if c['id'].startswith(ctx_id)), "")
+                return {
+                    "status": "OK_CEP_ONLY",
+                    "coordenadas": {"lat": feat['center'][1], "lng": feat['center'][0]},
+                    "postal_code_encontrado": get_context("postcode"),
+                    "endereco_formatado": feat['place_name'],
+                    "route_encontrada": "",  # Não encontrou rua, só CEP
+                    "sublocality": "",
+                    "locality": get_context("place"),
+                    "msg": f"Endereço não encontrado, PIN colocado no centro do CEP ({cep_try})."
+                }
+        except Exception:
+            continue
+    return {"status": "NOT_FOUND", "msg": "Endereço e CEP não encontrados."}
+
 def valida_rua_mapbox(endereco, cep):
     """
     Valida endereço usando Mapbox Geocoding API.
-    Se não encontrar, tenta posicionar o PIN dentro do CEP informado.
+    Se não encontrar pelo endereço, tenta centralizar o PIN no CEP.
     """
-    def get_context(ctx_id, feat):
-        return next((c['text'] for c in feat.get('context', []) if c['id'].startswith(ctx_id)), "")
-
-    # 1. Primeira tentativa: endereço completo
     url = f"https://api.mapbox.com/geocoding/v5/mapbox.places/{endereco}.json"
     params = {
         "access_token": MAPBOX_TOKEN,
@@ -26,36 +54,21 @@ def valida_rua_mapbox(endereco, cep):
         data = r.json()
         if data.get('features'):
             feat = data['features'][0]
+            def get_context(ctx_id):
+                return next((c['text'] for c in feat.get('context', []) if c['id'].startswith(ctx_id)), "")
+
             return {
                 "status": "OK",
                 "coordenadas": {"lat": feat['center'][1], "lng": feat['center'][0]},
-                "postal_code_encontrado": get_context("postcode", feat),
+                "postal_code_encontrado": get_context("postcode"),
                 "endereco_formatado": feat['place_name'],
-                "route_encontrada": get_context("street", feat),
+                "route_encontrada": get_context("street"),
                 "sublocality": "",
-                "locality": get_context("place", feat),
+                "locality": get_context("place"),
             }
-        # Se não encontrou o endereço, tenta pelo CEP
         elif cep:
-            # 2. Segunda tentativa: busca por CEP
-            url_cep = f"https://api.mapbox.com/geocoding/v5/mapbox.places/{cep}.json"
-            r_cep = requests.get(url_cep, params=params)
-            r_cep.raise_for_status()
-            data_cep = r_cep.json()
-            if data_cep.get('features'):
-                feat = data_cep['features'][0]
-                return {
-                    "status": "OK_CEP_ONLY",
-                    "coordenadas": {"lat": feat['center'][1], "lng": feat['center'][0]},
-                    "postal_code_encontrado": get_context("postcode", feat),
-                    "endereco_formatado": feat['place_name'],
-                    "route_encontrada": "",  # Não encontrou rua, só CEP
-                    "sublocality": "",
-                    "locality": get_context("place", feat),
-                    "msg": "Endereço não encontrado, PIN colocado no centro do CEP."
-                }
-            else:
-                return {"status": "NOT_FOUND", "msg": "Endereço e CEP não encontrados."}
+            # Tenta achar o centro do CEP
+            return _tenta_busca_cep(cep, params)
         else:
             return {"status": "NOT_FOUND", "msg": "Endereço não encontrado e CEP não fornecido."}
     except Exception as e:
@@ -83,9 +96,9 @@ def obter_endereco_por_coordenadas(lat, lng):
             return {
                 "status": "OK",
                 "address": feat['place_name'],
-                "postal_code": get_context("postcode", feat),
+                "postal_code": get_context("postcode"),
                 "sublocality": "",
-                "locality": get_context("place", feat),
+                "locality": get_context("place"),
                 "coordenadas": {"lat": lat, "lng": lng},
             }
         else:
