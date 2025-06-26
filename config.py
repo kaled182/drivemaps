@@ -6,10 +6,23 @@ class Config:
     SECRET_KEY = os.getenv('SECRET_KEY', os.urandom(24).hex())
     FLASK_ENV = os.getenv('FLASK_ENV', 'production')
     
-    # Configurações de API externa
-    GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY`)
-    MAPBOX_TOKEN = os.getenv('MAPBOX_TOKEN`)
-    MAP_ID = os.getenv('MAP_ID')
+    # Configurações de API externa (agora corrigidas)
+    GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY', '')
+    MAPBOX_TOKEN = os.getenv('MAPBOX_TOKEN', '')
+    MAP_ID = os.getenv('MAP_ID', '')
+
+    # Configuração dinâmica para múltiplas APIs
+    EXTERNAL_APIS = {
+        "google": {
+            "key": GOOGLE_API_KEY,
+            "base_url": "https://maps.googleapis.com/maps/api"
+        },
+        "mapbox": {
+            "token": MAPBOX_TOKEN,
+            "base_url": "https://api.mapbox.com"
+        },
+        # Adicione outros provedores no futuro...
+    }
     
     # Configurações de sessão
     SESSION_TYPE = os.getenv('SESSION_TYPE', 'filesystem')
