@@ -7,7 +7,8 @@ class Config:
     FLASK_ENV = os.getenv('FLASK_ENV', 'production')
     
     # Configurações de API externa
-    GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
+    GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY`)
+    MAPBOX_TOKEN = os.getenv(`MAPBOX_TOKEN`)
     MAP_ID = os.getenv('MAP_ID')
     
     # Configurações de sessão
