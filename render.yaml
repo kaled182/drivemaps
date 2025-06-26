@@ -21,8 +21,6 @@ services:
       sync: false
     - key: MAPBOX_TOKEN
       sync: false
-    - key: GOOGLE_API_KEY
-      sync: false
     - key: FLASK_ENV
       sync: false
 version: "1"
