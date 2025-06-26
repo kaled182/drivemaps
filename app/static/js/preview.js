@@ -26,16 +26,10 @@ const i18n = {
         warning: "warning",
         danger: "danger"
     }
-    // Futuramente, pode adicionar outros idiomas aqui: 'en': { ... }
+    // Outros idiomas futuros: 'en': { ... }
 };
-const locale = 'pt'; // Em produção, isto poderia ser dinâmico
+const locale = 'pt';
 
-/**
- * Função para obter texto traduzido.
- * @param {string} key - A chave da mensagem.
- * @param {string} [fallback=""] - Texto a ser usado se a chave não for encontrada.
- * @returns {string} O texto traduzido.
- */
 function t(key, fallback = "") {
     return (i18n[locale] && i18n[locale][key]) || fallback || key;
 }
@@ -44,38 +38,24 @@ function t(key, fallback = "") {
 // 2. Funções Utilitárias
 // ========================
 
-/**
- * Aplica uma função de máscara a todos os inputs que correspondem a um seletor.
- * @param {string} selector - O seletor CSS dos inputs.
- * @param {function} maskFn - A função que aplica a máscara.
- */
+/** Utiliza máscara de CEP global (MapsDrive) se disponível */
+function maskCEP(value) {
+    return (window.MapsDrive && window.MapsDrive.formatCEP)
+        ? window.MapsDrive.formatCEP(value)
+        : value.replace(/\D/g, '').replace(/^(\d{4})(\d{0,3}).*$/, (m, g1, g2) => g2 ? `${g1}-${g2}` : g1).substr(0, 8);
+}
+
 function applyInputMask(selector, maskFn) {
     document.querySelectorAll(selector).forEach(input => {
-        const applyMask = () => {
-            const originalValue = input.value;
-            const maskedValue = maskFn(originalValue);
-            if (originalValue !== maskedValue) {
-                input.value = maskedValue;
-            }
+        input.removeEventListener('input', input._maskHandler || (() => {}));
+        input._maskHandler = function() {
+            this.value = maskFn(this.value);
         };
-        input.addEventListener('input', applyMask);
-        applyMask(); // Aplica a máscara no carregamento inicial
+        input.addEventListener('input', input._maskHandler);
+        input.value = maskFn(input.value);
     });
 }
 
-/** Máscara para CEP português: 1234-567 */
-function maskCEP(value) {
-    if (!value) return '';
-    return value.replace(/\D/g, '')
-        .replace(/^(\d{4})(\d{0,3}).*$/, (m, g1, g2) => g2 ? `${g1}-${g2}` : g1)
-        .substr(0, 8);
-}
-
-/**
- * Cria uma função "debounced", que só é executada após um certo tempo sem ser chamada.
- * @param {function} fn - A função a ser executada.
- * @param {number} [delay=500] - O tempo de espera em milissegundos.
- */
 function debounce(fn, delay = 500) {
     let timer;
     return function (...args) {
@@ -84,7 +64,6 @@ function debounce(fn, delay = 500) {
     };
 }
 
-/** Mostra ou esconde um spinner global para indicar atividade em segundo plano. */
 function showGlobalSpinner(show = true) {
     let el = document.getElementById('global-spinner');
     if (show && !el) {
@@ -111,11 +90,12 @@ let enderecosData = [];
 document.addEventListener('DOMContentLoaded', () => {
     const pageDataElement = document.getElementById('page-data');
     try {
-        enderecosData = JSON.parse(pageDataElement.dataset.enderecos || '[]');
+        enderecosData = JSON.parse(pageDataElement?.dataset?.enderecos || '[]');
     } catch (e) {
-        showToast(t('error_load'), t('danger'));
+        window.MapsDrive?.showToast?.(t('error_load'), t('danger'));
         return;
     }
+    if (!Array.isArray(enderecosData) || enderecosData.length === 0) return;
 
     previewTable.rebuild();
     previewStats.update();
@@ -127,6 +107,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     mapManager.init(enderecosData);
     mapManager.renderMarkers(enderecosData);
+
+    // === Integração: troca de tema ===
+    document.addEventListener('mapsdrive:themechange', (e) => {
+        mapManager.setTheme?.(e.detail.theme);
+    });
 });
 
 // ========================
@@ -135,6 +120,7 @@ document.addEventListener('DOMContentLoaded', () => {
 const previewTable = {
     rebuild() {
         const tbody = document.getElementById('address-table-body');
+        if (!tbody) return;
         tbody.innerHTML = '';
         enderecosData.forEach((item, idx) => this.appendRow(item, idx));
     },
@@ -175,8 +161,7 @@ const previewTable = {
         document.getElementById(`btn-validate-${idx}`).disabled = false;
     }
 };
-
-window.previewTable = previewTable; // Expor para eventos inline
+window.previewTable = previewTable;
 
 // ========================
 // 6. Módulo de Estatísticas
@@ -203,7 +188,7 @@ const previewMap = {
     async onMarkerDragEnd(idx, marker) {
         const newLngLat = marker.getLngLat();
         const row = document.getElementById(`row-${idx}`);
-        row.classList.add('table-info');
+        row?.classList.add('table-info');
         try {
             const data = await fetchAPI('/api/reverse-geocode', {
                 method: "POST", headers: {"Content-Type": "application/json"},
@@ -212,10 +197,10 @@ const previewMap = {
             if (data.success) {
                 previewTable.updateRow(idx, data.item);
                 previewStats.update();
-                showToast(t('updated'), t('success'));
+                window.MapsDrive?.showToast?.(t('updated'), t('success'));
             }
         } catch(e) { /* Erro já tratado pela fetchAPI */ }
-        finally { row.classList.remove('table-info'); }
+        finally { row?.classList.remove('table-info'); }
     }
 };
 
@@ -230,7 +215,7 @@ async function fetchAPI(endpoint, options) {
         if (!resp.ok) throw new Error(data.msg || `Erro ${resp.status}`);
         return data;
     } catch (err) {
-        showToast(t('error_comm') + err.message, t('danger'));
+        window.MapsDrive?.showToast?.(t('error_comm') + err.message, t('danger'));
         throw err;
     } finally {
         showGlobalSpinner(false);
@@ -238,7 +223,7 @@ async function fetchAPI(endpoint, options) {
 }
 
 const debouncedValidateAddress = debounce(validateAddress, 600);
-window.debouncedValidateAddress = debouncedValidateAddress; // para onclick inline
+window.debouncedValidateAddress = debouncedValidateAddress;
 
 async function validateAddress(idx) {
     const btn = document.getElementById(`btn-validate-${idx}`);
@@ -257,7 +242,7 @@ async function validateAddress(idx) {
             previewTable.updateRow(idx, data.item);
             mapManager.renderMarkers(enderecosData);
             previewStats.update();
-            showToast(t('validated'), t('success'));
+            window.MapsDrive?.showToast?.(t('validated'), t('success'));
         }
     } catch(e) {
         previewTable.updateRow(idx, enderecosData[idx]);
@@ -278,7 +263,7 @@ async function removeAddress(idx) {
             previewTable.rebuild();
             mapManager.renderMarkers(enderecosData);
             previewStats.update();
-            showToast(t('removed'), t('warning'));
+            window.MapsDrive?.showToast?.(t('removed'), t('warning'));
         }
     } catch(e) { /* Erro já tratado */ }
 }
@@ -309,7 +294,7 @@ async function saveNewAddress(event) {
             toggleNewAddressForm();
             form.reset();
             form.classList.remove('was-validated');
-            showToast(t('added'), t('success'));
+            window.MapsDrive?.showToast?.(t('added'), t('success'));
         }
     } finally {
         submitBtn.disabled = false;
