@@ -16,18 +16,17 @@ class MapManager {
         this.options = { defaultZoom: 11, ...options };
         this.map = null;
         this.markers = {};
-        this.addressData = []; // Estado interno dos dados de endereços.
+        this.addressData = [];
         this.currentTheme = 'light';
     }
 
     /**
      * Valida se uma coordenada é um número válido (aceita string ou número).
      * @param {any} coord - A coordenada (latitude ou longitude).
-     * @returns {boolean} - Verdadeiro se for um número válido.
+     * @returns {boolean}
      */
     _isValidCoordinate(coord) {
-        // Usa parseFloat para converter a string para número e isNaN para verificar se é um número válido.
-        // Isto é mais robusto do que 'typeof', pois aceita "41.123" e 41.123.
+        if (coord === null || coord === undefined || coord === '') return false;
         return !isNaN(parseFloat(coord));
     }
 
@@ -43,7 +42,6 @@ class MapManager {
         mapboxgl.accessToken = this.accessToken;
         this.addressData = initialData;
 
-        // Filtra usando a nova função de validação robusta.
         const validCoords = this.addressData
             .filter(item => this._isValidCoordinate(item.latitude) && this._isValidCoordinate(item.longitude));
             
@@ -56,9 +54,7 @@ class MapManager {
 
         this.map = new mapboxgl.Map({
             container: this.containerId,
-            style: theme === 'dark'
-                ? 'mapbox://styles/mapbox/dark-v11'
-                : 'mapbox://styles/mapbox/streets-v12',
+            style: theme === 'dark' ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/streets-v12',
             center: center,
             zoom: this.options.defaultZoom
         });
@@ -74,13 +70,9 @@ class MapManager {
         if (!this.map) return;
         this.addressData = addressData;
 
-        console.log("A renderizar marcadores com os dados:", this.addressData);
-
-        // Remove todos os marcadores antigos
         Object.values(this.markers).forEach(marker => marker.remove());
         this.markers = {};
 
-        // Filtra usando a nova função de validação robusta.
         const validCoords = this.addressData.map((item, index) => ({ ...item, originalIndex: index }))
             .filter(item => this._isValidCoordinate(item.latitude) && this._isValidCoordinate(item.longitude));
 
@@ -88,43 +80,23 @@ class MapManager {
             this.handleError("Nenhum endereço com coordenadas válidas para exibir no mapa.");
             return;
         }
-        
-        console.log(`Encontrados ${validCoords.length} endereços com coordenadas válidas para renderizar.`);
 
         validCoords.forEach(item => {
-            // LÓGICA MANTIDA: Define cor vermelha para pendente/erro.
-            let markerColor = "#0d6efd"; // azul padrão
-            if (item.status_google !== "OK") {
-                markerColor = "#E74C3C"; // vermelho para pendentes/erro
-            } else if (item.cor) {
-                markerColor = item.cor;
-            }
-
-            // Cria elemento HTML para marcador customizado
+            const markerColor = item.status_google !== "OK" ? "#E74C3C" : (item.cor || "#0d6efd");
             const el = document.createElement('div');
             el.className = 'custom-marker-numbered';
             el.style.backgroundColor = markerColor;
             el.innerText = String(item.order_number || item.originalIndex + 1).substring(0, 4);
 
-            const marker = new mapboxgl.Marker({
-                element: el,
-                draggable: true
-            })
-            // Garante que as coordenadas são convertidas para números
-            .setLngLat([parseFloat(item.longitude), parseFloat(item.latitude)])
-            .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML(`
-                <div class="map-infowindow">
-                    <h6>${item.order_number || 'Sem ID'}</h6>
-                    <p>${item.address}</p>
+            const marker = new mapboxgl.Marker({ element: el, draggable: true })
+                .setLngLat([parseFloat(item.longitude), parseFloat(item.latitude)])
+                .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML(`
+                    <div class="map-infowindow"><h6>${item.order_number || 'Sem ID'}</h6><p>${item.address}</p>
                     <p>CEP: ${item.cep || 'Não informado'}</p>
-                    ${item.status_google === 'OK'
-                        ? '<p class="text-success small">✓ Validado</p>'
-                        : `<p class="text-danger small">${item.status_google || 'Não validado'}</p>`}
-                </div>
-            `))
-            .addTo(this.map);
+                    ${item.status_google === 'OK' ? '<p class="text-success small">✓ Validado</p>' : `<p class="text-danger small">${item.status_google || 'Não validado'}</p>`}
+                    </div>`))
+                .addTo(this.map);
 
-            // Callback para arrastar (FUNCIONALIDADE MANTIDA)
             if (typeof this.options.onMarkerDragEnd === 'function') {
                 marker.on('dragend', () => this.options.onMarkerDragEnd(item.originalIndex, marker));
             }
@@ -145,7 +117,6 @@ class MapManager {
             return;
         }
         const bounds = new mapboxgl.LngLatBounds();
-        // Garante que as coordenadas são números
         data.forEach(item => bounds.extend([parseFloat(item.longitude), parseFloat(item.latitude)]));
         this.map.fitBounds(bounds, { padding: 80, maxZoom: 15 });
     }
@@ -169,12 +140,8 @@ class MapManager {
     setTheme(theme) {
         if (!this.map || (theme !== 'dark' && theme !== 'light') || this.currentTheme === theme) return;
         this.currentTheme = theme;
-        const styleUrl = theme === 'dark'
-            ? 'mapbox://styles/mapbox/dark-v11'
-            : 'mapbox://styles/mapbox/streets-v12';
+        const styleUrl = theme === 'dark' ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/streets-v12';
         this.map.setStyle(styleUrl);
-
-        // Após trocar o style, renderize novamente os marcadores (pois são apagados)
         this.map.once('styledata', () => {
             this.renderMarkers(this.addressData);
         });
@@ -188,11 +155,8 @@ class MapManager {
         const mapDiv = document.getElementById(this.containerId);
         if (mapDiv) {
             mapDiv.innerHTML = `<div class="d-flex h-100 align-items-center justify-content-center map-empty-message">
-                <div class="text-center p-4">
-                    <h5 class="text-danger"><i class="fas fa-exclamation-triangle me-2"></i>Mapa indisponível</h5>
-                    <p class="text-muted small">${message}</p>
-                </div>
-            </div>`;
+                <div class="text-center p-4"><h5 class="text-danger"><i class="fas fa-exclamation-triangle me-2"></i>Mapa indisponível</h5>
+                <p class="text-muted small">${message}</p></div></div>`;
         }
         console.error("MapManager Error:", message);
     }
