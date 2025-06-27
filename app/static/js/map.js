@@ -32,7 +32,12 @@ class MapManager {
         mapboxgl.accessToken = this.accessToken;
         this.addressData = initialData;
 
-        const validCoords = this.addressData.filter(item => item.latitude && item.longitude);
+        // Só centraliza se houver pelo menos um endereço com latitude/longitude numéricas
+        const validCoords = this.addressData
+            .filter(item =>
+                typeof item.latitude === "number" && typeof item.longitude === "number"
+                && !isNaN(item.latitude) && !isNaN(item.longitude)
+            );
         const center = validCoords.length > 0
             ? [validCoords[0].longitude, validCoords[0].latitude]
             : [-9.1393, 38.7223]; // Fallback: Lisboa
@@ -65,8 +70,12 @@ class MapManager {
         Object.values(this.markers).forEach(marker => marker.remove());
         this.markers = {};
 
+        // Permite 0 e valores negativos, filtra apenas null/undefined/NaN
         const validCoords = this.addressData.map((item, index) => ({ ...item, originalIndex: index }))
-            .filter(item => item.latitude && item.longitude);
+            .filter(item =>
+                typeof item.latitude === "number" && typeof item.longitude === "number"
+                && !isNaN(item.latitude) && !isNaN(item.longitude)
+            );
 
         if (validCoords.length === 0) {
             this.handleError("Nenhum endereço com coordenadas válidas para exibir no mapa.");
