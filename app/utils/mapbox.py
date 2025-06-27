@@ -22,43 +22,33 @@ def _busca_geocode_mapbox(query):
 
 def valida_rua_mapbox(endereco, cep):
     """
-    Busca SEMPRE nesta ordem:
-    1. CEP + endereço/número
-    2. CEP apenas
-    3. Endereço apenas
-    Se tudo falhar, retorna centro do país para garantir exibição do PIN.
+    Busca o endereço e garante que as coordenadas retornadas sejam sempre floats.
     """
-    # 1. Busca: CEP + Endereço
     consulta = f"{endereco}, {cep}" if cep else endereco
     features = _busca_geocode_mapbox(consulta)
     
-    # 2. Se não achou, tenta só o CEP
     if not features and cep:
         features = _busca_geocode_mapbox(cep)
     
-    # 3. Se não achou, tenta só o endereço
     if not features and endereco:
         features = _busca_geocode_mapbox(endereco)
     
-    # 4. Fallback: Centro de Portugal continental
+    # Fallback: Endereço não encontrado
     if not features:
         return {
             "status": "NOT_FOUND",
-            "coordenadas": {"lat": 39.3999, "lng": -8.2245},  # Já são float
-            "postal_code_encontrado": "",
-            "endereco_formatado": "Endereço não encontrado",
-            "route_encontrada": "",
-            "sublocality": "",
-            "locality": ""
+            "coordenadas": {"lat": 39.3999, "lng": -8.2245},  # Já são floats
+            "postal_code_encontrado": "", "endereco_formatado": "Endereço não encontrado",
+            "route_encontrada": "", "sublocality": "", "locality": ""
         }
     
+    # Sucesso: Endereço encontrado
     feat = features[0]
     def get_context(ctx_id):
         return next((c['text'] for c in feat.get('context', []) if c['id'].startswith(ctx_id)), "")
 
     return {
         "status": "OK",
-        # Garante que as coordenadas são sempre float
         "coordenadas": {
             "lat": float(feat['center'][1]), 
             "lng": float(feat['center'][0])
@@ -72,14 +62,13 @@ def valida_rua_mapbox(endereco, cep):
 
 def obter_endereco_por_coordenadas(lat, lng):
     """
-    Busca reversa de endereço (coordenadas para endereço) usando Mapbox Geocoding API.
+    Busca reversa de endereço, garantindo que as coordenadas são retornadas como floats.
     """
+    # Garante que os inputs são floats antes de usar
+    lat, lng = float(lat), float(lng)
+    
     url = f"https://api.mapbox.com/geocoding/v5/mapbox.places/{lng},{lat}.json"
-    params = {
-        "access_token": MAPBOX_TOKEN,
-        "country": "PT",
-        "limit": 1
-    }
+    params = {"access_token": MAPBOX_TOKEN, "country": "PT", "limit": 1}
     try:
         r = requests.get(url, params=params, timeout=7)
         r.raise_for_status()
@@ -90,24 +79,10 @@ def obter_endereco_por_coordenadas(lat, lng):
                 return next((c['text'] for c in feat.get('context', []) if c['id'].startswith(ctx_id)), "")
 
             return {
-                "status": "OK",
-                "address": feat['place_name'],
-                "postal_code": get_context("postcode"),
-                "sublocality": "",
-                "locality": get_context("place"),
-                "coordenadas": {"lat": float(lat), "lng": float(lng)},
+                "status": "OK", "address": feat['place_name'],
+                "postal_code": get_context("postcode"), "sublocality": "", "locality": get_context("place"),
+                "coordenadas": {"lat": lat, "lng": lng},
             }
-        # Em caso de não encontrar, retorna um status claro mas mantém as coordenadas
-        return {
-            "status": "NOT_FOUND",
-            "address": "Endereço não encontrado",
-            "postal_code": "",
-            "coordenadas": {"lat": float(lat), "lng": float(lng)}
-        }
+        return {"status": "NOT_FOUND", "address": "Endereço não encontrado", "coordenadas": {"lat": lat, "lng": lng}}
     except Exception as e:
-        return {
-            "status": "ERRO",
-            "address": f"Erro na API: {e}",
-            "postal_code": "",
-            "coordenadas": {"lat": float(lat), "lng": float(lng)}
-        }
+        return {"status": "ERRO", "address": f"Erro na API: {e}", "coordenadas": {"lat": lat, "lng": lng}}
