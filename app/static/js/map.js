@@ -82,7 +82,10 @@ class MapManager {
         }
 
         validCoords.forEach(item => {
-            const markerColor = item.status_google !== "OK" ? "#E74C3C" : (item.cor || "#0d6efd");
+            // *** LÓGICA DE COR REVERTIDA PARA A VERSÃO ANTERIOR ***
+            // A cor é definida apenas pelo tipo de importação (item.cor) ou um padrão.
+            const markerColor = item.cor || "#0d6efd";
+            
             const el = document.createElement('div');
             el.className = 'custom-marker-numbered';
             el.style.backgroundColor = markerColor;
