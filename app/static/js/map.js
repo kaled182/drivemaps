@@ -21,7 +21,7 @@ class MapManager {
     }
 
     /**
-     * Valida se uma coordenada é um número válido.
+     * Valida se uma coordenada é um número válido (aceita string ou número).
      * @param {any} coord - A coordenada (latitude ou longitude).
      * @returns {boolean} - Verdadeiro se for um número válido.
      */
@@ -46,7 +46,7 @@ class MapManager {
             .filter(item => this._isValidCoordinate(item.latitude) && this._isValidCoordinate(item.longitude));
             
         const center = validCoords.length > 0
-            ? [validCoords[0].longitude, validCoords[0].latitude]
+            ? [parseFloat(validCoords[0].longitude), parseFloat(validCoords[0].latitude)]
             : [-9.1393, 38.7223]; // Fallback: Lisboa
 
         const theme = document.documentElement.getAttribute('data-bs-theme') || 'light';
@@ -72,6 +72,9 @@ class MapManager {
         if (!this.map) return;
         this.addressData = addressData;
 
+        // Linha de diagnóstico: mostra os dados recebidos no console do navegador.
+        console.log("A renderizar marcadores com os seguintes dados:", this.addressData);
+
         // Remove todos os marcadores antigos
         Object.values(this.markers).forEach(marker => marker.remove());
         this.markers = {};
@@ -83,6 +86,8 @@ class MapManager {
             this.handleError("Nenhum endereço com coordenadas válidas para exibir no mapa.");
             return;
         }
+        
+        console.log(`Encontrados ${validCoords.length} endereços com coordenadas válidas.`);
 
         validCoords.forEach(item => {
             // Define cor: vermelho para pendente/erro, cor do pacote para validado
@@ -98,7 +103,8 @@ class MapManager {
                 element: el,
                 draggable: true
             })
-            .setLngLat([item.longitude, item.latitude])
+            // Garante que as coordenadas são números
+            .setLngLat([parseFloat(item.longitude), parseFloat(item.latitude)])
             .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML(`
                 <div class="map-infowindow">
                     <h6>${item.order_number || 'Sem ID'}</h6>
@@ -128,11 +134,11 @@ class MapManager {
     fitToBounds(data) {
         if (!this.map || data.length === 0) return;
         if (data.length === 1) {
-            this.map.flyTo({ center: [data[0].longitude, data[0].latitude], zoom: 15 });
+            this.map.flyTo({ center: [parseFloat(data[0].longitude), parseFloat(data[0].latitude)], zoom: 15 });
             return;
         }
         const bounds = new mapboxgl.LngLatBounds();
-        data.forEach(item => bounds.extend([item.longitude, item.latitude]));
+        data.forEach(item => bounds.extend([parseFloat(item.longitude), parseFloat(item.latitude)]));
         this.map.fitBounds(bounds, { padding: 80, maxZoom: 15 });
     }
 
