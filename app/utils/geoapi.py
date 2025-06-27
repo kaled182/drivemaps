@@ -13,19 +13,18 @@ def normaliza_nome(s):
 def valida_rua_geoapi(endereco, cep):
     """
     Busca nas seguintes ordens:
-      1. CEP + Freguesia + Rua + Número
-      2. CEP + Freguesia + Rua
-      3. CEP + Freguesia
-      4. CEP
+      1. CEP + Freguesia + Rua + Número (rua só se existir NAQUELA freguesia)
+      2. CEP + Freguesia (centroide da freguesia)
+      3. CEP (centroide do CEP)
+    Se não encontrar, retorna NOT_FOUND.
     """
     try:
-        # 1. Quebrar endereço: tenta extrair rua, número e freguesia
+        # Extrai rua, número, freguesia
         partes = [p.strip() for p in re.split(r',', endereco) if p.strip()]
         rua = partes[0] if partes else endereco.strip()
         numero = ""
         freguesia = ""
         if len(partes) >= 2:
-            # Heurística: detecta número no fim da rua, ex: "Rua XPTO 123"
             rua_parts = rua.split()
             if rua_parts and rua_parts[-1].isdigit():
                 numero = rua_parts[-1]
@@ -33,13 +32,14 @@ def valida_rua_geoapi(endereco, cep):
             freguesia = partes[1]
         cep_limpo = cep.replace("-", "").replace(" ", "")
 
-        # 1. Busca artérias (ruas) dentro da freguesia
+        # 1. Busca artérias (ruas) dentro da freguesia - SÓ SE EXISTIR FREGUESIA
         if freguesia:
             arterias_url = f"{BASE_URL}/freguesia/{freguesia}/arterias?key={GEOAPI_KEY}"
             art_resp = requests.get(arterias_url, timeout=5)
             if art_resp.ok:
                 art_data = art_resp.json()
                 for art in art_data:
+                    # Só casa a rua NAQUELA freguesia, não busca nacional!
                     if normaliza_nome(rua) in normaliza_nome(art.get("arteria", "")):
                         lat, lng = art.get("coordenadas", [None, None])
                         if lat and lng:
@@ -52,7 +52,7 @@ def valida_rua_geoapi(endereco, cep):
                                 "sublocality": "",
                                 "locality": freguesia,
                             }
-        # 2. Centroide da freguesia
+        # 2. Se não achou a rua, retorna CENTROIDE da freguesia
         if freguesia:
             freg_url = f"{BASE_URL}/freguesia/{freguesia}?key={GEOAPI_KEY}"
             freg_resp = requests.get(freg_url, timeout=5)
@@ -70,7 +70,7 @@ def valida_rua_geoapi(endereco, cep):
                         "sublocality": "",
                         "locality": freguesia,
                     }
-        # 3. Centroide do CEP
+        # 3. Se não tem freguesia, busca só o CEP (centroide do CEP)
         if cep:
             cep_url = f"{BASE_URL}/cp/{cep_limpo}?key={GEOAPI_KEY}"
             cep_resp = requests.get(cep_url, timeout=5)
@@ -88,10 +88,10 @@ def valida_rua_geoapi(endereco, cep):
                         "sublocality": "",
                         "locality": "",
                     }
+        # Não achou nada
         return {"status": "NOT_FOUND", "msg": "Endereço não encontrado na base GEOAPI"}
     except Exception as e:
         return {"status": "ERRO", "msg": str(e)}
-
 
 def obter_endereco_por_coordenadas_geoapi(lat, lng):
     """
