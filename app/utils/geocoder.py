@@ -27,7 +27,7 @@ REVERSE_GEOCODER_PRIORITY = [
 def valida_rua(endereco: str, cep: str) -> dict:
     """
     Tenta validar um endereço usando provedores em cascata (GeoAPI, Mapbox, Google).
-    Retorna o primeiro resultado com status "OK" ou variante.
+    Retorna o primeiro resultado com status "OK" ou variantes ("OK_CEP", "OK_FREGUESIA", etc).
     """
     logger.info(f"Iniciando validação em cascata para: '{endereco}, {cep}'")
     erros = []
@@ -36,7 +36,6 @@ def valida_rua(endereco: str, cep: str) -> dict:
         logger.info(f"Tentando com o provedor: {provider_name}...")
         try:
             resultado = geocode_func(endereco, cep)
-            # Aceita status "OK", "OK_CEP", "OK_FREGUESIA", etc
             if resultado and str(resultado.get("status", "")).startswith("OK"):
                 logger.info(f"Endereço validado com sucesso via {provider_name}.")
                 return resultado
