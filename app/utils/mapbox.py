@@ -2,87 +2,69 @@
 
 import requests
 import os
-import re
 
 MAPBOX_TOKEN = os.environ.get("MAPBOX_TOKEN", "SEU_TOKEN_MAPBOX_AQUI")
 
-def _extrai_numero_rua(endereco):
-    """
-    Se possível, extrai número do endereço.
-    Exemplo: "Rua X n123" -> "123"
-    """
-    m = re.search(r'(\d+)[^\d]*$', endereco)
-    return m.group(1) if m else None
-
-def _monta_query(endereco, cep, nivel):
-    """Gera a query para cada nível de busca."""
-    cep = cep.strip() if cep else ""
-    if nivel == 1:
-        # Tenta CEP + rua + número
-        numero = _extrai_numero_rua(endereco)
-        if cep and numero:
-            # Ex: "Rua ABC 123, 1234-567"
-            return f"{endereco}, {cep}"
-    if nivel == 2:
-        # Tenta CEP + rua (sem número)
-        if cep:
-            rua_sem_numero = re.sub(r'\s*\d+[^\d]*$', '', endereco)
-            return f"{rua_sem_numero}, {cep}"
-    if nivel == 3:
-        # Só CEP
-        if cep:
-            return cep
-    return endereco
-
-def _get_context(feat, ctx_id):
-    return next((c['text'] for c in feat.get('context', []) if c['id'].startswith(ctx_id)), "")
-
-def _cep_normalizado(cep):
-    """Normaliza para comparação (só números)."""
-    return re.sub(r'\D', '', cep or '')
-
-def valida_rua_mapbox(endereco, cep):
-    """
-    Valida endereço usando Mapbox Geocoding API.
-    Sempre prioriza CEP, depois CEP+rua, depois só CEP.
-    Só aceita resultado no mesmo CEP.
-    """
-    params_base = {
+def _busca_geocode_mapbox(query):
+    url = f"https://api.mapbox.com/geocoding/v5/mapbox.places/{query}.json"
+    params = {
         "access_token": MAPBOX_TOKEN,
         "country": "PT",
         "limit": 1
     }
-    # Busca hierárquica: (1) CEP+rua+num, (2) CEP+rua, (3) só CEP
-    for nivel in [1, 2, 3]:
-        query = _monta_query(endereco, cep, nivel)
-        url = f"https://api.mapbox.com/geocoding/v5/mapbox.places/{query}.json"
-        params = dict(params_base)
-        if nivel == 3:
-            params["types"] = "postcode"
-        try:
-            r = requests.get(url, params=params)
-            r.raise_for_status()
-            data = r.json()
-            if data.get('features'):
-                feat = data['features'][0]
-                postal_code_encontrado = _get_context(feat, "postcode")
-                # Aceita só se o CEP encontrado for igual ao solicitado (quando foi fornecido)
-                if cep:
-                    if _cep_normalizado(postal_code_encontrado) != _cep_normalizado(cep):
-                        continue  # Não aceita resultados de outro CEP!
-                return {
-                    "status": "OK" if nivel < 3 else "OK_CEP_ONLY",
-                    "coordenadas": {"lat": feat['center'][1], "lng": feat['center'][0]},
-                    "postal_code_encontrado": postal_code_encontrado,
-                    "endereco_formatado": feat['place_name'],
-                    "route_encontrada": _get_context(feat, "street"),
-                    "sublocality": "",
-                    "locality": _get_context(feat, "place"),
-                    "msg": None if nivel < 3 else f"Endereço não encontrado, PIN colocado no centro do CEP ({cep})"
-                }
-        except Exception:
-            continue
-    return {"status": "NOT_FOUND", "msg": "Endereço e CEP não encontrados ou não existem juntos no Mapbox."}
+    try:
+        r = requests.get(url, params=params, timeout=7)
+        r.raise_for_status()
+        data = r.json()
+        return data.get('features', [])
+    except Exception as e:
+        return []
+
+def valida_rua_mapbox(endereco, cep):
+    """
+    Busca SEMPRE nesta ordem:
+    1. CEP + endereço/número
+    2. CEP apenas
+    3. Endereço apenas
+    Se tudo falhar, retorna centro do país para garantir exibição do PIN (em vermelho).
+    """
+    # 1. Busca: CEP + Endereço
+    consulta = f"{endereco}, {cep}" if cep else endereco
+    features = _busca_geocode_mapbox(consulta)
+    
+    # 2. Se não achou, tenta só o CEP
+    if not features and cep:
+        features = _busca_geocode_mapbox(cep)
+    
+    # 3. Se não achou, tenta só o endereço
+    if not features and endereco:
+        features = _busca_geocode_mapbox(endereco)
+    
+    # 4. Fallback: Centro de Portugal continental (ou outro ponto default)
+    if not features:
+        return {
+            "status": "NOT_FOUND",
+            "coordenadas": {"lat": 39.3999, "lng": -8.2245},  # Centro de Portugal
+            "postal_code_encontrado": "",
+            "endereco_formatado": "",
+            "route_encontrada": "",
+            "sublocality": "",
+            "locality": ""
+        }
+    
+    feat = features[0]
+    def get_context(ctx_id):
+        return next((c['text'] for c in feat.get('context', []) if c['id'].startswith(ctx_id)), "")
+
+    return {
+        "status": "OK",
+        "coordenadas": {"lat": feat['center'][1], "lng": feat['center'][0]},
+        "postal_code_encontrado": get_context("postcode"),
+        "endereco_formatado": feat['place_name'],
+        "route_encontrada": get_context("street"),
+        "sublocality": "",  # Mapbox não retorna sublocality explícito
+        "locality": get_context("place"),
+    }
 
 def obter_endereco_por_coordenadas(lat, lng):
     """
@@ -95,7 +77,7 @@ def obter_endereco_por_coordenadas(lat, lng):
         "limit": 1
     }
     try:
-        r = requests.get(url, params=params)
+        r = requests.get(url, params=params, timeout=7)
         r.raise_for_status()
         data = r.json()
         if data.get('features'):
@@ -112,6 +94,21 @@ def obter_endereco_por_coordenadas(lat, lng):
                 "coordenadas": {"lat": lat, "lng": lng},
             }
         else:
-            return {"status": "NOT_FOUND"}
+            return {
+                "status": "NOT_FOUND",
+                "address": "",
+                "postal_code": "",
+                "sublocality": "",
+                "locality": "",
+                "coordenadas": {"lat": lat, "lng": lng}
+            }
     except Exception as e:
-        return {"status": "ERRO", "erro": str(e)}
+        return {
+            "status": "ERRO",
+            "address": "",
+            "postal_code": "",
+            "sublocality": "",
+            "locality": "",
+            "coordenadas": {"lat": lat, "lng": lng},
+            "erro": str(e)
+        }
