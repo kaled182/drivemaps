@@ -26,7 +26,6 @@ const i18n = {
         warning: "warning",
         danger: "danger"
     }
-    // Outros idiomas futuros: 'en': { ... }
 };
 const locale = 'pt';
 
@@ -37,8 +36,6 @@ function t(key, fallback = "") {
 // ========================
 // 2. Funções Utilitárias
 // ========================
-
-/** Utiliza máscara de CEP global (MapsDrive) se disponível */
 function maskCEP(value) {
     return (window.MapsDrive && window.MapsDrive.formatCEP)
         ? window.MapsDrive.formatCEP(value)
@@ -48,9 +45,7 @@ function maskCEP(value) {
 function applyInputMask(selector, maskFn) {
     document.querySelectorAll(selector).forEach(input => {
         input.removeEventListener('input', input._maskHandler || (() => {}));
-        input._maskHandler = function() {
-            this.value = maskFn(this.value);
-        };
+        input._maskHandler = function() { this.value = maskFn(this.value); };
         input.addEventListener('input', input._maskHandler);
         input.value = maskFn(input.value);
     });
@@ -69,8 +64,6 @@ function showGlobalSpinner(show = true) {
     if (show && !el) {
         el = document.createElement('div');
         el.id = 'global-spinner';
-        el.setAttribute('role', 'status');
-        el.setAttribute('aria-live', 'polite');
         el.innerHTML = `<div class="spinner-border text-primary" style="position:fixed;top:45%;left:48%;z-index:2000;width:3rem;height:3rem;"></div>`;
         document.body.appendChild(el);
     } else if (!show && el) {
@@ -95,7 +88,7 @@ document.addEventListener('DOMContentLoaded', () => {
         window.MapsDrive?.showToast?.(t('error_load'), t('danger'));
         return;
     }
-    if (!Array.isArray(enderecosData) || enderecosData.length === 0) return;
+    if (!Array.isArray(enderecosData)) return;
 
     previewTable.rebuild();
     previewStats.update();
@@ -106,41 +99,12 @@ document.addEventListener('DOMContentLoaded', () => {
         onMarkerDragEnd: previewMap.onMarkerDragEnd
     });
     mapManager.init(enderecosData);
-
-    // --- [AJUSTE] Redefina renderMarkers para mostrar PIN vermelho se não validado
-    mapManager.renderMarkers = function(lista) {
-        // Remove todos os markers antigos, se houver
-        if (this.markers) this.markers.forEach(m => m.remove());
-        this.markers = [];
-        for (let i = 0; i < lista.length; i++) {
-            const item = lista[i];
-            // Só marca se houver coordenada (pelo menos do CEP)
-            if (item.latitude && item.longitude) {
-                // Cor: verde se OK, vermelho se erro/pending/etc
-                let color = "#1DB954"; // Verde padrão
-                if (!item.status_google || item.status_google === "Pendente" || item.status_google === "NOT_FOUND" || item.status_google === "ERRO" || item.status_google === "ZERO_RESULTS") {
-                    color = "#E74C3C"; // Vermelho
-                }
-                const marker = new mapboxgl.Marker({ color })
-                    .setLngLat([item.longitude, item.latitude])
-                    .setPopup(new mapboxgl.Popup({ offset: 20 }).setText(
-                        item.endereco_formatado || item.address || 'Sem endereço'
-                    ))
-                    .addTo(this.map);
-
-                // Event: ao clicar na tabela, foca o marker
-                marker.getElement().addEventListener('click', () => {
-                    marker.togglePopup();
-                });
-
-                this.markers.push(marker);
-            }
-        }
-    };
-
+    
+    // *** CORREÇÃO PRINCIPAL: REMOVIDA A SOBRESCRITA DO MÉTODO. ***
+    // Agora simplesmente chamamos o método original da classe MapManager.
     mapManager.renderMarkers(enderecosData);
 
-    // === Integração: troca de tema ===
+    // Integração com a troca de tema
     document.addEventListener('mapsdrive:themechange', (e) => {
         mapManager.setTheme?.(e.detail.theme);
     });
@@ -203,13 +167,7 @@ const previewStats = {
         const total = enderecosData.length;
         const validados = enderecosData.filter(e => e.status_google === 'OK').length;
         const pendentes = total - validados;
-        document.getElementById('stats-bar').innerHTML = `
-            <span aria-live="polite" aria-atomic="true">
-                <i class="fas fa-chart-pie me-2"></i>
-                <strong>${t('total')}: ${total}</strong> | 
-                <span class="text-success">${t('validated_label')}: ${validados}</span> | 
-                <span class="text-warning">${t('pending')}: ${pendentes}</span>
-            </span>`;
+        document.getElementById('stats-bar').innerHTML = `<span aria-live="polite" aria-atomic="true"><i class="fas fa-chart-pie me-2"></i><strong>${t('total')}: ${total}</strong> | <span class="text-success">${t('validated_label')}: ${validados}</span> | <span class="text-warning">${t('pending')}: ${pendentes}</span></span>`;
     }
 };
 
@@ -230,10 +188,9 @@ const previewMap = {
                 previewTable.updateRow(idx, data.item);
                 previewStats.update();
                 window.MapsDrive?.showToast?.(t('updated'), t('success'));
-                // Após atualizar, atualiza os markers do mapa
                 mapManager.renderMarkers(enderecosData);
             }
-        } catch(e) { /* Erro já tratado pela fetchAPI */ }
+        } catch(e) { /* Erro já tratado */ }
         finally { row?.classList.remove('table-info'); }
     }
 };
