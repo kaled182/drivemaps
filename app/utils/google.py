@@ -3,6 +3,7 @@
 Módulo para integração com a Google Maps Geocoding API.
 Oferece funções para validação e geolocalização de endereços, e geocodificação reversa.
 """
+
 import requests
 import os
 from functools import lru_cache
@@ -53,14 +54,16 @@ def valida_rua_google(endereco: str, cep: str) -> dict:
         data = response.json()
 
         if data.get("status") != "OK" or not data.get("results"):
-            return {"status": data.get("status", "ZERO_RESULTS"), "msg": data.get("error_message", "")}
+            return {
+                "status": data.get("status", "ZERO_RESULTS"),
+                "msg": data.get("error_message", "Nenhum resultado encontrado.")
+            }
 
         result = data["results"][0]
         endereco_formatado = result.get("formatted_address", "")
         coordenadas = result.get("geometry", {}).get("location", {})
         componentes = result.get("address_components", [])
 
-        # Busca os componentes relevantes (pode haver mais de um por tipo, pega o principal)
         postal_code = ""
         route = ""
         sublocality = ""
@@ -79,7 +82,10 @@ def valida_rua_google(endereco: str, cep: str) -> dict:
         return {
             "status": data.get("status", "OK"),
             "endereco_formatado": endereco_formatado,
-            "coordenadas": coordenadas,
+            "coordenadas": {
+                "lat": coordenadas.get("lat"),
+                "lng": coordenadas.get("lng")
+            } if coordenadas else {},
             "postal_code_encontrado": postal_code,
             "route_encontrada": route,
             "sublocality": sublocality,
@@ -130,13 +136,15 @@ def obter_endereco_por_coordenadas(lat, lng) -> dict:
         data = response.json()
 
         if data.get("status") != "OK" or not data.get("results"):
-            return {"status": data.get("status", "ZERO_RESULTS"), "msg": data.get("error_message", "")}
+            return {
+                "status": data.get("status", "ZERO_RESULTS"),
+                "msg": data.get("error_message", "Nenhum resultado encontrado.")
+            }
 
         result = data["results"][0]
         endereco_formatado = result.get("formatted_address", "")
         componentes = result.get("address_components", [])
 
-        # Extrai os mesmos componentes que a validação normal
         postal_code = ""
         route = ""
         sublocality = ""
@@ -159,7 +167,7 @@ def obter_endereco_por_coordenadas(lat, lng) -> dict:
             "route_encontrada": route,
             "sublocality": sublocality,
             "locality": locality,
-            "coordenadas": {"lat": lat, "lng": lng}
+            "coordenadas": {"lat": float(lat), "lng": float(lng)}
         }
 
     except requests.Timeout:
