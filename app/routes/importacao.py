@@ -1,7 +1,7 @@
 # app/routes/importacao.py
 
 from flask import Blueprint, request, session, redirect, url_for, flash
-from app.utils.geocoder import valida_rua  # <<<< AGORA USA O DISPATCHER DINÂMICO!
+from app.utils.geocoder import valida_rua
 from app.utils.helpers import normalizar, registro_unico, cor_por_tipo
 from app.utils import parser
 import pandas as pd
@@ -11,6 +11,10 @@ from werkzeug.datastructures import FileStorage
 logger = logging.getLogger(__name__)
 importacao_bp = Blueprint('importacao', __name__)
 ALLOWED_EXTENSIONS = {'csv', 'xls', 'xlsx', 'txt'}
+
+# Fallback de coordenadas para garantir que são sempre floats
+FALLBACK_LAT = 39.3999
+FALLBACK_LNG = -8.2245
 
 def extensao_permitida(filename: str) -> bool:
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -24,12 +28,16 @@ def _processa_e_geocodifica(empresa: str, enderecos: list, ceps: list, order_num
     for i, (endereco, cep) in enumerate(zip(enderecos, ceps)):
         order_number = order_numbers[i] if i < len(order_numbers) and order_numbers[i] else f"{(empresa or 'item').upper()}-{i+1}"
 
-        res_geo = valida_rua(endereco, cep)  # USANDO O DISPATCHER
+        res_geo = valida_rua(endereco, cep)
+        
+        coordenadas = res_geo.get('coordenadas', {})
+        
         novo_item = {
             "order_number": order_number, "address": endereco, "cep": cep,
             "status_google": res_geo.get('status', 'ERRO'),
-            "latitude": res_geo.get('coordenadas', {}).get('lat', ''),
-            "longitude": res_geo.get('coordenadas', {}).get('lng', ''),
+            # GARANTE que latitude e longitude são SEMPRE floats
+            "latitude": float(coordenadas.get('lat', FALLBACK_LAT)),
+            "longitude": float(coordenadas.get('lng', FALLBACK_LNG)),
             "importacao_tipo": empresa, "cor": cor_por_tipo(empresa),
             "postal_code_encontrado": res_geo.get('postal_code_encontrado', ''),
             "endereco_formatado": res_geo.get('endereco_formatado', ''),
@@ -54,7 +62,6 @@ def _processar_ficheiro(file: FileStorage) -> list:
         enderecos, ceps, order_numbers = parser.parse_paack_texto(conteudo)
         return _processa_e_geocodifica('paack', enderecos, ceps, order_numbers)
 
-    # -- Tenta ignorar a primeira linha, depois tenta normal se der erro ou detectar menos de 2 colunas --
     try:
         file.seek(0)
         df = pd.read_excel(file, skiprows=1)
@@ -72,16 +79,11 @@ def _processar_ficheiro(file: FileStorage) -> list:
             logger.error(f"Erro ao ler arquivo como excel/csv: {err}")
             return []
 
-    logger.debug(f"[IMPORTACAO] Colunas detectadas: {list(df.columns)}")
-    logger.debug(f"[IMPORTACAO] Primeiras linhas: {df.head().to_dict()}")
-
     if df.empty:
         logger.warning(f"DataFrame vazio para o ficheiro {file.filename}")
         return []
 
     formato = parser.detectar_formato_df(df)
-    logger.info(f"Formato detectado: {formato}")
-
     if not formato:
         logger.warning(f"Formato não reconhecido para {file.filename}. A ignorar.")
         return []
@@ -89,9 +91,9 @@ def _processar_ficheiro(file: FileStorage) -> list:
     enderecos, ceps, order_numbers = parser.parse_dataframe(df, formato)
     return _processa_e_geocodifica(formato, enderecos, ceps, order_numbers)
 
+# ... (o resto do seu ficheiro importacao.py permanece igual) ...
 def _processar_texto_manual(texto: str) -> list:
-    if not texto:
-        return []
+    if not texto: return []
     logger.info("Processando endereços da área de texto manual.")
     enderecos, ceps, order_numbers = parser.parse_paack_texto(texto)
     return _processa_e_geocodifica('paack', enderecos, ceps, order_numbers)
@@ -99,7 +101,6 @@ def _processar_texto_manual(texto: str) -> list:
 def _unificar_e_deduplicar(lista_de_itens: list) -> list:
     registros_unicos = {}
     logger.info(f"Deduplicando {len(lista_de_itens)} itens no total...")
-
     for item in lista_de_itens:
         chave = (normalizar(item['address']), normalizar(item['cep']))
         if chave in registros_unicos:
@@ -112,13 +113,11 @@ def _unificar_e_deduplicar(lista_de_itens: list) -> list:
     return lista_deduplicada
 
 def _reindexar_lista(lista: list) -> list:
-    """Mantém o order_number original para Paack e garante D1, D2... para Delnext"""
     d_count = 1
     for item in lista:
         if str(item.get("importacao_tipo", "")).lower() == "delnext":
             item['order_number'] = f"D{d_count}"
             d_count += 1
-        # Paack mantém order_number como está
     return lista
 
 @importacao_bp.route('/import_planilha', methods=['POST'])
@@ -126,31 +125,23 @@ def import_planilha():
     try:
         files = request.files.getlist('planilhas')
         texto_manual = request.form.get('enderecos_manuais', '').strip()
-
         if not files and not texto_manual:
             flash("Adicione pelo menos um ficheiro ou endereço manual.", "warning")
             return redirect(url_for('preview.home'))
-
         todos_os_itens = []
-
         for file in files:
             todos_os_itens.extend(_processar_ficheiro(file))
         todos_os_itens.extend(_processar_texto_manual(texto_manual))
-
         if not todos_os_itens:
             flash("Nenhum endereço válido foi encontrado nas fontes fornecidas.", "warning")
             return redirect(url_for('preview.home'))
-
         lista_unica = _unificar_e_deduplicar(todos_os_itens)
         lista_final = _reindexar_lista(lista_unica)
-
         session.clear()
         session['lista'] = lista_final
         session.modified = True
-
         flash(f"{len(lista_final)} endereços únicos foram importados com sucesso!", "success")
         return redirect(url_for('preview.preview'))
-
     except Exception as e:
         logger.error(f"[importacao] Erro crítico durante a importação unificada: {str(e)}", exc_info=True)
         flash(f"Ocorreu um erro inesperado durante a importação: {str(e)}", "danger")
