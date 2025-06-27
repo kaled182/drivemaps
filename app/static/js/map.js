@@ -26,8 +26,9 @@ class MapManager {
      * @returns {boolean} - Verdadeiro se for um número válido.
      */
     _isValidCoordinate(coord) {
-        const num = parseFloat(coord);
-        return !isNaN(num);
+        // Usa parseFloat para converter a string para número e isNaN para verificar se é um número válido.
+        // Isto é mais robusto do que 'typeof', pois aceita "41.123" e 41.123.
+        return !isNaN(parseFloat(coord));
     }
 
     /**
@@ -42,6 +43,7 @@ class MapManager {
         mapboxgl.accessToken = this.accessToken;
         this.addressData = initialData;
 
+        // Filtra usando a nova função de validação robusta.
         const validCoords = this.addressData
             .filter(item => this._isValidCoordinate(item.latitude) && this._isValidCoordinate(item.longitude));
             
@@ -72,13 +74,13 @@ class MapManager {
         if (!this.map) return;
         this.addressData = addressData;
 
-        // Linha de diagnóstico: mostra os dados recebidos no console do navegador.
-        console.log("A renderizar marcadores com os seguintes dados:", this.addressData);
+        console.log("A renderizar marcadores com os dados:", this.addressData);
 
         // Remove todos os marcadores antigos
         Object.values(this.markers).forEach(marker => marker.remove());
         this.markers = {};
 
+        // Filtra usando a nova função de validação robusta.
         const validCoords = this.addressData.map((item, index) => ({ ...item, originalIndex: index }))
             .filter(item => this._isValidCoordinate(item.latitude) && this._isValidCoordinate(item.longitude));
 
@@ -87,11 +89,16 @@ class MapManager {
             return;
         }
         
-        console.log(`Encontrados ${validCoords.length} endereços com coordenadas válidas.`);
+        console.log(`Encontrados ${validCoords.length} endereços com coordenadas válidas para renderizar.`);
 
         validCoords.forEach(item => {
-            // Define cor: vermelho para pendente/erro, cor do pacote para validado
-            const markerColor = item.status_google !== "OK" ? "#E74C3C" : (item.cor || "#0d6efd");
+            // LÓGICA MANTIDA: Define cor vermelha para pendente/erro.
+            let markerColor = "#0d6efd"; // azul padrão
+            if (item.status_google !== "OK") {
+                markerColor = "#E74C3C"; // vermelho para pendentes/erro
+            } else if (item.cor) {
+                markerColor = item.cor;
+            }
 
             // Cria elemento HTML para marcador customizado
             const el = document.createElement('div');
@@ -103,7 +110,7 @@ class MapManager {
                 element: el,
                 draggable: true
             })
-            // Garante que as coordenadas são números
+            // Garante que as coordenadas são convertidas para números
             .setLngLat([parseFloat(item.longitude), parseFloat(item.latitude)])
             .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML(`
                 <div class="map-infowindow">
@@ -117,7 +124,7 @@ class MapManager {
             `))
             .addTo(this.map);
 
-            // Callback para arrastar
+            // Callback para arrastar (FUNCIONALIDADE MANTIDA)
             if (typeof this.options.onMarkerDragEnd === 'function') {
                 marker.on('dragend', () => this.options.onMarkerDragEnd(item.originalIndex, marker));
             }
@@ -138,6 +145,7 @@ class MapManager {
             return;
         }
         const bounds = new mapboxgl.LngLatBounds();
+        // Garante que as coordenadas são números
         data.forEach(item => bounds.extend([parseFloat(item.longitude), parseFloat(item.latitude)]));
         this.map.fitBounds(bounds, { padding: 80, maxZoom: 15 });
     }
