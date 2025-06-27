@@ -4,27 +4,27 @@
 
 /*
  * 1. LAYOUT PRINCIPAL (FLEXBOX)
- * Este bloco controla o layout de duas colunas: mapa à esquerda e tabela à direita.
+ * Controla o layout de duas colunas (mapa à esquerda, tabela à direita).
  * É responsivo e empilha as colunas em ecrãs mais pequenos.
 */
 .mapsdrive-flex-row-responsive {
     display: flex;
-    flex-wrap: nowrap; /* Previne que as colunas quebrem para a linha de baixo antes do @media query */
+    flex-wrap: nowrap; /* Previne que as colunas quebrem antes do @media query */
     gap: 1.5rem;
-    align-items: flex-start; /* Alinha as colunas pelo topo */
+    align-items: flex-start;
 }
 
 .map-column {
-    flex: 1 1 55%; /* Base de 55% da largura, com flexibilidade para crescer/encolher. */
+    flex: 1 1 55%; /* Base de 55% da largura, flexível. */
     position: sticky; /* Efeito "colar" no topo ao rolar a página. */
     top: 1rem;
-    align-self: flex-start; /* Essencial para que a coluna "sticky" se comporte corretamente. */
+    align-self: flex-start; /* Essencial para o comportamento 'sticky'. */
     z-index: 1000;
-    min-width: 350px; /* Largura mínima para evitar que o mapa fique espremido. */
+    min-width: 350px; /* Previne que o mapa fique demasiado espremido. */
 }
 
 .table-column {
-    flex: 1 1 45%; /* Base de 45% da largura. */
+    flex: 1 1 45%; /* Base de 45% da largura, flexível. */
     min-width: 350px;
     display: flex;
     flex-direction: column;
@@ -41,7 +41,7 @@
 
 /*
  * 2. COMPONENTES DO MAPA
- * Estilos para o mapa em si, marcadores (pins), popups e controlos.
+ * Estilos para o mapa, marcadores (pins), popups e controlos.
 */
 #map {
     width: 100%;
@@ -68,7 +68,7 @@
     border: 2px solid #fff;
     box-shadow: 0 2px 7px rgba(0,0,0,0.17);
     cursor: pointer;
-    transition: transform 0.15s ease;
+    transition: transform 0.15s ease, background-color 0.2s;
     user-select: none; /* Previne seleção de texto no número do pin. */
 }
 .custom-marker-numbered:hover {
@@ -130,7 +130,6 @@
 
 /*
  * 3. ELEMENTOS DE UI AUXILIARES
- * Mensagens de erro, status, etc.
 */
 .map-empty-message {
     position: absolute;
@@ -147,16 +146,6 @@
     color: var(--bs-body-color);
     transition: background-color 0.2s, color 0.2s;
 }
-
-#map-status {
-    font-family: monospace;
-    font-size: 0.8rem;
-    color: var(--bs-secondary-color);
-    background-color: rgba(var(--bs-body-bg-rgb), 0.8);
-    backdrop-filter: blur(2px);
-    transition: color 0.2s, background-color 0.2s;
-}
-
 
 /*
  * 4. RESPONSIVIDADE
