@@ -21,6 +21,16 @@ class MapManager {
     }
 
     /**
+     * Valida se uma coordenada é um número válido.
+     * @param {any} coord - A coordenada (latitude ou longitude).
+     * @returns {boolean} - Verdadeiro se for um número válido.
+     */
+    _isValidCoordinate(coord) {
+        const num = parseFloat(coord);
+        return !isNaN(num);
+    }
+
+    /**
      * Inicializa o mapa Mapbox.
      * @param {Array} initialData - Lista de endereços para centralização inicial.
      */
@@ -32,12 +42,9 @@ class MapManager {
         mapboxgl.accessToken = this.accessToken;
         this.addressData = initialData;
 
-        // Só centraliza se houver pelo menos um endereço com latitude/longitude numéricas
         const validCoords = this.addressData
-            .filter(item =>
-                typeof item.latitude === "number" && typeof item.longitude === "number"
-                && !isNaN(item.latitude) && !isNaN(item.longitude)
-            );
+            .filter(item => this._isValidCoordinate(item.latitude) && this._isValidCoordinate(item.longitude));
+            
         const center = validCoords.length > 0
             ? [validCoords[0].longitude, validCoords[0].latitude]
             : [-9.1393, 38.7223]; // Fallback: Lisboa
@@ -59,7 +66,6 @@ class MapManager {
 
     /**
      * Renderiza marcadores customizados, com círculo numerado e cor do pacote.
-     * Pendente: PIN vermelho, Validado: cor normal.
      * @param {Array} addressData - Lista de endereços (atualiza o estado interno).
      */
     renderMarkers(addressData) {
@@ -70,12 +76,8 @@ class MapManager {
         Object.values(this.markers).forEach(marker => marker.remove());
         this.markers = {};
 
-        // Permite 0 e valores negativos, filtra apenas null/undefined/NaN
         const validCoords = this.addressData.map((item, index) => ({ ...item, originalIndex: index }))
-            .filter(item =>
-                typeof item.latitude === "number" && typeof item.longitude === "number"
-                && !isNaN(item.latitude) && !isNaN(item.longitude)
-            );
+            .filter(item => this._isValidCoordinate(item.latitude) && this._isValidCoordinate(item.longitude));
 
         if (validCoords.length === 0) {
             this.handleError("Nenhum endereço com coordenadas válidas para exibir no mapa.");
@@ -83,18 +85,13 @@ class MapManager {
         }
 
         validCoords.forEach(item => {
-            // Define cor: vermelho para pendente ou erro, cor do pacote para validado
-            let corMarker = "#0d6efd"; // azul padrão
-            if (item.status_google !== "OK") {
-                corMarker = "#E74C3C"; // vermelho para pendentes/erro
-            } else if (item.cor) {
-                corMarker = item.cor;
-            }
+            // Define cor: vermelho para pendente/erro, cor do pacote para validado
+            const markerColor = item.status_google !== "OK" ? "#E74C3C" : (item.cor || "#0d6efd");
 
             // Cria elemento HTML para marcador customizado
             const el = document.createElement('div');
             el.className = 'custom-marker-numbered';
-            el.style.backgroundColor = corMarker;
+            el.style.backgroundColor = markerColor;
             el.innerText = String(item.order_number || item.originalIndex + 1).substring(0, 4);
 
             const marker = new mapboxgl.Marker({
