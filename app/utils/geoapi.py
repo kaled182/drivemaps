@@ -3,70 +3,117 @@
 import requests
 import os
 import re
-import logging
 
 GEOAPI_KEY = os.environ.get("GEOAPI_KEY", "SUA_CHAVE_API_GEOAPI")
 BASE_URL = "https://json.geoapi.pt"
-logger = logging.getLogger(__name__)
 
 def normaliza_nome(s):
-    return re.sub(r'[^a-z0-9]', '', s.lower()) if s else ""
-
-def extrai_cep(texto):
-    m = re.search(r'(\d{4}-\d{3})', texto)
-    return m.group(1) if m else ""
+    return re.sub(r'[^a-z0-9]', '', s.lower())
 
 def valida_rua_geoapi(endereco, cep):
     """
-    Busca APENAS ruas existentes no CEP. Se não existir, retorna centroide do CEP.
+    Busca nas seguintes ordens:
+      1. CEP + Freguesia + Rua + Número
+      2. CEP + Freguesia + Rua
+      3. CEP + Freguesia
+      4. CEP
     """
     try:
+        # 1. Quebrar endereço: tenta extrair rua, número e freguesia
         partes = [p.strip() for p in re.split(r',', endereco) if p.strip()]
-        cep_final = extrai_cep(" ".join(partes)) or cep.replace(" ", "")
-        cep_limpo = cep_final.replace("-", "")
-        if not cep_limpo or len(cep_limpo) != 7:
-            return {"status": "NOT_FOUND", "msg": "Sem CEP válido"}
-
         rua = partes[0] if partes else endereco.strip()
+        numero = ""
+        freguesia = ""
+        if len(partes) >= 2:
+            # Heurística: detecta número no fim da rua, ex: "Rua XPTO 123"
+            rua_parts = rua.split()
+            if rua_parts and rua_parts[-1].isdigit():
+                numero = rua_parts[-1]
+                rua = " ".join(rua_parts[:-1])
+            freguesia = partes[1]
+        cep_limpo = cep.replace("-", "").replace(" ", "")
 
-        # Busca as ruas/artérias do CEP na GeoAPI
-        url = f"{BASE_URL}/cp/{cep_limpo}?key={GEOAPI_KEY}"
-        resp = requests.get(url, timeout=7)
-        if not resp.ok:
-            return {"status": "NOT_FOUND", "msg": "CEP não encontrado na base GEOAPI"}
-        data = resp.json()
-        
-        # Tenta matching exato ou "inclusivo" da rua
-        arterias = data.get("arterias", [])
-        for art in arterias:
-            nome_arteria = art.get("arteria", "")
-            if normaliza_nome(rua) in normaliza_nome(nome_arteria):
-                lat, lng = art.get("coordenadas", [None, None])
-                if lat and lng:
+        # 1. Busca artérias (ruas) dentro da freguesia
+        if freguesia:
+            arterias_url = f"{BASE_URL}/freguesia/{freguesia}/arterias?key={GEOAPI_KEY}"
+            art_resp = requests.get(arterias_url, timeout=5)
+            if art_resp.ok:
+                art_data = art_resp.json()
+                for art in art_data:
+                    if normaliza_nome(rua) in normaliza_nome(art.get("arteria", "")):
+                        lat, lng = art.get("coordenadas", [None, None])
+                        if lat and lng:
+                            return {
+                                "status": "OK",
+                                "coordenadas": {"lat": float(lat), "lng": float(lng)},
+                                "postal_code_encontrado": cep,
+                                "endereco_formatado": f"{rua} {numero}, {freguesia}, {cep}" if numero else f"{rua}, {freguesia}, {cep}",
+                                "route_encontrada": art.get("arteria", rua),
+                                "sublocality": "",
+                                "locality": freguesia,
+                            }
+        # 2. Centroide da freguesia
+        if freguesia:
+            freg_url = f"{BASE_URL}/freguesia/{freguesia}?key={GEOAPI_KEY}"
+            freg_resp = requests.get(freg_url, timeout=5)
+            if freg_resp.ok:
+                freg_data = freg_resp.json()
+                centro = freg_data.get("centroide")
+                if centro:
+                    lat, lng = map(float, centro.split(","))
                     return {
-                        "status": "OK",
-                        "coordenadas": {"lat": float(lat), "lng": float(lng)},
-                        "postal_code_encontrado": cep_final,
-                        "endereco_formatado": f"{nome_arteria}, {cep_final}",
-                        "route_encontrada": nome_arteria,
+                        "status": "OK_FREGUESIA",
+                        "coordenadas": {"lat": lat, "lng": lng},
+                        "postal_code_encontrado": cep,
+                        "endereco_formatado": f"{freguesia}, {cep}",
+                        "route_encontrada": rua,
                         "sublocality": "",
-                        "locality": art.get("freguesia", ""),
+                        "locality": freguesia,
                     }
-        
-        # Se não achou a rua, retorna centroide do CEP
-        centroide = data.get("centroide")
-        if centroide:
-            lat, lng = map(float, centroide.split(","))
-            return {
-                "status": "OK_CEP",
-                "coordenadas": {"lat": lat, "lng": lng},
-                "postal_code_encontrado": cep_final,
-                "endereco_formatado": f"{cep_final}",
-                "route_encontrada": rua,
-                "sublocality": "",
-                "locality": "",
-            }
+        # 3. Centroide do CEP
+        if cep:
+            cep_url = f"{BASE_URL}/cp/{cep_limpo}?key={GEOAPI_KEY}"
+            cep_resp = requests.get(cep_url, timeout=5)
+            if cep_resp.ok:
+                cep_data = cep_resp.json()
+                centroide = cep_data.get("centroide")
+                if centroide:
+                    lat, lng = map(float, centroide.split(","))
+                    return {
+                        "status": "OK_CEP",
+                        "coordenadas": {"lat": lat, "lng": lng},
+                        "postal_code_encontrado": cep,
+                        "endereco_formatado": f"{cep}",
+                        "route_encontrada": rua,
+                        "sublocality": "",
+                        "locality": "",
+                    }
         return {"status": "NOT_FOUND", "msg": "Endereço não encontrado na base GEOAPI"}
     except Exception as e:
-        logger.exception("Erro na validação geoapi")
+        return {"status": "ERRO", "msg": str(e)}
+
+
+def obter_endereco_por_coordenadas_geoapi(lat, lng):
+    """
+    Faz geocodificação reversa usando GeoAPI.pt (coordenadas para endereço).
+    """
+    try:
+        url = f"{BASE_URL}/gps/{lat},{lng}"
+        params = {"key": GEOAPI_KEY}
+        resp = requests.get(url, params=params, timeout=5)
+        resp.raise_for_status()
+        d = resp.json()
+        if isinstance(d, dict) and d.get("cp4"):
+            return {
+                "status": "OK",
+                "address": d.get("address", ""),
+                "postal_code": d.get("cp4", "") + ("-" + d.get("cp3", "") if d.get("cp3") else ""),
+                "route_encontrada": d.get("arteria", ""),
+                "sublocality": d.get("freguesia", ""),
+                "locality": d.get("municipio", ""),
+                "coordenadas": {"lat": lat, "lng": lng},
+            }
+        else:
+            return {"status": "NOT_FOUND"}
+    except Exception as e:
         return {"status": "ERRO", "msg": str(e)}
